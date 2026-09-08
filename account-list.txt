@@ -1,0 +1,23 @@
+=== AUTH USERS (login emails) ===
+- staff@clinic.test | role=Staff | id=aa4f8351-410c-4b5d-842f-e684de014276
+- phase5doctor@clinic.test | role=Doctor | id=857757af-9545-485b-8981-5a2043f54fe9
+- doctor@clinic.test | role=Doctor | id=60310394-4c74-4370-9cd3-47b22c4cbfb8
+- patient@clinic.test | role=Patient | id=f3c7d22e-9f67-4511-ae1a-73b30b2fc4e6
+- admin@clinic.test | role=Admin | id=409a0fd7-c371-4c4c-89b3-31f9d3b18366
+
+=== STAFF ACCOUNTS ===
+- phase5doctor@clinic.test | Phase5 Doctor | role=Doctor | status=Inactive | linked=yes
+- admin@clinic.test | Test Admin | role=Admin | status=Active | linked=yes
+- doctor@clinic.test | Test Doctor | role=Doctor | status=Active | linked=yes
+- staff@clinic.test | Test Staff | role=Staff | status=Active | linked=yes
+
+=== PATIENTS WITH PORTAL (user_id set) ===
+- patient@clinic.test | TestEdited Patient | code=MF-0001
+
+=== GUEST / UNLINKED PATIENTS (cannot login) ===
+count=1
+- (blank email) | Phase4 Guest | code=MF-2898 | guest=true
+
+Note: passwords are NOT stored in the database in readable form.
+If you do not remember them, reset via /forgot-password or Supabase Auth dashboard.
+EXITCODE=0 
