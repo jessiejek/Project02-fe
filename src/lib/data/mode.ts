@@ -32,6 +32,7 @@ export type DataResource =
   | "reviews"
   | "consultations"
   | "consultation_diagnoses"
+  | "medical_certificates"
   | "patient_vital_readings"
   | "follow_ups"
   | "prescription_groups"
@@ -78,6 +79,7 @@ const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
   // Phase 5 — clinical resources via src/lib/data/clinical.ts
   "consultations",
   "consultation_diagnoses",
+  "medical_certificates",
   "patient_vital_readings",
   "follow_ups",
   "prescription_groups",

@@ -279,6 +279,61 @@ export async function deleteFollowUpByConsultation(supabase: SupabaseClient, con
   await supabase.from("follow_ups").delete().eq("consultation_id", consultationId);
 }
 
+// ── medical_certificates (§16.8 Form 2) — .NET-only, no Supabase table ────
+export interface MedicalCertificateRow {
+  certificate_id?: string;
+  consultation_id?: string;
+  patient_id: string;
+  doctor_id: string;
+  issue_date?: string | null;
+  patient_address_snapshot?: string | null;
+  examined_at?: string | null;
+  examination_date_from?: string | null;
+  examination_date_to?: string | null;
+  diagnosis_text?: string | null;
+  recommendations?: string | null;
+  purpose_exception?: string | null;
+  come_back_on?: string | null;
+  issued_by_user_id?: string | null;
+}
+
+export async function queryMedicalCertificateByBooking(
+  _supabase: SupabaseClient,
+  bookingId: string,
+): Promise<MedicalCertificateRow | null> {
+  try {
+    return await api.get<MedicalCertificateRow>(`/api/medical-certificates/by-booking/${bookingId}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function queryMedicalCertificateByConsultation(
+  _supabase: SupabaseClient,
+  consultationId: string,
+): Promise<MedicalCertificateRow | null> {
+  try {
+    return await api.get<MedicalCertificateRow>(`/api/medical-certificates/by-consultation/${consultationId}`);
+  } catch {
+    return null;
+  }
+}
+
+export async function upsertMedicalCertificateByConsultation(
+  _supabase: SupabaseClient,
+  consultationId: string,
+  body: MedicalCertificateRow,
+): Promise<MedicalCertificateRow> {
+  return api.put<MedicalCertificateRow>(`/api/medical-certificates/by-consultation/${consultationId}`, body);
+}
+
+export async function deleteMedicalCertificateByConsultation(
+  _supabase: SupabaseClient,
+  consultationId: string,
+): Promise<void> {
+  await api.delete(`/api/medical-certificates/by-consultation/${consultationId}`);
+}
+
 // ── prescriptions ─────────────────────────────────────────────────────────
 export interface RxItem {
   id?: string;
