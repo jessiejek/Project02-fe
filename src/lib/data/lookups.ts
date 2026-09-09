@@ -27,6 +27,14 @@ export interface Icd10CodeRow {
   description: string;
 }
 
+export interface LabTestRow {
+  lab_test_id: string;
+  name: string;
+  is_default: boolean;
+  sort_order: number;
+  created_at?: string;
+}
+
 export async function queryMedicines(supabase: SupabaseClient): Promise<MedicineRow[]> {
   if (resolveMode("medicines") === "dotnet") {
     return api.get<MedicineRow[]>("/api/medicines", { anonymous: true });
@@ -43,6 +51,14 @@ export async function queryVitalFieldTemplates(
   }
   const { data } = await supabase.from("vital_field_templates").select("*").order("description");
   return (data ?? []) as VitalFieldTemplateRow[];
+}
+
+/**
+ * §16.8 Form 3 — the clinic's fixed lab-request panel. .NET-only (no Supabase
+ * table); resolves via the `medical_certificates`/labs migration data.
+ */
+export async function queryLabTestCatalog(_supabase: SupabaseClient): Promise<LabTestRow[]> {
+  return api.get<LabTestRow[]>("/api/lab-test-catalog", { anonymous: true });
 }
 
 export async function queryIcd10Codes(

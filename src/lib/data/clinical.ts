@@ -345,6 +345,12 @@ export interface RxItem {
   quantity: string;
   instruction: string | null;
   is_controlled_substance: boolean;
+  // §16.8 Form 1 — structured Rx-pad fields (line items only; all optional).
+  timing?: string | null;
+  meal_relation?: string | null;
+  duration_kind?: string | null;
+  duration_value?: number | null;
+  indication?: string | null;
   created_at?: string;
 }
 export interface RxGroupRow {
@@ -418,9 +424,13 @@ export async function upsertRxGroupByBooking(
     .single();
   await supabase.from("prescription_line_items").delete().eq("group_id", group!.group_id);
   if (body.items.length) {
-    await supabase
-      .from("prescription_line_items")
-      .insert(body.items.map((i) => ({ ...i, group_id: group!.group_id })));
+    // Supabase fallback: the §16.8 structured columns don't exist there yet.
+    await supabase.from("prescription_line_items").insert(
+      body.items.map(({ timing, meal_relation, duration_kind, duration_value, indication, ...i }) => {
+        void timing; void meal_relation; void duration_kind; void duration_value; void indication;
+        return { ...i, group_id: group!.group_id };
+      }),
+    );
   }
   const { data } = await supabase
     .from("prescription_groups")
