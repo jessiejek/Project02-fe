@@ -32,7 +32,10 @@ import {
   upsertFollowUpByConsultation,
   deleteFollowUpByConsultation,
   upsertMedicalCertificateByConsultation,
+  queryMedicalCertificateByConsultation,
+  queryRxGroups,
   writeAuditLog,
+  type RxGroupRow,
 } from "@/lib/data/clinical";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
@@ -43,6 +46,30 @@ import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFie
 import type { Database } from "@/data/supabase-types";
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
+
+function mapRxGroup(g: RxGroupRow): PrescriptionGroup {
+  return {
+    id: g.group_id,
+    patientId: g.patient_id,
+    doctorId: g.doctor_id,
+    bookingId: g.booking_id,
+    createdAt: g.created_at.slice(0, 10),
+    items: (g.prescription_line_items ?? []).map((i) => ({
+      id: i.id ?? "",
+      rxId: i.medicine_id,
+      genericName: i.generic_name,
+      dosage: i.dosage,
+      quantity: i.quantity,
+      instruction: i.instruction ?? "",
+      isControlledSubstance: i.is_controlled_substance,
+      mealRelation: (i.meal_relation as "Before" | "After" | null) ?? null,
+      timing: i.timing ?? null,
+      durationKind: (i.duration_kind as "Maintain" | "Days" | "Weeks" | null) ?? null,
+      durationValue: i.duration_value ?? null,
+      indication: i.indication ?? null,
+    })),
+  };
+}
 
 interface ConsultationBooking {
   id: string;
@@ -76,6 +103,7 @@ const SECTIONS = [
   "Lab Orders",
   "Vaccinations",
   "Follow-up",
+  "Medical Certificate",
   "Professional Fee Decision",
 ];
 
@@ -346,11 +374,19 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     seniorPwd: number;
     medCert: number;
   } | null>(null);
-  // §16.8 Form 2 — medical certificate issue + print.
+  // §16.8 Form 2 — medical certificate (its own section, index 7).
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
+  const [mcAddress, setMcAddress] = useState("");
   const [mcExaminedAt, setMcExaminedAt] = useState("");
+  const [mcExamFrom, setMcExamFrom] = useState("");
+  const [mcExamTo, setMcExamTo] = useState("");
+  const [mcDiagnosis, setMcDiagnosis] = useState("");
+  const [mcRecommendations, setMcRecommendations] = useState("");
   const [mcPurposeException, setMcPurposeException] = useState("");
+  const [mcComeBackOn, setMcComeBackOn] = useState("");
+  const [certExists, setCertExists] = useState(false);
   const [issuingCert, setIssuingCert] = useState(false);
+  const [certSavedAt, setCertSavedAt] = useState<string | null>(null);
 
   // §16.6 preview of the flat-line fee the backend will compute on save.
   const previewFee = (() => {
@@ -405,28 +441,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               bookings: c.bookings,
             })),
         })),
-        supabase.from("prescription_groups").select("*, prescription_line_items(*)").eq("booking_id", bookingId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        queryRxGroups(supabase, { bookingId }).then((rows) => ({ data: rows[0] ?? null })),
       ]);
       if (cancelled) return;
 
       if (rxRes.data) {
-        const g = rxRes.data;
-        setPrescriptionGroup({
-          id: g.group_id,
-          patientId: g.patient_id,
-          doctorId: g.doctor_id,
-          bookingId: g.booking_id,
-          createdAt: g.created_at.slice(0, 10),
-          items: (g.prescription_line_items ?? []).map((i: DbLineItem) => ({
-            id: i.id,
-            rxId: i.medicine_id,
-            genericName: i.generic_name,
-            dosage: i.dosage,
-            quantity: i.quantity,
-            instruction: i.instruction ?? "",
-            isControlledSubstance: i.is_controlled_substance,
-          })),
-        });
+        setPrescriptionGroup(mapRxGroup(rxRes.data));
       }
 
       setVitalTemplates(
@@ -555,6 +575,25 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         setFollowUpInstructions(loadedConsultation.followUpInstructions ?? "");
         setFollowUpReminder(loadedConsultation.followUpReminder ?? true);
       }
+
+      // §16.8 Form 2 — hydrate an already-issued certificate if there is one.
+      const consultId = consultRes.data?.consultation_id;
+      if (consultId) {
+        queryMedicalCertificateByConsultation(supabase, consultId)
+          .then((mc) => {
+            if (cancelled || !mc) return;
+            setCertExists(true);
+            setMcAddress(mc.patient_address_snapshot ?? "");
+            setMcExaminedAt(mc.examined_at ?? "");
+            setMcExamFrom(mc.examination_date_from ?? "");
+            setMcExamTo(mc.examination_date_to ?? "");
+            setMcDiagnosis(mc.diagnosis_text ?? "");
+            setMcRecommendations(mc.recommendations ?? "");
+            setMcPurposeException(mc.purpose_exception ?? "");
+            setMcComeBackOn(mc.come_back_on ?? "");
+          })
+          .catch(() => {});
+      }
       setLoaded(true);
     }
     load();
@@ -581,6 +620,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     labOrders.length > 0,
     vaccinations.length > 0,
     followUpDate.trim() !== "",
+    certExists,
     pfDecision !== null && (pfDecision === "charge" ? pfAmount.trim() !== "" : pfWaiveReason.trim().length >= 5),
   ];
   const sectionHasDraft = [
@@ -591,6 +631,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     newLab.testName.trim() !== "",
     newVax.vaccineName.trim() !== "",
     followUpReason.trim() !== "" || followUpInstructions.trim() !== "",
+    mcDiagnosis.trim() !== "" || mcRecommendations.trim() !== "" || mcAddress.trim() !== "",
     pfDecision !== null,
   ];
   function sectionStatus(i: number): SectionStatus {
@@ -746,7 +787,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   // §16.8 Form 2 — save the certificate row (upsert on consultation) then print
   // it on the shared clinic letterhead. Requires a saved consultation.
-  async function handleIssueMedCert() {
+  async function handleIssueMedCert(printAfter: boolean) {
     if (!booking || !clinicRow) return;
     setIssuingCert(true);
     const supabase = createClient();
@@ -758,15 +799,20 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         patient_id: booking.patientId,
         doctor_id: booking.doctorId,
         issue_date: today,
+        patient_address_snapshot: mcAddress || null,
         examined_at: mcExaminedAt || clinicRow.clinic_name,
-        examination_date_from: today,
-        examination_date_to: today,
-        diagnosis_text: assessment || null,
-        recommendations: plan || null,
+        examination_date_from: mcExamFrom || today,
+        examination_date_to: mcExamTo || mcExamFrom || today,
+        diagnosis_text: mcDiagnosis || assessment || null,
+        recommendations: mcRecommendations || plan || null,
         purpose_exception: mcPurposeException || null,
-        come_back_on: followUpDate || null,
+        come_back_on: mcComeBackOn || followUpDate || null,
       };
       await upsertMedicalCertificateByConsultation(supabase, consultId, cert);
+      setCertExists(true);
+      setMedCertRequested(true);
+      setCertSavedAt(new Date().toLocaleTimeString());
+      if (!printAfter) return;
       const [doc, pat] = await Promise.all([
         queryDoctorById(supabase, booking.doctorId),
         queryPatientById(supabase, booking.patientId),
@@ -1244,31 +1290,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         embedded
                         onSaved={async () => {
                           const supabase = createClient();
-                          const { data: g } = await supabase
-                            .from("prescription_groups")
-                            .select("*, prescription_line_items(*)")
-                            .eq("booking_id", bookingId)
-                            .order("created_at", { ascending: false })
-                            .limit(1)
-                            .maybeSingle();
-                          if (g) {
-                            setPrescriptionGroup({
-                              id: g.group_id,
-                              patientId: g.patient_id,
-                              doctorId: g.doctor_id,
-                              bookingId: g.booking_id,
-                              createdAt: g.created_at.slice(0, 10),
-                              items: (g.prescription_line_items ?? []).map((i: DbLineItem) => ({
-                                id: i.id,
-                                rxId: i.medicine_id,
-                                genericName: i.generic_name,
-                                dosage: i.dosage,
-                                quantity: i.quantity,
-                                instruction: i.instruction ?? "",
-                                isControlledSubstance: i.is_controlled_substance,
-                              })),
-                            });
-                          }
+                          const rows = await queryRxGroups(supabase, { bookingId });
+                          if (rows[0]) setPrescriptionGroup(mapRxGroup(rows[0]));
                           setRxVersion((v) => v + 1);
                           setRxSavedAt(new Date().toLocaleTimeString());
                         }}
@@ -1345,6 +1368,72 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 7 && (
                     <div className="mt-md space-y-md">
+                      {certSavedAt && <Toast key={certSavedAt} variant="success" message={`Certificate saved at ${certSavedAt}.`} />}
+                      <p className="text-label-md text-on-surface-variant">
+                        §16.8 Form 2. Blank fields fall back to the SOAP Assessment / Plan and the
+                        follow-up date. Issuing marks &ldquo;medical certificate&rdquo; on the fee (+₱{feeSchedule?.medCert ?? 50}).
+                      </p>
+                      <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+                        <input
+                          value={mcAddress}
+                          onChange={(e) => setMcAddress(e.target.value)}
+                          placeholder="Patient address (&ldquo;residing at …&rdquo;)"
+                          className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
+                        />
+                        <input
+                          value={mcExaminedAt}
+                          onChange={(e) => setMcExaminedAt(e.target.value)}
+                          placeholder={`Examined in… (default: ${clinicRow?.clinic_name ?? "clinic"})`}
+                          className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
+                        />
+                        <label className="text-label-sm text-on-surface-variant">
+                          Examination from
+                          <input type="date" value={mcExamFrom} onChange={(e) => setMcExamFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
+                        </label>
+                        <label className="text-label-sm text-on-surface-variant">
+                          Examination until
+                          <input type="date" value={mcExamTo} onChange={(e) => setMcExamTo(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
+                        </label>
+                      </div>
+                      <textarea
+                        value={mcDiagnosis}
+                        onChange={(e) => setMcDiagnosis(e.target.value)}
+                        placeholder={assessment ? `Diagnosis / Impressions (default: “${assessment}”)` : "Diagnosis / Impressions"}
+                        rows={2}
+                        className="w-full rounded-lg border border-outline-variant p-md text-body-md"
+                      />
+                      <textarea
+                        value={mcRecommendations}
+                        onChange={(e) => setMcRecommendations(e.target.value)}
+                        placeholder={plan ? `Recommendations (default: “${plan}”)` : "Recommendations"}
+                        rows={2}
+                        className="w-full rounded-lg border border-outline-variant p-md text-body-md"
+                      />
+                      <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+                        <input
+                          value={mcPurposeException}
+                          onChange={(e) => setMcPurposeException(e.target.value)}
+                          placeholder="Purpose exception (the &ldquo;except ___&rdquo; blank)"
+                          className="rounded-lg border border-outline-variant px-md py-sm text-body-md"
+                        />
+                        <label className="text-label-sm text-on-surface-variant">
+                          Please come back on
+                          <input type="date" value={mcComeBackOn} onChange={(e) => setMcComeBackOn(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-sm">
+                        <Button disabled={issuingCert || !clinicRow} onClick={() => handleIssueMedCert(true)}>
+                          {issuingCert ? "Working…" : certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
+                        </Button>
+                        <Button variant="secondary" disabled={issuingCert || !clinicRow} onClick={() => handleIssueMedCert(false)}>
+                          Save without printing
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {isOpen && i === 8 && (
+                    <div className="mt-md space-y-md">
                       {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
                       <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
                         <div className="flex flex-wrap items-center gap-sm">
@@ -1384,35 +1473,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                             onChange={(e) => setMedCertRequested(e.target.checked)}
                             className="h-5 w-5"
                           />
-                          Medical certificate requested
+                          Medical certificate (+₱{feeSchedule?.medCert ?? 50}) — issue it in section 8
                         </label>
-                        {medCertRequested && (
-                          <div className="space-y-sm rounded-lg border border-outline-variant p-md">
-                            <p className="text-label-md text-on-surface-variant">
-                              Medical certificate (§16.8). Diagnosis and recommendations use the
-                              Assessment / Plan above; follow-up date fills &ldquo;come back on&rdquo;.
-                            </p>
-                            <input
-                              value={mcExaminedAt}
-                              onChange={(e) => setMcExaminedAt(e.target.value)}
-                              placeholder={`Examined in… (default: ${clinicRow?.clinic_name ?? "clinic"})`}
-                              className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
-                            />
-                            <input
-                              value={mcPurposeException}
-                              onChange={(e) => setMcPurposeException(e.target.value)}
-                              placeholder="Purpose exception (the &ldquo;except ___&rdquo; blank) — optional"
-                              className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
-                            />
-                            <Button
-                              variant="secondary"
-                              disabled={issuingCert || !clinicRow}
-                              onClick={handleIssueMedCert}
-                            >
-                              {issuingCert ? "Issuing…" : "Save & Print Certificate"}
-                            </Button>
-                          </div>
-                        )}
                         {previewFee !== null && (
                           <p className="text-label-md text-on-surface">
                             Computed clinic fee: <strong>₱{previewFee}</strong>

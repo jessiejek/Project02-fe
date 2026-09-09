@@ -279,6 +279,12 @@ export interface PrescriptionLineItem {
   quantity: string;
   instruction: string;
   isControlledSubstance?: boolean;
+  // §16.8 Form 1 — the clinic's real Rx pad columns.
+  mealRelation?: "Before" | "After" | null;
+  timing?: string | null; // comma-joined subset of Breakfast/Lunch/Dinner/Bedtime
+  durationKind?: "Maintain" | "Days" | "Weeks" | null;
+  durationValue?: number | null;
+  indication?: string | null;
 }
 
 export interface PrescriptionGroup {

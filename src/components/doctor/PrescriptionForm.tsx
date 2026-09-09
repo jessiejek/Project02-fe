@@ -30,7 +30,21 @@ function newId(prefix: string) {
 }
 
 function sig(item: PrescriptionLineItem) {
-  return `Sig. ${item.dosage} ${item.instruction}`.trim();
+  const duration =
+    item.durationKind === "Maintain"
+      ? "Maintain"
+      : item.durationValue && item.durationKind
+        ? `${item.durationValue} ${item.durationKind.toLowerCase()}`
+        : "";
+  const parts = [
+    `Sig. ${item.dosage}`.trim(),
+    item.mealRelation ? `${item.mealRelation} meals` : "",
+    item.timing ?? "",
+    duration,
+    item.indication ? `— ${item.indication}` : "",
+    item.instruction ?? "",
+  ].filter(Boolean);
+  return parts.join(" · ");
 }
 
 interface LineItemListProps {
@@ -135,12 +149,18 @@ interface NewRxTabProps {
   onAdd: (item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean) => void;
 }
 
+const TIMING_SLOTS = ["Breakfast", "Lunch", "Dinner", "Bedtime"] as const;
+
 function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   const [query, setQuery] = useState("");
   const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(null);
   const [dosage, setDosage] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [mealTiming, setMealTiming] = useState<"Before Meal" | "After Meal" | null>(null);
+  const [mealRelation, setMealRelation] = useState<"Before" | "After" | null>(null);
+  const [timingSlots, setTimingSlots] = useState<string[]>([]);
+  const [durationKind, setDurationKind] = useState<"Maintain" | "Days" | "Weeks" | null>(null);
+  const [durationValue, setDurationValue] = useState("");
+  const [indication, setIndication] = useState("");
   const [instructions, setInstructions] = useState("");
   const [addToFavorites, setAddToFavorites] = useState(false);
 
@@ -152,15 +172,36 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
     setSelectedMedicine(null);
     setDosage("");
     setQuantity("");
-    setMealTiming(null);
+    setMealRelation(null);
+    setTimingSlots([]);
+    setDurationKind(null);
+    setDurationValue("");
+    setIndication("");
     setInstructions("");
     setAddToFavorites(false);
   }
 
+  function toggleSlot(slot: string) {
+    setTimingSlots((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
+  }
+
   function handleAdd() {
     if (!selectedMedicine || !canAdd) return;
-    const instruction = `${mealTiming ?? ""} ${instructions}`.trim();
-    onAdd({ rxId: selectedMedicine.id, genericName: selectedMedicine.genericName, dosage, quantity, instruction }, addToFavorites);
+    onAdd(
+      {
+        rxId: selectedMedicine.id,
+        genericName: selectedMedicine.genericName,
+        dosage,
+        quantity,
+        instruction: instructions.trim(),
+        mealRelation,
+        timing: timingSlots.length ? timingSlots.join(", ") : null,
+        durationKind,
+        durationValue: durationKind === "Days" || durationKind === "Weeks" ? Number(durationValue) || null : null,
+        indication: indication.trim() || null,
+      },
+      addToFavorites,
+    );
     reset();
   }
 
@@ -194,29 +235,93 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
           </div>
         )}
       </div>
-      <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-      <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity (e.g. 50pcs)" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-      <div className="grid grid-cols-2 gap-sm">
-        {(["Before Meal", "After Meal"] as const).map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setMealTiming((prev) => (prev === option ? null : option))}
-            aria-pressed={mealTiming === option}
-            className={cn(
-              "rounded-lg border px-md py-sm text-label-md",
-              mealTiming === option ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
-            )}
-          >
-            {option}
-          </button>
-        ))}
+      <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+      <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+
+      {/* §16.8 Form 1 — before/after meals */}
+      <div>
+        <p className="mb-xs text-label-sm text-on-surface-variant">Meals</p>
+        <div className="grid grid-cols-2 gap-sm">
+          {(["Before", "After"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => setMealRelation((prev) => (prev === option ? null : option))}
+              aria-pressed={mealRelation === option}
+              className={cn(
+                "rounded-lg border px-md py-sm text-label-md",
+                mealRelation === option ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
+              )}
+            >
+              {option} meals
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* §16.8 Form 1 — Breakfast / Lunch / Dinner / Bedtime (multiple) */}
+      <div>
+        <p className="mb-xs text-label-sm text-on-surface-variant">Timing</p>
+        <div className="grid grid-cols-4 gap-sm">
+          {TIMING_SLOTS.map((slot) => (
+            <button
+              key={slot}
+              type="button"
+              onClick={() => toggleSlot(slot)}
+              aria-pressed={timingSlots.includes(slot)}
+              className={cn(
+                "rounded-lg border px-xs py-sm text-label-sm",
+                timingSlots.includes(slot) ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
+              )}
+            >
+              {slot}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* §16.8 Form 1 — DURATION: Maintain | ___ Days | ___ Weeks */}
+      <div>
+        <p className="mb-xs text-label-sm text-on-surface-variant">Duration</p>
+        <div className="flex flex-wrap items-center gap-sm">
+          {(["Maintain", "Days", "Weeks"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setDurationKind((prev) => (prev === k ? null : k))}
+              aria-pressed={durationKind === k}
+              className={cn(
+                "rounded-lg border px-md py-sm text-label-md",
+                durationKind === k ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
+              )}
+            >
+              {k}
+            </button>
+          ))}
+          {(durationKind === "Days" || durationKind === "Weeks") && (
+            <input
+              type="number"
+              min={1}
+              value={durationValue}
+              onChange={(e) => setDurationValue(e.target.value)}
+              placeholder={`# ${durationKind.toLowerCase()}`}
+              className="w-28 rounded-lg border border-outline-variant px-md py-sm text-body-md"
+            />
+          )}
+        </div>
+      </div>
+
+      <input
+        value={indication}
+        onChange={(e) => setIndication(e.target.value)}
+        placeholder="Indication (e.g. for fever, for cough)"
+        className="w-full rounded-lg border border-outline-variant px-md py-sm"
+      />
       <div>
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value.slice(0, 200))}
-          placeholder="Instructions (optional)"
+          placeholder="Sig. / extra instructions (optional)"
           rows={2}
           className="w-full rounded-lg border border-outline-variant p-md"
         />
@@ -527,6 +632,12 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         quantity: i.quantity,
         instruction: i.instruction || null,
         is_controlled_substance: i.isControlledSubstance ?? false,
+        // §16.8 Form 1 structured columns.
+        meal_relation: i.mealRelation ?? null,
+        timing: i.timing ?? null,
+        duration_kind: i.durationKind ?? null,
+        duration_value: i.durationValue ?? null,
+        indication: i.indication ?? null,
       })),
     });
 
