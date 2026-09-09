@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { PATIENT_LAB_RESULTS_BUCKET, uploadPatientFile } from "@/lib/patientUploads";
+import { queryPatientLabResults, uploadPatientLabResult } from "@/lib/data/patientFiles";
 
 interface BookingOption {
   id: string;
@@ -49,11 +49,7 @@ export default function LabResultsPage() {
           .select("booking_id, appointment_date, doctors(staff_accounts(full_name))")
           .eq("patient_id", patientId)
           .order("appointment_date", { ascending: false }),
-        supabase
-          .from("patient_lab_results")
-          .select("id, result_title, file_name, file_url, uploaded_at")
-          .eq("patient_id", patientId)
-          .order("uploaded_at", { ascending: false }),
+        queryPatientLabResults(supabase, { patientId }).then((data) => ({ data })),
       ]);
 
       setBookings(
@@ -95,35 +91,21 @@ export default function LabResultsPage() {
     }
 
     setUploading(true);
-    const supabase = createClient();
-    const uploaded = await uploadPatientFile(supabase, PATIENT_LAB_RESULTS_BUCKET, session.patientId, bookingId, file);
-    if (uploaded.error) {
-      setUploading(false);
-      setError(uploaded.error);
-      return;
-    }
-
     const notes = resultNotes.trim();
-    const { data, error: insertError } = await supabase
-      .from("patient_lab_results")
-      .insert({
-        patient_id: session.patientId,
-        booking_id: bookingId,
-        file_name: uploaded.fileName,
-        file_content_type: uploaded.contentType,
-        result_title: notes || uploaded.fileName,
-        result_text: notes || null,
-        status: "Completed",
-        file_url: uploaded.fileUrl,
-      })
-      .select("id, result_title, file_name, file_url, uploaded_at")
-      .single();
-
-    setUploading(false);
-    if (insertError || !data) {
-      setError(insertError?.message ?? "File uploaded, but saving the lab result record failed.");
+    let data;
+    try {
+      data = await uploadPatientLabResult(file, {
+        patientId: session.patientId,
+        bookingId,
+        resultTitle: notes || file.name,
+        resultText: notes || undefined,
+      });
+    } catch (e) {
+      setUploading(false);
+      setError(e instanceof Error ? e.message : "Upload failed.");
       return;
     }
+    setUploading(false);
 
     setLabResults((prev) => [
       {

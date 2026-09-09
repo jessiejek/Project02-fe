@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryDoctorServices } from "@/lib/data/doctorServices";
+import { queryReviews } from "@/lib/data/patientFiles";
 import { indexToDayName } from "@/lib/days";
 
 // Stitch screen_5_doctor_profile. Retiring mockDoctors per
@@ -23,7 +24,7 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
     supabase.from("doctor_schedules").select("*").eq("doctor_id", id).order("day_of_week"),
     supabase.from("v_doctor_ratings").select("*").eq("doctor_id", id).single(),
     supabase.from("doctor_day_statuses").select("status").eq("doctor_id", id).eq("status_date", today).maybeSingle(),
-    supabase.from("reviews").select("review_id, rating, comment, created_at").eq("doctor_id", id).order("created_at", { ascending: false }),
+    queryReviews(supabase, { doctorId: id }).then((data) => ({ data })),
   ]);
   const staff = doctor?.staff_accounts ?? null;
   if (!doctor || staff?.status === "Inactive") notFound();

@@ -86,6 +86,11 @@ const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
   "soap_templates",
   "soap_phrases",
   "audit_logs",
+  // Phase 6 — patient files, vaccinations, reviews via src/lib/data/patientFiles.ts
+  "patient_documents",
+  "patient_lab_results",
+  "patient_vaccinations",
+  "reviews",
 ]);
 
 export function resolveMode(resource: DataResource): ApiMode {

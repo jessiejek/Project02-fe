@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryVaccinations } from "@/lib/data/patientFiles";
 import { printHtml, escapeHtml } from "@/lib/print";
 
 interface VaccinationRow {
@@ -30,14 +31,10 @@ export default function VaccinationsPage() {
 
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("patient_vaccinations")
-        .select("id, vaccine_name, dose_number, administered_date, status, source")
-        .eq("patient_id", patientId)
-        .order("administered_date", { ascending: false, nullsFirst: false });
+      const data = await queryVaccinations(supabase, patientId);
 
       setVaccinations(
-        (data ?? []).map((v) => ({
+        data.map((v) => ({
           id: v.id,
           vaccineName: v.vaccine_name,
           doseNumber: v.dose_number,

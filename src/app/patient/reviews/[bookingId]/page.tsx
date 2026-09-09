@@ -12,6 +12,7 @@ import { faStar as faStarOutline } from "@fortawesome/free-regular-svg-icons";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryReviews, createReview } from "@/lib/data/patientFiles";
 
 interface ReviewBooking {
   id: string;
@@ -49,7 +50,7 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
           .eq("booking_id", bookingId)
           .eq("patient_id", patientId)
           .maybeSingle(),
-        supabase.from("reviews").select("review_id").eq("booking_id", bookingId).maybeSingle(),
+        queryReviews(supabase, { bookingId }).then((rows) => ({ data: rows[0] ?? null })),
       ]);
       if (!bookingRes.data) {
         setBooking(null);
@@ -92,18 +93,20 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
       setSubmitError("You can only review your own visits.");
       return;
     }
-    const { error } = await supabase.from("reviews").insert({
-      booking_id: booking.id,
-      doctor_id: booking.doctorId,
-      patient_id: patientId,
-      rating,
-      comment: comment || null,
-    });
-    setSubmitting(false);
-    if (error) {
+    try {
+      await createReview(supabase, {
+        booking_id: booking.id,
+        doctor_id: booking.doctorId,
+        patient_id: patientId,
+        rating,
+        comment: comment || null,
+      });
+    } catch {
+      setSubmitting(false);
       setSubmitError("Could not submit your review. Please try again.");
       return;
     }
+    setSubmitting(false);
     router.push(`/patient/bookings/${booking.id}`);
   }
 

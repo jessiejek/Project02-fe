@@ -8,7 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { PATIENT_DOCUMENTS_BUCKET, uploadPatientFile } from "@/lib/patientUploads";
+import { queryPatientDocuments, uploadPatientDocument } from "@/lib/data/patientFiles";
 
 interface BookingOption {
   id: string;
@@ -51,11 +51,7 @@ export default function DocumentsPage() {
           .select("booking_id, appointment_date, doctors(staff_accounts(full_name))")
           .eq("patient_id", patientId)
           .order("appointment_date", { ascending: false }),
-        supabase
-          .from("patient_documents")
-          .select("id, title, description, file_name, file_url, uploaded_at, bookings(doctors(staff_accounts(full_name)))")
-          .eq("patient_id", patientId)
-          .order("uploaded_at", { ascending: false }),
+        queryPatientDocuments(supabase, { patientId }).then((data) => ({ data })),
       ]);
 
       setBookings(
@@ -112,37 +108,22 @@ export default function DocumentsPage() {
     }
 
     setUploading(true);
-    const supabase = createClient();
-    const uploaded = await uploadPatientFile(supabase, PATIENT_DOCUMENTS_BUCKET, session.patientId, bookingId, file);
-    if (uploaded.error) {
+    let data;
+    try {
+      data = await uploadPatientDocument(file, {
+        patientId: session.patientId,
+        bookingId,
+        title: title.trim() || undefined,
+      });
+    } catch (e) {
       setUploading(false);
-      setError(uploaded.error);
+      setError(e instanceof Error ? e.message : "Upload failed.");
       return;
     }
-
-    const { data, error: insertError } = await supabase
-      .from("patient_documents")
-      .insert({
-        patient_id: session.patientId,
-        booking_id: bookingId,
-        file_name: uploaded.fileName,
-        file_size: uploaded.fileSize,
-        file_content_type: uploaded.contentType,
-        title: title.trim() || null,
-        file_url: uploaded.fileUrl,
-        uploaded_by_user_id: session.userId,
-      })
-      .select("id, title, description, file_name, file_url, uploaded_at, bookings(doctors(staff_accounts(full_name)))")
-      .single();
-
     setUploading(false);
-    if (insertError || !data) {
-      setError(insertError?.message ?? "File uploaded, but saving the document record failed.");
-      return;
-    }
 
-    const booking = Array.isArray(data.bookings) ? data.bookings[0] : data.bookings;
-    const doctor = booking ? (Array.isArray(booking.doctors) ? booking.doctors[0] : booking.doctors) : undefined;
+    const b = Array.isArray(data.bookings) ? data.bookings[0] : data.bookings;
+    const doctor = b ? (Array.isArray(b.doctors) ? b.doctors[0] : b.doctors) : undefined;
     const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
     setDocuments((prev) => [
       {

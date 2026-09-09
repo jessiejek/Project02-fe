@@ -59,6 +59,10 @@ const ORDER = [
   "doctor_favorite_medicines",
   "soap_templates",
   "soap_phrases",
+  "reviews",
+  "patient_vaccinations",
+  "patient_documents",
+  "patient_lab_results",
 ];
 
 const wanted = process.argv.slice(2);
