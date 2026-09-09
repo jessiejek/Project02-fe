@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctors } from "@/lib/data/doctors";
 import type { ManagedService } from "@/data/types";
 
 const CATEGORIES: ManagedService["category"][] = ["Consultation", "Procedure", "Laboratory", "Diagnostic"];
@@ -43,23 +44,17 @@ export default function AdminServicesPage() {
       const supabase = createClient();
       const [servicesRes, doctorsRes, linksRes] = await Promise.all([
         supabase.from("services").select("*").order("category").order("name"),
-        supabase.from("doctors").select("doctor_id, slot_duration_minutes, staff_accounts(full_name, status)"),
+        queryDoctors(supabase),
         supabase.from("doctor_services").select("doctor_id, service_id"),
       ]);
 
-      const doctorOptions: DoctorOption[] = (doctorsRes.data ?? [])
-        .filter((d) => {
-          const staff = Array.isArray(d.staff_accounts) ? d.staff_accounts[0] : d.staff_accounts;
-          return staff?.status !== "Inactive";
-        })
-        .map((d) => {
-          const staff = Array.isArray(d.staff_accounts) ? d.staff_accounts[0] : d.staff_accounts;
-          return {
-            id: d.doctor_id,
-            name: staff?.full_name ?? "",
-            slotDurationMinutes: d.slot_duration_minutes,
-          };
-        });
+      const doctorOptions: DoctorOption[] = doctorsRes
+        .filter((d) => d.staff_accounts?.status !== "Inactive")
+        .map((d) => ({
+          id: d.doctor_id,
+          name: d.staff_accounts?.full_name ?? "",
+          slotDurationMinutes: d.slot_duration_minutes,
+        }));
       const nameByDoctorId = new Map(doctorOptions.map((d) => [d.id, d.name]));
 
       const linksByService: Record<string, string[]> = {};

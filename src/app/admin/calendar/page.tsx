@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctors } from "@/lib/data/doctors";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -63,17 +64,11 @@ export default function AdminCalendarPage() {
   useEffect(() => {
     async function loadDoctors() {
       const supabase = createClient();
-      const { data } = await supabase.from("doctors").select("doctor_id, staff_accounts(full_name, status)");
+      const rows = await queryDoctors(supabase);
       setDoctors(
-        (data ?? [])
-          .filter((d) => {
-            const staff = Array.isArray(d.staff_accounts) ? d.staff_accounts[0] : d.staff_accounts;
-            return staff?.status !== "Inactive";
-          })
-          .map((d) => {
-            const staff = Array.isArray(d.staff_accounts) ? d.staff_accounts[0] : d.staff_accounts;
-            return { id: d.doctor_id, name: staff?.full_name ?? "Unknown doctor" };
-          }),
+        rows
+          .filter((d) => d.staff_accounts?.status !== "Inactive")
+          .map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "Unknown doctor" })),
       );
     }
     loadDoctors();

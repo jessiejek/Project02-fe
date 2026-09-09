@@ -7,7 +7,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
-import { one } from "@/lib/one";
+import { queryDoctors } from "@/lib/data/doctors";
 
 type DayStatus = "Available" | "RunningLate" | "UnavailableToday";
 
@@ -29,17 +29,17 @@ export default function DoctorStatusPage() {
     async function load() {
       const supabase = createClient();
       const today = new Date().toISOString().slice(0, 10);
-      const [doctorsRes, statusesRes] = await Promise.all([
-        supabase.from("doctors").select("doctor_id, staff_accounts(full_name, status)"),
+      const [allDoctors, statusesRes] = await Promise.all([
+        queryDoctors(supabase),
         supabase.from("doctor_day_statuses").select("doctor_id, status").eq("status_date", today),
       ]);
 
       const statusByDoctor = new Map((statusesRes.data ?? []).map((row) => [row.doctor_id, row.status as DayStatus]));
-      const rows: DoctorRow[] = (doctorsRes.data ?? [])
-        .filter((d) => one(d.staff_accounts)?.status !== "Inactive")
+      const rows: DoctorRow[] = allDoctors
+        .filter((d) => d.staff_accounts?.status !== "Inactive")
         .map((d) => ({
           id: d.doctor_id,
-          name: one(d.staff_accounts)?.full_name ?? "",
+          name: d.staff_accounts?.full_name ?? "",
           dayStatus: statusByDoctor.get(d.doctor_id) ?? "Available",
         }));
 

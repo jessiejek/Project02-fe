@@ -6,6 +6,7 @@ import { StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctors } from "@/lib/data/doctors";
 
 interface BookingRow {
   id: string;
@@ -66,7 +67,7 @@ export default function AdminDashboardPage() {
         supabase.from("bookings").select("booking_id", { count: "exact", head: true }).eq("status", "OnHold").gte("appointment_date", monthStart),
         supabase.from("v_unpaid_completed_visits").select("booking_id", { count: "exact", head: true }),
         supabase.from("v_pending_follow_ups").select("follow_up_id", { count: "exact", head: true }).gte("follow_up_date", today).lte("follow_up_date", in7Days),
-        supabase.from("doctors").select("doctor_id, staff_accounts(full_name)"),
+        queryDoctors(supabase),
         supabase
           .from("bookings")
           .select("*, patients(first_name, last_name), doctors(staff_accounts(full_name))")
@@ -89,14 +90,11 @@ export default function AdminDashboardPage() {
         bookingCountByDoctor.set(b.doctor_id, (bookingCountByDoctor.get(b.doctor_id) ?? 0) + 1);
       });
       setDoctorLoads(
-        (doctorsRes.data ?? []).map((d) => {
-          const staff = Array.isArray(d.staff_accounts) ? d.staff_accounts[0] : d.staff_accounts;
-          return {
-            id: d.doctor_id,
-            name: staff?.full_name ?? "",
-            bookingCount: bookingCountByDoctor.get(d.doctor_id) ?? 0,
-          };
-        }),
+        doctorsRes.map((d) => ({
+          id: d.doctor_id,
+          name: d.staff_accounts?.full_name ?? "",
+          bookingCount: bookingCountByDoctor.get(d.doctor_id) ?? 0,
+        })),
       );
 
       setRecentBookings(

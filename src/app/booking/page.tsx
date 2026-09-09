@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StepIndicator } from "@/components/ui/StepIndicator";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctors } from "@/lib/data/doctors";
 import { registerPatientAccount } from "@/app/actions/registerPatientAccount";
 import { parseSlotTo24h, addMinutes } from "@/lib/bookingTime";
 import { one } from "@/lib/one";
@@ -72,19 +73,19 @@ function BookingWizard() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [doctorsRes, ratingsRes, servicesRes, schedulesRes, blockedRes] = await Promise.all([
-        supabase.from("doctors").select("*, staff_accounts(full_name, status)"),
+      const [allDoctors, ratingsRes, servicesRes, schedulesRes, blockedRes] = await Promise.all([
+        queryDoctors(supabase),
         supabase.from("v_doctor_ratings").select("*"),
         supabase.from("doctor_services").select("doctor_id, service_id, services(name, price)"),
         supabase.from("doctor_schedules").select("*"),
         supabase.from("doctor_blocked_dates").select("*"),
       ]);
       const ratingByDoctor = new Map((ratingsRes.data ?? []).map((r) => [r.doctor_id, r.average_rating]));
-      const activeDoctors = (doctorsRes.data ?? []).filter((d) => one(d.staff_accounts)?.status !== "Inactive");
+      const activeDoctors = allDoctors.filter((d) => d.staff_accounts?.status !== "Inactive");
       setDoctors(
         activeDoctors.map((d) => ({
           id: d.doctor_id,
-          name: one(d.staff_accounts)?.full_name ?? "",
+          name: d.staff_accounts?.full_name ?? "",
           specialization: d.specialization,
           consultationFee: Number(d.consultation_fee),
           rating: Number(ratingByDoctor.get(d.doctor_id) ?? 0),

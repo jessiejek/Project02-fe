@@ -9,7 +9,7 @@ import { StepIndicator } from "@/components/ui/StepIndicator";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { parseSlotTo24h, addMinutes } from "@/lib/bookingTime";
-import { one } from "@/lib/one";
+import { queryDoctors } from "@/lib/data/doctors";
 import { cn } from "@/lib/cn";
 
 const STEPS = ["Patient", "Slot", "Review"];
@@ -56,9 +56,9 @@ export default function AdminWalkInPage() {
     async function load() {
       const supabase = createClient();
       const today = new Date().toISOString().slice(0, 10);
-      const [patientsRes, doctorsRes, dayStatusRes] = await Promise.all([
+      const [patientsRes, allDoctors, dayStatusRes] = await Promise.all([
         supabase.from("patients").select("patient_id, patient_code, first_name, last_name, contact_number, email").order("created_at", { ascending: false }),
-        supabase.from("doctors").select("doctor_id, consultation_fee, slot_duration_minutes, staff_accounts(full_name, status)"),
+        queryDoctors(supabase),
         supabase.from("doctor_day_statuses").select("doctor_id, status").eq("status_date", today),
       ]);
 
@@ -74,18 +74,15 @@ export default function AdminWalkInPage() {
 
       const dayStatusByDoctor = new Map((dayStatusRes.data ?? []).map((s) => [s.doctor_id, s.status]));
       setDoctors(
-        (doctorsRes.data ?? [])
-          .filter((d) => one(d.staff_accounts)?.status !== "Inactive")
-          .map((d) => {
-            const staff = one(d.staff_accounts);
-            return {
-              id: d.doctor_id,
-              name: staff?.full_name ?? "",
-              consultationFee: Number(d.consultation_fee),
-              slotDurationMinutes: d.slot_duration_minutes,
-              dayStatus: dayStatusByDoctor.get(d.doctor_id) ?? "Available",
-            };
-          }),
+        allDoctors
+          .filter((d) => d.staff_accounts?.status !== "Inactive")
+          .map((d) => ({
+            id: d.doctor_id,
+            name: d.staff_accounts?.full_name ?? "",
+            consultationFee: Number(d.consultation_fee),
+            slotDurationMinutes: d.slot_duration_minutes,
+            dayStatus: dayStatusByDoctor.get(d.doctor_id) ?? "Available",
+          })),
       );
 
       setLoading(false);

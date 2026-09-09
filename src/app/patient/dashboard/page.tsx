@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { one, serviceNames } from "@/lib/one";
+import { queryDoctors } from "@/lib/data/doctors";
 
 interface BookingRow {
   id: string;
@@ -72,7 +73,7 @@ export default function PatientDashboardPage() {
           .from("consultations")
           .select("chief_complaint, doctors(staff_accounts(full_name)), bookings(appointment_date)")
           .eq("patient_id", patientId),
-        supabase.from("doctors").select("*, staff_accounts(full_name, status)").limit(6),
+        queryDoctors(supabase),
         supabase.from("v_doctor_ratings").select("*"),
       ]);
 
@@ -123,11 +124,12 @@ export default function PatientDashboardPage() {
 
       const ratingByDoctor = new Map((ratingsRes.data ?? []).map((r) => [r.doctor_id, r]));
       setDoctors(
-        (doctorsRes.data ?? [])
-          .filter((d) => one(d.staff_accounts)?.status !== "Inactive")
+        doctorsRes
+          .filter((d) => d.staff_accounts?.status !== "Inactive")
+          .slice(0, 6)
           .map((d) => ({
             id: d.doctor_id,
-            name: one(d.staff_accounts)?.full_name ?? "",
+            name: d.staff_accounts?.full_name ?? "",
             specialization: d.specialization,
             rating: ratingByDoctor.get(d.doctor_id)?.average_rating ?? 0,
             reviewCount: ratingByDoctor.get(d.doctor_id)?.review_count ?? 0,

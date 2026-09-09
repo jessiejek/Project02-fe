@@ -9,6 +9,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctors } from "@/lib/data/doctors";
 import type { BookingStatus } from "@/data/types";
 
 const ALL_STATUSES: BookingStatus[] = [
@@ -49,7 +50,7 @@ export default function AdminBookingsPage() {
       const [bookingsRes, servicesRes, doctorsRes] = await Promise.all([
         supabase.from("bookings").select("*, patients(first_name, last_name, patient_code), doctors(staff_accounts(full_name))").order("created_at", { ascending: false }),
         supabase.from("booking_services").select("booking_id, services(name)"),
-        supabase.from("doctors").select("doctor_id, staff_accounts(full_name)"),
+        queryDoctors(supabase),
       ]);
       const paymentsRes = await supabase.from("payments").select("booking_id, status");
       const paymentByBooking = new Map((paymentsRes.data ?? []).map((p) => [p.booking_id, p.status]));
@@ -79,10 +80,7 @@ export default function AdminBookingsPage() {
         }),
       );
       setDoctors(
-        (doctorsRes.data ?? []).map((d) => {
-          const staff = Array.isArray(d.staff_accounts) ? d.staff_accounts[0] : d.staff_accounts;
-          return { id: d.doctor_id, name: staff?.full_name ?? "" };
-        }),
+        doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
       );
     }
     load();

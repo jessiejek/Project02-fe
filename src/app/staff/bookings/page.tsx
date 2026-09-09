@@ -10,6 +10,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctors } from "@/lib/data/doctors";
 
 interface BookingRow {
   id: string;
@@ -63,7 +64,7 @@ function StaffBookingsContent() {
       const [bookingsRes, servicesRes, doctorsRes, paymentsRes] = await Promise.all([
         supabase.from("bookings").select("*, patients(first_name, last_name), doctors(staff_accounts(full_name))").order("appointment_date", { ascending: false }),
         supabase.from("booking_services").select("booking_id, services(name)"),
-        supabase.from("doctors").select("doctor_id, staff_accounts(full_name)"),
+        queryDoctors(supabase),
         supabase.from("payments").select("booking_id, status"),
       ]);
       const paymentByBooking = new Map((paymentsRes.data ?? []).map((p) => [p.booking_id, p.status]));
@@ -95,10 +96,7 @@ function StaffBookingsContent() {
         }),
       );
       setDoctors(
-        (doctorsRes.data ?? []).map((d) => {
-          const staff = Array.isArray(d.staff_accounts) ? d.staff_accounts[0] : d.staff_accounts;
-          return { id: d.doctor_id, name: staff?.full_name ?? "" };
-        }),
+        doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
       );
     }
     load();
