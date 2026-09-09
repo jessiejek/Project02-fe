@@ -55,6 +55,7 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
           { label: "Bookings", href: "/staff/bookings", icon: "calendar_today" },
           { label: "Payments", href: "/staff/payments", icon: "payments" },
           { label: "Walk-In", href: "/staff/walk-in", icon: "directions_walk" },
+          { label: "Queue", href: "/staff/queue", icon: "list_alt" },
           { label: "Patients", href: "/staff/patients", icon: "group" },
           { label: "Doctor Status", href: "/staff/doctor-status", icon: "medical_services" },
           { label: "Announcements", href: "/staff/announcements", icon: "campaign" },
