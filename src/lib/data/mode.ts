@@ -52,8 +52,10 @@ export type DataResource =
   | "clinic_accepted_payment_methods"
   | "reports";
 
+// Default is now "dotnet" — every resource with a data module is migrated.
+// Set NEXT_PUBLIC_API_MODE=supabase only to fall back for debugging.
 const GLOBAL_DEFAULT: ApiMode =
-  process.env.NEXT_PUBLIC_API_MODE === "dotnet" ? "dotnet" : "supabase";
+  process.env.NEXT_PUBLIC_API_MODE === "supabase" ? "supabase" : "dotnet";
 
 /**
  * Resources already migrated and parity-verified. Add entries here as phases land.

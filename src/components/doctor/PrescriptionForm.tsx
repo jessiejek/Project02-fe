@@ -18,6 +18,7 @@ import {
   createRxTemplate,
   updateRxTemplate,
   deleteRxTemplate,
+  upsertRxGroupByBooking,
 } from "@/lib/data/clinical";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -516,23 +517,10 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     }
 
     const supabase = createClient();
-    let groupId: string;
-    if (mode === "edit" && group) {
-      groupId = group.id;
-      await supabase.from("prescription_groups").update({ updated_at: new Date().toISOString() }).eq("group_id", groupId);
-      await supabase.from("prescription_line_items").delete().eq("group_id", groupId);
-    } else {
-      const { data, error } = await supabase
-        .from("prescription_groups")
-        .insert({ patient_id: patientId, doctor_id: doctorId, booking_id: effectiveBookingId })
-        .select()
-        .single();
-      if (error || !data) return;
-      groupId = data.group_id;
-    }
-    await supabase.from("prescription_line_items").insert(
-      items.map((i) => ({
-        group_id: groupId,
+    await upsertRxGroupByBooking(supabase, effectiveBookingId, {
+      patient_id: patientId,
+      doctor_id: doctorId,
+      items: items.map((i) => ({
         medicine_id: i.rxId,
         generic_name: i.genericName,
         dosage: i.dosage,
@@ -540,7 +528,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         instruction: i.instruction || null,
         is_controlled_substance: i.isControlledSubstance ?? false,
       })),
-    );
+    });
 
     // 8d: "Add to Template" writes prescription_templates + its items
     // alongside the group/line-items write — a separate, additional insert,

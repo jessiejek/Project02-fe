@@ -13,7 +13,9 @@
 
 export type AuthMode = "supabase" | "dotnet";
 
+// Default is now "dotnet" — the migration is complete. Set
+// NEXT_PUBLIC_AUTH_MODE=supabase only to fall back for debugging.
 export const AUTH_MODE: AuthMode =
-  process.env.NEXT_PUBLIC_AUTH_MODE === "dotnet" ? "dotnet" : "supabase";
+  process.env.NEXT_PUBLIC_AUTH_MODE === "supabase" ? "supabase" : "dotnet";
 
 export const isDotnetAuth = AUTH_MODE === "dotnet";

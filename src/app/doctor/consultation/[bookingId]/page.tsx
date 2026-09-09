@@ -18,6 +18,7 @@ import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
+import { queryAuditLogs } from "@/lib/data/admin";
 import {
   queryConsultationByBooking,
   queryConsultationById,
@@ -477,14 +478,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           followUpReminder: followRes.data?.reminder_enabled ?? true,
         };
         if (consultRes.data.status === "Completed" || consultRes.data.status === "Amended") {
-          const { data: logs } = await supabase
-            .from("audit_logs")
-            .select("*")
-            .eq("entity_type", "Consultation")
-            .eq("entity_id", consultRes.data.consultation_id)
-            .order("performed_at", { ascending: false });
+          const logs = await queryAuditLogs(supabase, {
+            entityType: "Consultation",
+            entityId: consultRes.data.consultation_id,
+          });
           setAmendmentHistory(
-            (logs ?? []).map((l) => ({
+            logs.map((l) => ({
               timestamp: new Date(l.performed_at).toLocaleString(),
               author: realBooking.doctorName,
               section: l.details ?? "Consultation record",
