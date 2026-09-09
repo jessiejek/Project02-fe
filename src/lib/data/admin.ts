@@ -201,6 +201,37 @@ export async function queryDoctorRatings(supabase: SupabaseClient): Promise<Doct
   }));
 }
 
+// ── v_doctor_earnings (§16.9) — .NET-only view, no Supabase equivalent ──
+export interface DoctorEarningsRow {
+  doctor_id: string;
+  period: string; // 'YYYY-MM'
+  completed_visits: number;
+  gross_billed: number;
+  collected: number;
+  waived: number;
+}
+
+/**
+ * Monthly earnings. A Doctor caller only ever gets their own rows (the API
+ * scopes by JWT); an Admin may pass `doctorId` to scope, or omit it for all.
+ */
+export async function queryDoctorEarnings(
+  _supabase: SupabaseClient,
+  doctorId?: string,
+): Promise<DoctorEarningsRow[]> {
+  const rows = await api.get<Record<string, unknown>[]>("/api/reports/doctor-earnings", {
+    query: doctorId ? { doctorId } : undefined,
+  });
+  return rows.map((r) => ({
+    doctor_id: String(r.doctor_id ?? ""),
+    period: String(r.period ?? ""),
+    completed_visits: Number(r.completed_visits ?? 0),
+    gross_billed: Number(r.gross_billed ?? 0),
+    collected: Number(r.collected ?? 0),
+    waived: Number(r.waived ?? 0),
+  }));
+}
+
 // ── reports (4 views) ────────────────────────────────────────────────
 export async function queryReport<T = Record<string, unknown>>(
   supabase: SupabaseClient,

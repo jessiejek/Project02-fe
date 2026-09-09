@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { one, serviceNames } from "@/lib/one";
+import { queryDoctorEarnings, type DoctorEarningsRow } from "@/lib/data/admin";
+
+const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
 
 type DayStatus = "Available" | "RunningLate" | "UnavailableToday";
 
@@ -30,6 +33,7 @@ export default function DoctorDashboardPage() {
   const [name, setName] = useState("");
   const [dayStatus, setDayStatus] = useState<DayStatus>("Available");
   const [queue, setQueue] = useState<QueueRow[]>([]);
+  const [earnings, setEarnings] = useState<DoctorEarningsRow[]>([]);
 
   useEffect(() => {
     if (!meDoctorId) return;
@@ -62,6 +66,11 @@ export default function DoctorDashboardPage() {
         })
         .sort((a, b) => (a.queueNumber ?? "").localeCompare(b.queueNumber ?? ""));
       setQueue(rows);
+      try {
+        setEarnings(await queryDoctorEarnings(supabase, meDoctorId));
+      } catch {
+        setEarnings([]);
+      }
       setLoaded(true);
     }
     load();
@@ -176,6 +185,58 @@ export default function DoctorDashboardPage() {
           <Link href="/doctor/patients"><Button variant="secondary">My Patients</Button></Link>
           <Link href="/doctor/schedule"><Button variant="secondary">Schedule</Button></Link>
         </div>
+
+        <Card>
+          <h3 className="mb-md text-headline-sm text-on-surface">Earnings</h3>
+          {earnings.length === 0 ? (
+            <p className="text-body-md text-on-surface-variant">No completed visits yet.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-md sm:grid-cols-4">
+                <div>
+                  <p className="text-headline-sm text-on-surface">{peso(earnings[0].collected)}</p>
+                  <p className="text-label-md text-on-surface-variant">Collected ({earnings[0].period})</p>
+                </div>
+                <div>
+                  <p className="text-headline-sm text-on-surface">{peso(earnings[0].gross_billed)}</p>
+                  <p className="text-label-md text-on-surface-variant">Billed</p>
+                </div>
+                <div>
+                  <p className="text-headline-sm text-on-surface">{earnings[0].completed_visits}</p>
+                  <p className="text-label-md text-on-surface-variant">Visits</p>
+                </div>
+                <div>
+                  <p className="text-headline-sm text-on-surface">{peso(earnings[0].waived)}</p>
+                  <p className="text-label-md text-on-surface-variant">Waived</p>
+                </div>
+              </div>
+              {earnings.length > 1 && (
+                <div className="mt-md overflow-x-auto">
+                  <table className="w-full text-body-sm">
+                    <thead>
+                      <tr className="text-left text-label-md text-on-surface-variant">
+                        <th className="py-xs pr-md">Month</th>
+                        <th className="py-xs pr-md text-right">Visits</th>
+                        <th className="py-xs pr-md text-right">Billed</th>
+                        <th className="py-xs text-right">Collected</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/30">
+                      {earnings.map((e) => (
+                        <tr key={e.period}>
+                          <td className="py-xs pr-md">{e.period}</td>
+                          <td className="py-xs pr-md text-right">{e.completed_visits}</td>
+                          <td className="py-xs pr-md text-right">{peso(e.gross_billed)}</td>
+                          <td className="py-xs text-right">{peso(e.collected)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </Card>
 
         <div className="grid grid-cols-1 gap-lg sm:grid-cols-2">
           <Card>
