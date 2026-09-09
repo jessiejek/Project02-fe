@@ -129,7 +129,7 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
       onClose={onClose}
       title="Edit Prescription"
       footer={
-        <Button onClick={() => onSave({ ...item, genericName, dosage, quantity, instruction })} disabled={!genericName.trim() || !dosage.trim()}>
+        <Button onClick={() => onSave({ ...item, genericName, dosage, quantity, instruction })} disabled={!genericName.trim() || !quantity.trim()}>
           Save
         </Button>
       }
@@ -165,7 +165,10 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   const [addToFavorites, setAddToFavorites] = useState(false);
 
   const matches = query.length >= 3 && !selectedMedicine ? medicines.filter((m) => m.genericName.toLowerCase().includes(query.toLowerCase())).slice(0, 8) : [];
-  const canAdd = selectedMedicine !== null && dosage.trim() !== "" && quantity.trim() !== "";
+  // Free-text is allowed — the paper Rx pad isn't limited to a catalog. A picked
+  // catalog match just also carries its medicine id.
+  const effectiveGenericName = (selectedMedicine?.genericName ?? query).trim();
+  const canAdd = effectiveGenericName !== "" && quantity.trim() !== "";
 
   function reset() {
     setQuery("");
@@ -186,11 +189,11 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   }
 
   function handleAdd() {
-    if (!selectedMedicine || !canAdd) return;
+    if (!canAdd) return;
     onAdd(
       {
-        rxId: selectedMedicine.id,
-        genericName: selectedMedicine.genericName,
+        rxId: selectedMedicine?.id ?? "",
+        genericName: effectiveGenericName,
         dosage,
         quantity,
         instruction: instructions.trim(),
@@ -214,7 +217,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
             setQuery(e.target.value);
             setSelectedMedicine(null);
           }}
-          placeholder="Search medication (type 3+ chars)"
+          placeholder="Medication — pick from the list or just type it"
           className="w-full rounded-lg border border-outline-variant px-md py-sm"
         />
         {matches.length > 0 && (
@@ -235,6 +238,11 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
           </div>
         )}
       </div>
+      {query.trim() !== "" && !selectedMedicine && (
+        <p className="text-label-sm text-on-surface-variant">
+          Will be added as typed: <strong>{query.trim()}</strong>
+        </p>
+      )}
       <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
       <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
 
@@ -590,7 +598,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     if (addToFavorites && !wasDuplicate) {
       const supabase = createClient();
       const data = await addFavoriteMedicine(supabase, doctorId, {
-        medicine_id: item.rxId,
+        medicine_id: item.rxId || "00000000-0000-0000-0000-000000000000",
         generic_name: item.genericName,
         dosage: item.dosage,
         quantity: item.quantity,
@@ -626,7 +634,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       patient_id: patientId,
       doctor_id: doctorId,
       items: items.map((i) => ({
-        medicine_id: i.rxId,
+        medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
         generic_name: i.genericName,
         dosage: i.dosage,
         quantity: i.quantity,
@@ -649,7 +657,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         title: templateTitle.trim(),
         is_system_template: false,
         items: items.map((i) => ({
-          medicine_id: i.rxId,
+          medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
           generic_name: i.genericName,
           dosage: i.dosage,
           quantity: i.quantity,
@@ -752,7 +760,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         onSave={async (title, tplItems) => {
           const supabase = createClient();
           const items = tplItems.map((i) => ({
-            medicine_id: i.rxId,
+            medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
             generic_name: i.genericName,
             dosage: i.dosage,
             quantity: i.quantity,
