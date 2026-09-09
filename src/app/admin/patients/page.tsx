@@ -7,8 +7,10 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
-import { queryPatients, createPatient } from "@/lib/data/patients";
+import { queryPatientsPaged, createPatient } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
+
+const PAGE_SIZE = 25;
 
 const BLANK_NEW_PATIENT = { firstName: "", lastName: "", dateOfBirth: "", contactNumber: "", sex: "" as "" | "Male" | "Female" };
 
@@ -24,20 +26,29 @@ function accountStatus(userId: string | null, isGuest: boolean): PatientSummary[
 export default function AdminPatientsPage() {
   const [search, setSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
-  const [patients, setPatients] = useState<PatientSummary[]>([]);
+  const [rows, setRows] = useState<PatientSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
   const [newPatient, setNewPatient] = useState(BLANK_NEW_PATIENT);
-  const rows = patients.filter((p) =>
-    `${p.fullName} ${p.patientCode} ${p.contactNumber} ${p.email}`.toLowerCase().includes(search.toLowerCase()),
-  );
 
+  // §16.2 — server-side search + pagination. Debounce the query; reset to page 1
+  // whenever the search term changes.
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+    setLoading(true);
+    const handle = setTimeout(async () => {
       const supabase = createClient();
-      const data = (await queryPatients(supabase)).sort((a, b) =>
-        (b.created_at ?? "").localeCompare(a.created_at ?? ""),
-      );
-      setPatients(
-        data.map((p) => ({
+      const res = await queryPatientsPaged(supabase, {
+        q: search.trim() || undefined,
+        page,
+        pageSize: PAGE_SIZE,
+        sort: "-created",
+      });
+      if (cancelled) return;
+      setTotal(res.totalCount);
+      setRows(
+        res.items.map((p) => ({
           id: p.patient_id,
           patientCode: p.patient_code,
           fullName: `${p.first_name} ${p.last_name}`,
@@ -48,9 +59,17 @@ export default function AdminPatientsPage() {
           accountStatus: accountStatus(p.user_id, p.is_guest),
         })),
       );
-    }
-    load();
-  }, []);
+      setLoading(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [search, page]);
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, total);
 
   const canCreate = newPatient.firstName.trim() !== "" && newPatient.lastName.trim() !== "" && newPatient.dateOfBirth.trim() !== "" && newPatient.sex !== "";
 
@@ -65,7 +84,7 @@ export default function AdminPatientsPage() {
         sex: newPatient.sex as "Male" | "Female",
         contact_number: newPatient.contactNumber || null,
       });
-      setPatients((prev) => [
+      setRows((prev) => [
         {
           id: data.patient_id,
           patientCode: data.patient_code,
@@ -78,6 +97,7 @@ export default function AdminPatientsPage() {
         },
         ...prev,
       ]);
+      setTotal((n) => n + 1);
     } catch {
       /* keep the modal open on failure */
     }
@@ -94,9 +114,12 @@ export default function AdminPatientsPage() {
         </div>
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search patients..."
-          className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          placeholder="Search patients by name, code, email, phone..."
+          className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-96"
         />
         <DataTable
           columns={[
@@ -120,6 +143,19 @@ export default function AdminPatientsPage() {
             </div>
           )}
         />
+
+        <div className="flex items-center justify-between text-label-md text-on-surface-variant">
+          <span>{loading ? "Loading…" : `${rangeStart}–${rangeEnd} of ${total}`}</span>
+          <div className="flex items-center gap-sm">
+            <Button variant="secondary" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </Button>
+            <span>Page {page} / {pageCount}</span>
+            <Button variant="secondary" disabled={page >= pageCount || loading} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </Button>
+          </div>
+        </div>
       </div>
 
       <Modal

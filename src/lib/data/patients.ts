@@ -38,6 +38,45 @@ export interface PatientRow {
 
 const dotnet = () => resolveMode("patients") === "dotnet";
 
+export interface PagedResult<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PatientsPageOpts {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+  /** name | code | created, prefix "-" for descending. */
+  sort?: string;
+}
+
+/**
+ * §16.2 — server-side paged + searched patient list. Falls back to a
+ * client-side slice of the Supabase list when running in supabase mode.
+ */
+export async function queryPatientsPaged(
+  supabase: SupabaseClient,
+  opts: PatientsPageOpts = {},
+): Promise<PagedResult<PatientRow>> {
+  const page = Math.max(opts.page ?? 1, 1);
+  const pageSize = Math.min(Math.max(opts.pageSize ?? 25, 1), 200);
+  if (dotnet()) {
+    return api.get<PagedResult<PatientRow>>("/api/patients/search", {
+      query: { q: opts.q || undefined, page, pageSize, sort: opts.sort || undefined },
+    });
+  }
+  const all = await queryPatients(supabase, { search: opts.q });
+  return {
+    items: all.slice((page - 1) * pageSize, page * pageSize),
+    totalCount: all.length,
+    page,
+    pageSize,
+  };
+}
+
 export async function queryPatients(
   supabase: SupabaseClient,
   opts: { search?: string } = {},
