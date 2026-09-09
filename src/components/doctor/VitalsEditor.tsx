@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
+import { queryVitalReadings, upsertVitalsByBooking } from "@/lib/data/clinical";
 import type { VitalFieldTemplate } from "@/data/types";
 
 interface VitalInputCardProps {
@@ -69,9 +70,9 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [templates, readingsRes] = await Promise.all([
+      const [templates, readings] = await Promise.all([
         queryVitalFieldTemplates(supabase),
-        supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", bookingId),
+        queryVitalReadings(supabase, { bookingId }),
       ]);
       const fetchedTemplates = templates.map((t) => ({
         id: t.template_id,
@@ -82,7 +83,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
         isDefault: t.is_default,
       }));
       setTemplates(fetchedTemplates);
-      const existingReadings = (readingsRes.data ?? []).map((r) => ({ templateId: r.template_id, value: r.value }));
+      const existingReadings = readings.map((r) => ({ templateId: r.template_id, value: r.value }));
       const otherTemplateIds = new Set(fetchedTemplates.filter((t) => !t.isDefault).map((t) => t.id));
       setValues(Object.fromEntries(existingReadings.map((r) => [r.templateId, r.value])));
       setVisibleOtherIds(existingReadings.filter((r) => otherTemplateIds.has(r.templateId)).map((r) => r.templateId));
@@ -120,18 +121,11 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
     // row (Implementation-Phases/07-consultations-vitals.md §7c).
     const supabase = createClient();
     const relevantTemplateIds = [...defaultTemplates.map((t) => t.id), ...visibleOtherIds];
-    await Promise.all(
-      relevantTemplateIds.map(async (templateId) => {
-        const value = (values[templateId] ?? "").trim();
-        if (value === "") {
-          await supabase.from("patient_vital_readings").delete().eq("booking_id", bookingId).eq("template_id", templateId);
-        } else {
-          await supabase.from("patient_vital_readings").upsert(
-            { booking_id: bookingId, patient_id: patientId, template_id: templateId, value },
-            { onConflict: "booking_id,template_id" },
-          );
-        }
-      }),
+    await upsertVitalsByBooking(
+      supabase,
+      bookingId,
+      patientId,
+      relevantTemplateIds.map((templateId) => ({ template_id: templateId, value: (values[templateId] ?? "").trim() })),
     );
     setSavedAt(new Date().toLocaleTimeString());
     onSaved?.();

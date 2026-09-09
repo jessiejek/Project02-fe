@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { createClient } from "@/lib/supabase/client";
 import { queryMedicines } from "@/lib/data/lookups";
+import { queryFavoriteMedicines, queryRxTemplates } from "@/lib/data/clinical";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -429,16 +430,16 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   async function reloadFavoritesAndTemplates() {
     const supabase = createClient();
     const [favRes, tplRes] = await Promise.all([
-      supabase.from("doctor_favorite_medicines").select("*").eq("doctor_id", doctorId),
-      supabase.from("prescription_templates").select("*, prescription_template_items(*)").or(`doctor_id.eq.${doctorId},is_system_template.eq.true`),
+      queryFavoriteMedicines(supabase, doctorId),
+      queryRxTemplates(supabase, doctorId),
     ]);
     setFavorites(
-      (favRes.data ?? []).map((f) => ({
+      favRes.map((f) => ({
         id: f.id,
         item: { id: f.id, rxId: f.medicine_id, genericName: f.generic_name, dosage: f.dosage, quantity: f.quantity, instruction: f.instruction ?? "" },
       })),
     );
-    setTemplates((tplRes.data ?? []).map(toTemplate));
+    setTemplates(tplRes.map((t) => toTemplate(t as Parameters<typeof toTemplate>[0])));
   }
 
   useEffect(() => {

@@ -5,6 +5,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { querySoapPhrases } from "@/lib/data/clinical";
 import type { SoapField, SoapPhrase } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -36,12 +37,13 @@ export function SoapFieldToolbar({ doctorId, field, fieldLabel, value, onInsert 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("soap_phrases")
-        .select("id, doctor_id, field, label, body")
-        .eq("doctor_id", doctorId)
-        .eq("field", toDbField(field));
-      setPhrases((data ?? []).map((p) => ({ id: p.id, doctorId: p.doctor_id, field, label: p.label, text: p.body })));
+      const all = await querySoapPhrases(supabase, doctorId);
+      const dbField = toDbField(field);
+      setPhrases(
+        all
+          .filter((p) => p.field === dbField)
+          .map((p) => ({ id: p.id, doctorId: p.doctor_id, field, label: p.label, text: p.body })),
+      );
     }
     load();
   }, [doctorId, field]);

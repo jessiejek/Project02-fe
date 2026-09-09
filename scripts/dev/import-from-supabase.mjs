@@ -48,6 +48,17 @@ const ORDER = [
   "bookings",
   "booking_services",
   "payments",
+  "consultations",
+  "consultation_diagnoses",
+  "patient_vital_readings",
+  "follow_ups",
+  "prescription_groups",
+  "prescription_line_items",
+  "prescription_templates",
+  "prescription_template_items",
+  "doctor_favorite_medicines",
+  "soap_templates",
+  "soap_phrases",
 ];
 
 const wanted = process.argv.slice(2);

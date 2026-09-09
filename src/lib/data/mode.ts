@@ -73,6 +73,19 @@ const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
   "bookings",
   // Phase 4d — confirm / waive / refund via src/lib/data/payments.ts
   "payments",
+  // Phase 5 — clinical resources via src/lib/data/clinical.ts
+  "consultations",
+  "consultation_diagnoses",
+  "patient_vital_readings",
+  "follow_ups",
+  "prescription_groups",
+  "prescription_line_items",
+  "prescription_templates",
+  "prescription_template_items",
+  "doctor_favorite_medicines",
+  "soap_templates",
+  "soap_phrases",
+  "audit_logs",
 ]);
 
 export function resolveMode(resource: DataResource): ApiMode {
