@@ -10,6 +10,7 @@ import { Toast } from "@/components/ui/Toast";
 import { inviteStaffMember } from "@/app/actions/inviteStaffMember";
 import { revokeStaffInvite } from "@/app/actions/revokeStaffInvite";
 import { createClient } from "@/lib/supabase/client";
+import { queryStaffAccounts } from "@/lib/data/staff";
 import type { StaffMember } from "@/data/types";
 
 // Stitch staff_management.
@@ -27,10 +28,8 @@ export default function AdminStaffPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase.from("staff_accounts").select("*").eq("role", "Staff").order("full_name");
-      if (data) {
-        setStaff(data.map((s) => ({ id: s.staff_id, fullName: s.full_name, email: s.email, role: "Staff", status: s.status })));
-      }
+      const data = await queryStaffAccounts(supabase, { role: "Staff" });
+      setStaff(data.map((s) => ({ id: s.staff_id, fullName: s.full_name, email: s.email, role: "Staff", status: s.status })));
     }
     load();
   }, []);

@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
+import { queryPatients } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
 
 const BLANK_NEW_PATIENT = { firstName: "", lastName: "", dateOfBirth: "", contactNumber: "", sex: "" as "" | "Male" | "Female" };
@@ -32,21 +33,21 @@ export default function AdminPatientsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase.from("patients").select("*").order("created_at", { ascending: false });
-      if (data) {
-        setPatients(
-          data.map((p) => ({
-            id: p.patient_id,
-            patientCode: p.patient_code,
-            fullName: `${p.first_name} ${p.last_name}`,
-            sex: p.sex,
-            dateOfBirth: p.date_of_birth,
-            contactNumber: p.contact_number ?? "",
-            email: p.email,
-            accountStatus: accountStatus(p.user_id, p.is_guest),
-          })),
-        );
-      }
+      const data = (await queryPatients(supabase)).sort((a, b) =>
+        (b.created_at ?? "").localeCompare(a.created_at ?? ""),
+      );
+      setPatients(
+        data.map((p) => ({
+          id: p.patient_id,
+          patientCode: p.patient_code,
+          fullName: `${p.first_name} ${p.last_name}`,
+          sex: p.sex,
+          dateOfBirth: p.date_of_birth,
+          contactNumber: p.contact_number ?? "",
+          email: p.email,
+          accountStatus: accountStatus(p.user_id, p.is_guest),
+        })),
+      );
     }
     load();
   }, []);

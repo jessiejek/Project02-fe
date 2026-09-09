@@ -37,9 +37,25 @@ const sb = createClient(
   env.SUPABASE_SERVICE_ROLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 );
 const API_BASE = (env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
+
+// Authenticate as admin so protected endpoints (staff-accounts, patients, …) work.
+let token = "";
+try {
+  const r = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "admin@clinic.test", password: "ClinicDev123!" }),
+  });
+  if (r.ok) token = (await r.json()).accessToken ?? "";
+} catch {
+  /* endpoint may be public-only; continue unauthenticated */
+}
+
 const api = {
   get: async (path) => {
-    const res = await fetch(`${API_BASE}${path}`);
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
     if (!res.ok) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
     return res.json();
   },

@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { parseSlotTo24h, addMinutes } from "@/lib/bookingTime";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryPatients } from "@/lib/data/patients";
 import { cn } from "@/lib/cn";
 
 const STEPS = ["Patient", "Slot", "Review"];
@@ -56,14 +57,14 @@ export default function AdminWalkInPage() {
     async function load() {
       const supabase = createClient();
       const today = new Date().toISOString().slice(0, 10);
-      const [patientsRes, allDoctors, dayStatusRes] = await Promise.all([
-        supabase.from("patients").select("patient_id, patient_code, first_name, last_name, contact_number, email").order("created_at", { ascending: false }),
+      const [allPatients, allDoctors, dayStatusRes] = await Promise.all([
+        queryPatients(supabase),
         queryDoctors(supabase),
         supabase.from("doctor_day_statuses").select("doctor_id, status").eq("status_date", today),
       ]);
 
       setPatients(
-        (patientsRes.data ?? []).map((p) => ({
+        allPatients.map((p) => ({
           id: p.patient_id,
           patientCode: p.patient_code,
           fullName: `${p.first_name} ${p.last_name}`,

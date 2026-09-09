@@ -5,6 +5,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { createClient } from "@/lib/supabase/client";
+import { queryPatients } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
 
 function accountStatus(userId: string | null, isGuest: boolean): PatientSummary["accountStatus"] {
@@ -21,9 +22,11 @@ export default function StaffPatientsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase.from("patients").select("*").order("created_at", { ascending: false });
+      const data = (await queryPatients(supabase)).sort((a, b) =>
+        (b.created_at ?? "").localeCompare(a.created_at ?? ""),
+      );
       setPatients(
-        (data ?? []).map((p) => ({
+        data.map((p) => ({
           id: p.patient_id,
           patientCode: p.patient_code,
           fullName: `${p.first_name} ${p.last_name}`,

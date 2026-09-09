@@ -60,7 +60,10 @@ const GLOBAL_DEFAULT: ApiMode =
  * Phase 0: empty — everything is still Supabase.
  */
 const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
-  "doctors", // Phase 2 — directory reads via src/lib/data/doctors.ts (parity-verified)
+  // Phase 2 — reads via src/lib/data/*.ts, parity-verified
+  "doctors",
+  "patients",
+  "staff_accounts",
 ]);
 
 export function resolveMode(resource: DataResource): ApiMode {

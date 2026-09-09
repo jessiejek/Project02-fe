@@ -24,13 +24,48 @@ export class ApiError extends Error {
   }
 }
 
-/** Supplies the access token for Authorization. Replaced in Phase 1. */
+/** Supplies the access token for Authorization. */
 export type TokenProvider = () => string | undefined | Promise<string | undefined>;
 
-let tokenProvider: TokenProvider = () => undefined;
+let tokenProvider: TokenProvider = defaultBrowserTokenProvider;
 
 export function setTokenProvider(provider: TokenProvider) {
   tokenProvider = provider;
+}
+
+// In the browser under AUTH_MODE=dotnet, fetch the access token from the
+// same-origin /api/session/token route (it lives in an httpOnly cookie).
+// Cached for a minute; a 401 from a real API call clears it via clearCachedToken().
+let cachedToken: { value: string; at: number } | undefined;
+
+async function defaultBrowserTokenProvider(): Promise<string | undefined> {
+  if (process.env.NEXT_PUBLIC_AUTH_MODE !== "dotnet") return undefined;
+
+  // Server (RSC / route handlers): read the httpOnly cookie directly.
+  if (typeof window === "undefined") {
+    try {
+      const { cookies } = await import("next/headers");
+      return (await cookies()).get("clinic_at")?.value;
+    } catch {
+      return undefined; // outside a request scope (e.g. build)
+    }
+  }
+
+  // Browser: the token lives in an httpOnly cookie — fetch it from same-origin.
+  if (cachedToken && Date.now() - cachedToken.at < 60_000) return cachedToken.value;
+  try {
+    const res = await fetch("/api/session/token", { cache: "no-store" });
+    if (!res.ok) return undefined;
+    const { token } = (await res.json()) as { token?: string };
+    if (token) cachedToken = { value: token, at: Date.now() };
+    return token;
+  } catch {
+    return undefined;
+  }
+}
+
+export function clearCachedToken() {
+  cachedToken = undefined;
 }
 
 type RequestOptions = {
@@ -66,7 +101,7 @@ async function request<T>(
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(buildUrl(path, opts.query), {
+  let res = await fetch(buildUrl(path, opts.query), {
     method,
     headers,
     body:
@@ -78,6 +113,22 @@ async function request<T>(
     signal: opts.signal,
     cache: "no-store",
   });
+
+  // Stale cached browser token → refetch once and retry.
+  if (res.status === 401 && !opts.anonymous && typeof window !== "undefined") {
+    clearCachedToken();
+    const fresh = await tokenProvider();
+    if (fresh) {
+      headers.Authorization = `Bearer ${fresh}`;
+      res = await fetch(buildUrl(path, opts.query), {
+        method,
+        headers,
+        body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+        signal: opts.signal,
+        cache: "no-store",
+      });
+    }
+  }
 
   const text = await res.text();
   const parsed = text ? safeJson(text) : undefined;
