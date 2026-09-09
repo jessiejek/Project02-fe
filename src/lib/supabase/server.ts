@@ -14,7 +14,7 @@ export async function createClient() {
             cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
           } catch {
             // Called from a Server Component that can't set cookies — fine as
-            // long as middleware (Phase 2) is refreshing the session.
+            // long as proxy (Phase 2) is refreshing the session.
           }
         },
       },

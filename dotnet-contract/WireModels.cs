@@ -409,6 +409,10 @@ public sealed class PatientVitalReadingRow
     [JsonPropertyName("template_id")] public string TemplateId { get; set; } = "";
     [JsonPropertyName("value")] public string Value { get; set; } = "";
     [JsonPropertyName("recorded_at")] public string RecordedAt { get; set; } = "";
+    // PROPOSED — not in the live DB yet. See DOTNET_FRONTEND_CONTRACT.md §16.1
+    // (staff-recorded vitals at walk-in intake). Nullable/optional until a
+    // migration adds the column; safe to serialize now (omitted when null).
+    [JsonPropertyName("recorded_by_user_id")] public string? RecordedByUserId { get; set; }
     [JsonPropertyName("created_at")] public string CreatedAt { get; set; } = "";
     [JsonPropertyName("updated_at")] public string UpdatedAt { get; set; } = "";
 }
