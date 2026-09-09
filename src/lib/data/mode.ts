@@ -65,6 +65,10 @@ const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
   "patients",
   "staff_accounts",
   "doctor_services",
+  // Phase 3 — clinical lookup tables
+  "medicines",
+  "vital_field_templates",
+  "icd10_codes",
 ]);
 
 export function resolveMode(resource: DataResource): ApiMode {

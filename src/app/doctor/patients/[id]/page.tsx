@@ -14,6 +14,7 @@ import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { one, serviceNames } from "@/lib/one";
 import { printHtml, escapeHtml } from "@/lib/print";
 import type { PrescriptionGroup, VitalFieldTemplate, BookingStatus } from "@/data/types";
@@ -112,7 +113,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
 
     async function load() {
       const supabase = createClient();
-      const [patientRes, consultsRes, rxRes, bookingsRes, templatesRes, vitalsRes, labsRes, docsRes, vaxRes] = await Promise.all([
+      const [patientRes, consultsRes, rxRes, bookingsRes, templates, vitalsRes, labsRes, docsRes, vaxRes] = await Promise.all([
         supabase.from("patients").select("patient_id, first_name, last_name, patient_code, sex, date_of_birth, contact_number").eq("patient_id", id).maybeSingle(),
         supabase
           .from("consultations")
@@ -126,7 +127,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           .eq("patient_id", id)
           .eq("doctor_id", doctorId)
           .order("appointment_date", { ascending: false }),
-        supabase.from("vital_field_templates").select("*").order("description"),
+        queryVitalFieldTemplates(supabase),
         supabase.from("patient_vital_readings").select("id, booking_id, template_id, value").eq("patient_id", id),
         supabase.from("patient_lab_results").select("id, result_title").eq("patient_id", id).order("uploaded_at", { ascending: false }),
         supabase.from("patient_documents").select("id, title, file_name").eq("patient_id", id).order("uploaded_at", { ascending: false }),
@@ -196,7 +197,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
       );
 
       setVitalTemplates(
-        (templatesRes.data ?? []).map((t) => ({
+        templates.map((t) => ({
           id: t.template_id,
           description: t.description,
           formKey: t.form_key,

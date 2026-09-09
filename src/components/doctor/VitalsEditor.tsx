@@ -8,6 +8,7 @@ import { Toast } from "@/components/ui/Toast";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
+import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import type { VitalFieldTemplate } from "@/data/types";
 
 interface VitalInputCardProps {
@@ -68,11 +69,11 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [templatesRes, readingsRes] = await Promise.all([
-        supabase.from("vital_field_templates").select("*").order("description"),
+      const [templates, readingsRes] = await Promise.all([
+        queryVitalFieldTemplates(supabase),
         supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", bookingId),
       ]);
-      const fetchedTemplates = (templatesRes.data ?? []).map((t) => ({
+      const fetchedTemplates = templates.map((t) => ({
         id: t.template_id,
         description: t.description,
         formKey: t.form_key,

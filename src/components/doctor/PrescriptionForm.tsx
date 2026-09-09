@@ -10,6 +10,7 @@ import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { createClient } from "@/lib/supabase/client";
+import { queryMedicines } from "@/lib/data/lookups";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -443,8 +444,8 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase.from("medicines").select("*").order("generic_name");
-      if (data) setMedicines(data.map((m) => ({ id: m.medicine_id, genericName: m.generic_name })));
+      const data = await queryMedicines(supabase);
+      setMedicines(data.map((m) => ({ id: m.medicine_id, genericName: m.generic_name })));
       await reloadFavoritesAndTemplates();
     }
     load();

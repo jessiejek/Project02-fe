@@ -17,6 +17,7 @@ import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { one, serviceNames } from "@/lib/one";
 import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFieldTemplate } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -345,9 +346,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         totalFee: Number(bookingRow.total_fee),
       };
 
-      const [consultRes, templatesRes, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes] = await Promise.all([
+      const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes] = await Promise.all([
         supabase.from("consultations").select("*").eq("booking_id", bookingId).maybeSingle(),
-        supabase.from("vital_field_templates").select("*").order("description"),
+        queryVitalFieldTemplates(supabase),
         supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", bookingId),
         supabase.from("soap_templates").select("*").or(`doctor_id.eq.${realBooking.doctorId},is_system_template.eq.true`),
         supabase
@@ -379,11 +380,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         });
       }
 
-      if (templatesRes.data) {
-        setVitalTemplates(
-          templatesRes.data.map((t) => ({ id: t.template_id, description: t.description, formKey: t.form_key, unit: t.unit, icon: t.icon, isDefault: t.is_default })),
-        );
-      }
+      setVitalTemplates(
+        templates.map((t) => ({ id: t.template_id, description: t.description, formKey: t.form_key, unit: t.unit, icon: t.icon, isDefault: t.is_default })),
+      );
       setVitalReadings((vitalsRes.data ?? []).map((r) => ({ templateId: r.template_id, value: r.value })));
       setSoapTemplates(
         (soapTemplatesRes.data ?? []).map((t) => ({

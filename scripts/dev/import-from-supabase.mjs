@@ -35,6 +35,8 @@ const API = (env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, 
 
 // FK-safe order.
 const ORDER = [
+  "medicines",
+  "vital_field_templates",
   "services",
   "staff_accounts",
   "patients",
