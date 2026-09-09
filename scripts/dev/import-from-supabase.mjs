@@ -45,6 +45,9 @@ const ORDER = [
   "doctor_schedules",
   "doctor_blocked_dates",
   "doctor_day_statuses",
+  "bookings",
+  "booking_services",
+  "payments",
 ];
 
 const wanted = process.argv.slice(2);

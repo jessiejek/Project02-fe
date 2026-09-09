@@ -11,6 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryBookingById } from "@/lib/data/bookings";
 
 const TIMELINE = ["Pending", "Confirmed", "CheckedIn", "Completed"];
 
@@ -55,31 +56,15 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     const patientId = session.patientId;
     async function load() {
       const supabase = createClient();
-      const bookingRes = await supabase
-        .from("bookings")
-        .select("*, doctors(staff_accounts(full_name))")
-        .eq("booking_id", id)
-        .eq("patient_id", patientId)
-        .maybeSingle();
-      if (!bookingRes.data) {
+      const b = await queryBookingById(supabase, id);
+      if (!b || b.patient_id !== patientId) {
         setBooking(null);
         return;
       }
-      const [servicesRes, paymentRes] = await Promise.all([
-        supabase.from("booking_services").select("services(name)").eq("booking_id", id),
-        supabase.from("payments").select("status, waived_reason").eq("booking_id", id).maybeSingle(),
-      ]);
-      const b = bookingRes.data;
-      const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-      const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-      const payment = paymentRes.data;
       setBooking({
         id: b.booking_id,
-        doctorName: staff?.full_name ?? "",
-        serviceNames: (servicesRes.data ?? []).map((s) => {
-          const service = Array.isArray(s.services) ? s.services[0] : s.services;
-          return service?.name ?? "";
-        }),
+        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         appointmentDate: b.appointment_date,
         slotStartTime: b.slot_start_time.slice(0, 5),
         slotEndTime: b.slot_end_time.slice(0, 5),
@@ -87,9 +72,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         queueNumber: b.queue_number,
         amountDue: Number(b.amount_due),
         totalFee: Number(b.total_fee),
-        paymentStatus: payment?.status ?? "Unpaid",
+        paymentStatus: b.payments?.status ?? "Unpaid",
         paymentMode: b.payment_mode,
-        waivedReason: payment?.waived_reason ?? null,
+        waivedReason: b.payments?.waived_reason ?? null,
         createdAt: b.created_at.slice(0, 10),
       });
     }

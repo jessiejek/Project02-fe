@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
+import { queryBookingById } from "@/lib/data/bookings";
 
 interface BookingView {
   id: string;
@@ -55,47 +56,31 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [bookingRes, servicesRes, paymentRes] = await Promise.all([
-        supabase
-          .from("bookings")
-          .select("*, patients(first_name, last_name, patient_code, contact_number, email, sex, date_of_birth), doctors(specialization, staff_accounts(full_name))")
-          .eq("booking_id", id)
-          .maybeSingle(),
-        supabase.from("booking_services").select("services(name)").eq("booking_id", id),
-        supabase.from("payments").select("*").eq("booking_id", id).maybeSingle(),
-      ]);
-      if (!bookingRes.data) {
+      const b = await queryBookingById(supabase, id);
+      if (!b) {
         setBooking(null);
         return;
       }
-      const b = bookingRes.data;
-      const patient = Array.isArray(b.patients) ? b.patients[0] : b.patients;
-      const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-      const doctorStaff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-      const payment = paymentRes.data;
       setBooking({
         id: b.booking_id,
-        patientName: patient ? `${patient.first_name} ${patient.last_name}` : "",
-        patientCode: patient?.patient_code ?? "",
-        patientContact: patient?.contact_number ?? "",
-        patientEmail: patient?.email ?? "",
-        patientSex: patient?.sex ?? "",
-        patientDob: patient?.date_of_birth ?? "",
-        doctorName: doctorStaff?.full_name ?? "",
-        doctorSpecialization: doctor?.specialization ?? "",
-        serviceNames: (servicesRes.data ?? []).map((s) => {
-          const service = Array.isArray(s.services) ? s.services[0] : s.services;
-          return service?.name ?? "";
-        }),
+        patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+        patientCode: b.patients?.patient_code ?? "",
+        patientContact: b.patients?.contact_number ?? "",
+        patientEmail: b.patients?.email ?? "",
+        patientSex: b.patients?.sex ?? "",
+        patientDob: b.patients?.date_of_birth ?? "",
+        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+        doctorSpecialization: b.doctors?.specialization ?? "",
+        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         appointmentDate: b.appointment_date,
         slotStartTime: b.slot_start_time.slice(0, 5),
         status: b.status,
         queueNumber: b.queue_number,
         paymentMode: b.payment_mode,
         amountDue: Number(b.amount_due),
-        paymentStatus: payment?.status ?? "Unpaid",
-        orNumber: payment?.or_number ?? null,
-        waivedReason: payment?.waived_reason ?? null,
+        paymentStatus: b.payments?.status ?? "Unpaid",
+        orNumber: b.payments?.or_number ?? null,
+        waivedReason: b.payments?.waived_reason ?? null,
       });
       setAmountReceived(String(b.amount_due));
     }

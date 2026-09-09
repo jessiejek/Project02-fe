@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { createClient } from "@/lib/supabase/client";
+import { queryBookingById } from "@/lib/data/bookings";
 import { printHtml, escapeHtml } from "@/lib/print";
 
 const TIMELINE = ["Pending", "ProofSubmitted", "Confirmed", "Completed"];
@@ -54,40 +55,28 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [bookingRes, servicesRes, paymentRes] = await Promise.all([
-        supabase.from("bookings").select("*, patients(first_name, last_name, patient_code, contact_number, email), doctors(specialization, staff_accounts(full_name))").eq("booking_id", id).single(),
-        supabase.from("booking_services").select("services(name)").eq("booking_id", id),
-        supabase.from("payments").select("*").eq("booking_id", id).single(),
-      ]);
-      if (!bookingRes.data) {
+      const b = await queryBookingById(supabase, id);
+      if (!b) {
         setBooking(null);
         return;
       }
-      const b = bookingRes.data;
-      const patient = Array.isArray(b.patients) ? b.patients[0] : b.patients;
-      const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-      const doctorStaff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-      const payment = paymentRes.data;
       setBooking({
         id: b.booking_id,
         patientId: b.patient_id,
-        patientName: patient ? `${patient.first_name} ${patient.last_name}` : "",
-        patientCode: patient?.patient_code ?? "",
-        patientContact: patient?.contact_number ?? "",
-        patientEmail: patient?.email ?? "",
+        patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+        patientCode: b.patients?.patient_code ?? "",
+        patientContact: b.patients?.contact_number ?? "",
+        patientEmail: b.patients?.email ?? "",
         doctorId: b.doctor_id,
-        doctorName: doctorStaff?.full_name ?? "",
-        doctorSpecialization: doctor?.specialization ?? "",
-        serviceNames: (servicesRes.data ?? []).map((s) => {
-          const service = Array.isArray(s.services) ? s.services[0] : s.services;
-          return service?.name ?? "";
-        }),
+        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+        doctorSpecialization: b.doctors?.specialization ?? "",
+        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         appointmentDate: b.appointment_date,
         status: b.status,
         paymentMode: b.payment_mode,
         amountDue: Number(b.amount_due),
-        paymentStatus: payment?.status ?? "Unpaid",
-        orNumber: payment?.or_number ?? null,
+        paymentStatus: b.payments?.status ?? "Unpaid",
+        orNumber: b.payments?.or_number ?? null,
       });
     }
     load();

@@ -7,7 +7,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { one, serviceNames } from "@/lib/one";
+import { queryMyBookings } from "@/lib/data/bookings";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -55,30 +55,19 @@ export default function MyBookingsPage() {
 
     async function loadBookings() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("bookings")
-        .select("booking_id, appointment_date, slot_start_time, status, queue_number, doctors(staff_accounts(full_name)), booking_services(services(name)), payments(status)")
-        .eq("patient_id", patientId)
-        .order("appointment_date", { ascending: false })
-        .order("slot_start_time", { ascending: false });
-
-      const mapped: BookingRow[] = (data ?? []).map((b) => {
-        const doctor = one(b.doctors);
-        const staff = one(doctor?.staff_accounts);
-        const payment = one(b.payments);
-        return {
+      const rows = await queryMyBookings(supabase, patientId);
+      setBookings(
+        rows.map((b) => ({
           id: b.booking_id,
-          doctorName: staff?.full_name ?? "",
-          serviceNames: serviceNames(b.booking_services),
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
           appointmentDate: b.appointment_date,
           slotStartTime: b.slot_start_time.slice(0, 5),
           status: b.status,
           queueNumber: b.queue_number,
-          paymentStatus: payment?.status ?? "Unpaid",
-        };
-      });
-
-      setBookings(mapped);
+          paymentStatus: b.payments?.status ?? "Unpaid",
+        })),
+      );
     }
 
     loadBookings();

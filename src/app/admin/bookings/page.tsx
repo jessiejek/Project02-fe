@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryStaffBookings } from "@/lib/data/bookings";
 import type { BookingStatus } from "@/data/types";
 
 const ALL_STATUSES: BookingStatus[] = [
@@ -47,37 +48,22 @@ export default function AdminBookingsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [bookingsRes, servicesRes, doctorsRes] = await Promise.all([
-        supabase.from("bookings").select("*, patients(first_name, last_name, patient_code), doctors(staff_accounts(full_name))").order("created_at", { ascending: false }),
-        supabase.from("booking_services").select("booking_id, services(name)"),
+      const [rows, doctorsRes] = await Promise.all([
+        queryStaffBookings(supabase, "all"),
         queryDoctors(supabase),
       ]);
-      const paymentsRes = await supabase.from("payments").select("booking_id, status");
-      const paymentByBooking = new Map((paymentsRes.data ?? []).map((p) => [p.booking_id, p.status]));
-      const servicesByBooking = new Map<string, string[]>();
-      for (const row of servicesRes.data ?? []) {
-        const service = Array.isArray(row.services) ? row.services[0] : row.services;
-        const list = servicesByBooking.get(row.booking_id) ?? [];
-        list.push(service?.name ?? "");
-        servicesByBooking.set(row.booking_id, list);
-      }
       setBookings(
-        (bookingsRes.data ?? []).map((b) => {
-          const patient = Array.isArray(b.patients) ? b.patients[0] : b.patients;
-          const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-          const doctorStaff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-          return {
-            id: b.booking_id,
-            patientName: patient ? `${patient.first_name} ${patient.last_name}` : "",
-            patientCode: patient?.patient_code ?? "",
-            doctorId: b.doctor_id,
-            doctorName: doctorStaff?.full_name ?? "",
-            serviceNames: servicesByBooking.get(b.booking_id) ?? [],
-            appointmentDate: b.appointment_date,
-            status: b.status,
-            paymentStatus: paymentByBooking.get(b.booking_id) ?? "Unpaid",
-          };
-        }),
+        rows.map((b) => ({
+          id: b.booking_id,
+          patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+          patientCode: b.patients?.patient_code ?? "",
+          doctorId: b.doctor_id,
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+          appointmentDate: b.appointment_date,
+          status: b.status,
+          paymentStatus: b.payments?.status ?? "Unpaid",
+        })),
       );
       setDoctors(
         doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
