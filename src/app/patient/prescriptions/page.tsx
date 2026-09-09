@@ -8,7 +8,9 @@ import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { queryRxGroups } from "@/lib/data/clinical";
-import { printHtml, escapeHtml } from "@/lib/print";
+import { queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
+import { queryPatientById } from "@/lib/data/patients";
+import { printPrescription } from "@/lib/print-forms";
 import type { Database } from "@/data/supabase-types";
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
@@ -19,6 +21,12 @@ interface PrescriptionLine {
   quantity: string;
   dosage: string;
   instruction: string;
+  timing: string | null;
+  mealRelation: string | null;
+  durationKind: string | null;
+  durationValue: number | null;
+  indication: string | null;
+  isControlledSubstance: boolean;
 }
 
 interface PrescriptionGroupRow {
@@ -35,13 +43,29 @@ export default function PrescriptionsPage() {
   const { session } = useSession();
   const [search, setSearch] = useState("");
   const [groups, setGroups] = useState<PrescriptionGroupRow[]>([]);
+  const [clinic, setClinic] = useState<ClinicSettingsRow | null>(null);
+  const [me, setMe] = useState<{ name: string; code?: string; dob: string | null; sex: string | null; address: string | null } | null>(null);
 
   useEffect(() => {
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
       const supabase = createClient();
-      const data = await queryRxGroups(supabase, { patientId });
+      const [data, settings, pat] = await Promise.all([
+        queryRxGroups(supabase, { patientId }),
+        queryClinicSettings(supabase),
+        queryPatientById(supabase, patientId),
+      ]);
+      setClinic(settings);
+      if (pat) {
+        setMe({
+          name: `${pat.first_name} ${pat.last_name}`.trim(),
+          code: pat.patient_code,
+          dob: pat.date_of_birth ?? null,
+          sex: pat.sex ?? null,
+          address: pat.address ?? null,
+        });
+      }
       const mapped: PrescriptionGroupRow[] = data.map((g) => ({
         id: g.group_id,
         createdAt: g.created_at.slice(0, 10),
@@ -52,6 +76,12 @@ export default function PrescriptionsPage() {
           quantity: i.quantity,
           dosage: i.dosage,
           instruction: i.instruction ?? "",
+          timing: i.timing ?? null,
+          mealRelation: i.meal_relation ?? null,
+          durationKind: i.duration_kind ?? null,
+          durationValue: i.duration_value ?? null,
+          indication: i.indication ?? null,
+          isControlledSubstance: i.is_controlled_substance ?? false,
         })),
       }));
       mapped.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -66,18 +96,32 @@ export default function PrescriptionsPage() {
   );
 
   function printGroup(group: PrescriptionGroupRow) {
-    const items = group.items
-      .map(
-        (item, i) =>
-          `<p><strong>${i + 1}. ${escapeHtml(item.genericName)} #${escapeHtml(item.quantity)}</strong><br/>Sig. ${escapeHtml(item.dosage)} ${escapeHtml(item.instruction)}</p>`,
-      )
-      .join("");
-    printHtml(
-      `Prescription ${group.createdAt}`,
-      `<h1>Prescription</h1>
-       <p class="meta">${escapeHtml(group.createdAt)} · ${escapeHtml(group.doctorName || "—")}</p>
-       <div class="card">${items || "<p class='muted'>No medicines listed.</p>"}</div>`,
-    );
+    printPrescription({
+      clinic: clinic
+        ? { clinic_name: clinic.clinic_name, address: clinic.address, contact_number: clinic.contact_number }
+        : { clinic_name: "Grace Medical Clinic", address: "", contact_number: null },
+      doctor: { full_name: group.doctorName || "", license_number: null, ptr_number: null },
+      patient: {
+        full_name: me?.name ?? "",
+        patient_code: me?.code,
+        date_of_birth: me?.dob ?? null,
+        sex: me?.sex ?? null,
+        address: me?.address ?? null,
+      },
+      date: group.createdAt,
+      items: group.items.map((i) => ({
+        generic_name: i.genericName,
+        dosage: i.dosage,
+        quantity: i.quantity,
+        instruction: i.instruction,
+        timing: i.timing,
+        meal_relation: i.mealRelation,
+        duration_kind: i.durationKind,
+        duration_value: i.durationValue,
+        indication: i.indication,
+        is_controlled_substance: i.isControlledSubstance,
+      })),
+    });
   }
 
   return (

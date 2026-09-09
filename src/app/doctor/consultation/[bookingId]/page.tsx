@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
-import { queryAuditLogs, queryClinicSettings } from "@/lib/data/admin";
+import { queryAuditLogs, queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
 import {
   queryConsultationByBooking,
   queryConsultationById,
@@ -31,8 +31,12 @@ import {
   replaceDiagnoses,
   upsertFollowUpByConsultation,
   deleteFollowUpByConsultation,
+  upsertMedicalCertificateByConsultation,
   writeAuditLog,
 } from "@/lib/data/clinical";
+import { queryDoctorById } from "@/lib/data/doctors";
+import { queryPatientById } from "@/lib/data/patients";
+import { printMedicalCertificate } from "@/lib/print-forms";
 import { one, serviceNames } from "@/lib/one";
 import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFieldTemplate } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -341,6 +345,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     seniorPwd: number;
     medCert: number;
   } | null>(null);
+  // §16.8 Form 2 — medical certificate issue + print.
+  const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
+  const [mcExaminedAt, setMcExaminedAt] = useState("");
+  const [mcPurposeException, setMcPurposeException] = useState("");
+  const [issuingCert, setIssuingCert] = useState(false);
 
   // §16.6 preview of the flat-line fee the backend will compute on save.
   const previewFee = (() => {
@@ -536,6 +545,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       queryClinicSettings(supabase)
         .then((s) => {
           if (!cancelled && s) {
+            setClinicRow(s);
             setFeeSchedule({
               consultation: s.fee_consultation,
               followUp: s.fee_follow_up,
@@ -744,6 +754,58 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setSavedConsultation(buildConsultationRecord());
     setChecklistOpen(false);
     setJustCompleted(true);
+  }
+
+  // §16.8 Form 2 — save the certificate row (upsert on consultation) then print
+  // it on the shared clinic letterhead. Requires a saved consultation.
+  async function handleIssueMedCert() {
+    if (!booking || !clinicRow) return;
+    setIssuingCert(true);
+    const supabase = createClient();
+    try {
+      const consultId = consultationId ?? (await persistConsultation("Draft"));
+      if (!consultId) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const cert = {
+        patient_id: booking.patientId,
+        doctor_id: booking.doctorId,
+        issue_date: today,
+        examined_at: mcExaminedAt || clinicRow.clinic_name,
+        examination_date_from: today,
+        examination_date_to: today,
+        diagnosis_text: assessment || null,
+        recommendations: plan || null,
+        purpose_exception: mcPurposeException || null,
+        come_back_on: followUpDate || null,
+      };
+      await upsertMedicalCertificateByConsultation(supabase, consultId, cert);
+      const [doc, pat] = await Promise.all([
+        queryDoctorById(supabase, booking.doctorId),
+        queryPatientById(supabase, booking.patientId),
+      ]);
+      printMedicalCertificate({
+        clinic: {
+          clinic_name: clinicRow.clinic_name,
+          address: clinicRow.address,
+          contact_number: clinicRow.contact_number,
+        },
+        doctor: {
+          full_name: booking.doctorName || (doc?.staff_accounts?.full_name ?? ""),
+          license_number: doc?.license_number ?? null,
+          ptr_number: doc?.ptr_number ?? null,
+        },
+        patient: {
+          full_name: pat ? `${pat.first_name} ${pat.last_name}`.trim() : "",
+          patient_code: pat?.patient_code,
+          date_of_birth: pat?.date_of_birth ?? null,
+          sex: pat?.sex ?? null,
+          address: pat?.address ?? null,
+        },
+        cert,
+      });
+    } finally {
+      setIssuingCert(false);
+    }
   }
 
   function currentFormSnapshot() {
@@ -1336,6 +1398,33 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                           />
                           Medical certificate requested
                         </label>
+                        {medCertRequested && (
+                          <div className="space-y-sm rounded-lg border border-outline-variant p-md">
+                            <p className="text-label-md text-on-surface-variant">
+                              Medical certificate (§16.8). Diagnosis and recommendations use the
+                              Assessment / Plan above; follow-up date fills &ldquo;come back on&rdquo;.
+                            </p>
+                            <input
+                              value={mcExaminedAt}
+                              onChange={(e) => setMcExaminedAt(e.target.value)}
+                              placeholder={`Examined in… (default: ${clinicRow?.clinic_name ?? "clinic"})`}
+                              className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
+                            />
+                            <input
+                              value={mcPurposeException}
+                              onChange={(e) => setMcPurposeException(e.target.value)}
+                              placeholder="Purpose exception (the &ldquo;except ___&rdquo; blank) — optional"
+                              className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
+                            />
+                            <Button
+                              variant="secondary"
+                              disabled={issuingCert || !clinicRow}
+                              onClick={handleIssueMedCert}
+                            >
+                              {issuingCert ? "Issuing…" : "Save & Print Certificate"}
+                            </Button>
+                          </div>
+                        )}
                         {previewFee !== null && (
                           <p className="text-label-md text-on-surface">
                             Computed clinic fee: <strong>₱{previewFee}</strong>

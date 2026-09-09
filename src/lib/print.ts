@@ -1,5 +1,10 @@
-/** Open a focused print window. Returns false if the browser blocked popups. */
-export function printHtml(title: string, bodyHtml: string): boolean {
+/**
+ * Open a focused print window. Returns false if the browser blocked popups.
+ * Pass `opts.brand` to override the default brand line, or `null` to omit it
+ * entirely (the body carries its own letterhead — see `print-forms.ts`).
+ */
+export function printHtml(title: string, bodyHtml: string, opts?: { brand?: string | null }): boolean {
+  const brand = opts && "brand" in opts ? opts.brand : "Dr. Grace Gavino Clinic";
   const win = window.open("", "_blank", "noopener,noreferrer,width=800,height=900");
   if (!win) return false;
 
@@ -39,7 +44,7 @@ export function printHtml(title: string, bodyHtml: string): boolean {
   </style>
 </head>
 <body>
-  <div class="brand">Dr. Grace Gavino Clinic</div>
+  ${brand ? `<div class="brand">${escapeHtml(brand)}</div>` : ""}
   ${bodyHtml}
   <script>
     window.onload = function () {
