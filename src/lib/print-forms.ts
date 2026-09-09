@@ -98,11 +98,19 @@ export function printPrescription(opts: {
 }): boolean {
   const { clinic, doctor, patient, items } = opts;
   const dateStr = fmtDate(opts.date ?? new Date().toISOString());
-  const timingPhrase = (t: string | null | undefined) => {
+  const slotList = (t: string | null | undefined) => {
     const slots = (t ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
     if (slots.length === 0) return "";
-    if (slots.length === 1) return `at ${slots[0]}`;
-    return `at ${slots.slice(0, -1).join(", ")} & ${slots[slots.length - 1]}`;
+    if (slots.length === 1) return slots[0];
+    return `${slots.slice(0, -1).join(", ")} & ${slots[slots.length - 1]}`;
+  };
+  const whenPhrase = (meal: string | null | undefined, t: string | null | undefined) => {
+    const slots = slotList(t);
+    const m = meal ? String(meal).toLowerCase() : "";
+    if (m && slots) return `${m} ${slots}`;
+    if (m) return `${m} meals`;
+    if (slots) return `at ${slots}`;
+    return "";
   };
   const durationPhrase = (kind: string | null | undefined, value: number | null | undefined) => {
     if (kind === "Maintain") return "maintenance";
@@ -115,8 +123,7 @@ export function printPrescription(opts: {
   const rows = items
     .map((i, idx) => {
       const dir = [
-        i.meal_relation ? `${String(i.meal_relation).toLowerCase()} meals` : "",
-        timingPhrase(i.timing),
+        whenPhrase(i.meal_relation, i.timing),
         durationPhrase(i.duration_kind, i.duration_value),
       ].filter(Boolean).join(", ");
       const sigLine = dir ? dir.charAt(0).toUpperCase() + dir.slice(1) + "." : "";

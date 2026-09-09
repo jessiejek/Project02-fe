@@ -30,12 +30,12 @@ function newId(prefix: string) {
 }
 
 // §16.8 Form 1 — turn the structured Rx-pad fields into a readable directions
-// line, e.g. "After meals, at lunch, maintenance."
-function timingPhrase(timing: string | null | undefined): string {
+// line, e.g. "After lunch, maintenance." / "Before breakfast & dinner, for 5 days."
+function slotList(timing: string | null | undefined): string {
   const slots = (timing ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   if (slots.length === 0) return "";
-  if (slots.length === 1) return `at ${slots[0]}`;
-  return `at ${slots.slice(0, -1).join(", ")} & ${slots[slots.length - 1]}`;
+  if (slots.length === 1) return slots[0];
+  return `${slots.slice(0, -1).join(", ")} & ${slots[slots.length - 1]}`;
 }
 function durationPhrase(kind: PrescriptionLineItem["durationKind"], value: PrescriptionLineItem["durationValue"]): string {
   if (kind === "Maintain") return "maintenance";
@@ -45,12 +45,17 @@ function durationPhrase(kind: PrescriptionLineItem["durationKind"], value: Presc
   }
   return "";
 }
+// meal + timing collapse into one natural phrase: "after lunch", "before breakfast & dinner".
+function whenPhrase(meal: PrescriptionLineItem["mealRelation"], timing: string | null | undefined): string {
+  const slots = slotList(timing);
+  const m = meal ? meal.toLowerCase() : "";
+  if (m && slots) return `${m} ${slots}`;
+  if (m) return `${m} meals`;
+  if (slots) return `at ${slots}`;
+  return "";
+}
 export function directionsLine(item: PrescriptionLineItem): string {
-  const parts = [
-    item.mealRelation ? `${item.mealRelation.toLowerCase()} meals` : "",
-    timingPhrase(item.timing),
-    durationPhrase(item.durationKind, item.durationValue),
-  ].filter(Boolean);
+  const parts = [whenPhrase(item.mealRelation, item.timing), durationPhrase(item.durationKind, item.durationValue)].filter(Boolean);
   if (parts.length === 0) return "";
   const s = parts.join(", ");
   return s.charAt(0).toUpperCase() + s.slice(1) + ".";
@@ -282,7 +287,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
                 mealRelation === option ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
               )}
             >
-              {option} meals
+              {option}
             </button>
           ))}
         </div>
