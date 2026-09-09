@@ -10,7 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { parseSlotTo24h, addMinutes } from "@/lib/bookingTime";
 import { queryDoctors } from "@/lib/data/doctors";
-import { queryPatients } from "@/lib/data/patients";
+import { queryPatients, createPatient } from "@/lib/data/patients";
 import { cn } from "@/lib/cn";
 
 const STEPS = ["Patient", "Slot", "Review"];
@@ -109,27 +109,21 @@ export default function AdminWalkInPage() {
     setRegisterError("");
     setRegistering(true);
     const supabase = createClient();
-    const patientCode = `MF-${Math.floor(1000 + Math.random() * 9000)}`;
-    const { data, error } = await supabase
-      .from("patients")
-      .insert({
-        patient_code: patientCode,
-        first_name: quickRegister.firstName.trim(),
-        last_name: quickRegister.lastName.trim(),
+    let data;
+    try {
+      data = await createPatient(supabase, {
+        first_name: quickRegister.firstName,
+        last_name: quickRegister.lastName,
         date_of_birth: quickRegister.dateOfBirth,
         sex: quickRegister.sex as "Male" | "Female",
         contact_number: quickRegister.contactNumber || null,
-        email: "",
-        is_guest: true,
-        user_id: null,
-      })
-      .select("patient_id, patient_code, first_name, last_name, contact_number, email")
-      .single();
-    setRegistering(false);
-    if (error || !data) {
+      });
+    } catch {
+      setRegistering(false);
       setRegisterError("Could not register this patient. Try again.");
       return;
     }
+    setRegistering(false);
     const created: PatientRow = {
       id: data.patient_id,
       patientCode: data.patient_code,

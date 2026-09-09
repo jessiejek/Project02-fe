@@ -75,6 +75,39 @@ export async function queryPatientById(
 
 export type PatientPatch = Partial<Omit<PatientRow, "patient_id" | "created_at" | "updated_at">>;
 
+/** Guest / staff quick-register (no linked auth account). Returns the created row. */
+export async function createPatient(
+  supabase: SupabaseClient,
+  fields: {
+    first_name: string;
+    last_name: string;
+    date_of_birth: string;
+    sex: "Male" | "Female";
+    contact_number?: string | null;
+    email?: string;
+    patient_code?: string;
+  },
+): Promise<PatientRow> {
+  const patient_code = fields.patient_code ?? `MF-${Math.floor(1000 + Math.random() * 9000)}`;
+  const row = {
+    patient_code,
+    first_name: fields.first_name.trim(),
+    last_name: fields.last_name.trim(),
+    date_of_birth: fields.date_of_birth,
+    sex: fields.sex,
+    contact_number: fields.contact_number || null,
+    email: fields.email ?? "",
+    is_guest: true,
+    user_id: null,
+  };
+  if (dotnet()) {
+    return api.post<PatientRow>("/api/patients", row);
+  }
+  const { data, error } = await supabase.from("patients").insert(row).select("*").single();
+  if (error || !data) throw error ?? new Error("Could not create patient.");
+  return data as PatientRow;
+}
+
 /** Partial update — fetch-merge-put in dotnet mode (PUT replaces the row). */
 export async function updatePatient(
   supabase: SupabaseClient,

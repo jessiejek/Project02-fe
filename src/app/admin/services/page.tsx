@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryDoctorServices } from "@/lib/data/doctorServices";
 import type { ManagedService } from "@/data/types";
 
 const CATEGORIES: ManagedService["category"][] = ["Consultation", "Procedure", "Laboratory", "Diagnostic"];
@@ -42,10 +43,10 @@ export default function AdminServicesPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [servicesRes, doctorsRes, linksRes] = await Promise.all([
+      const [servicesRes, doctorsRes, links] = await Promise.all([
         supabase.from("services").select("*").order("category").order("name"),
         queryDoctors(supabase),
-        supabase.from("doctor_services").select("doctor_id, service_id"),
+        queryDoctorServices(supabase),
       ]);
 
       const doctorOptions: DoctorOption[] = doctorsRes
@@ -58,7 +59,7 @@ export default function AdminServicesPage() {
       const nameByDoctorId = new Map(doctorOptions.map((d) => [d.id, d.name]));
 
       const linksByService: Record<string, string[]> = {};
-      for (const link of linksRes.data ?? []) {
+      for (const link of links) {
         if (!linksByService[link.service_id]) linksByService[link.service_id] = [];
         linksByService[link.service_id].push(link.doctor_id);
       }

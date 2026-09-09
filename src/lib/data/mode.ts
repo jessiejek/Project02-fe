@@ -64,6 +64,7 @@ const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
   "doctors",
   "patients",
   "staff_accounts",
+  "doctor_services",
 ]);
 
 export function resolveMode(resource: DataResource): ApiMode {

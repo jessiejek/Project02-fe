@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctorById } from "@/lib/data/doctors";
+import { queryDoctorServices } from "@/lib/data/doctorServices";
 import { indexToDayName } from "@/lib/days";
 
 // Stitch screen_5_doctor_profile. Retiring mockDoctors per
@@ -16,9 +17,9 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const [doctor, servicesRes, scheduleRes, ratingRes, dayStatusRes, reviewsRes] = await Promise.all([
+  const [doctor, doctorServices, scheduleRes, ratingRes, dayStatusRes, reviewsRes] = await Promise.all([
     queryDoctorById(supabase, id),
-    supabase.from("doctor_services").select("service_id, duration_minutes, services(name, category, price)").eq("doctor_id", id),
+    queryDoctorServices(supabase, { doctorId: id }),
     supabase.from("doctor_schedules").select("*").eq("doctor_id", id).order("day_of_week"),
     supabase.from("v_doctor_ratings").select("*").eq("doctor_id", id).single(),
     supabase.from("doctor_day_statuses").select("status").eq("doctor_id", id).eq("status_date", today).maybeSingle(),
@@ -68,17 +69,14 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
                 </tr>
               </thead>
               <tbody>
-                {(servicesRes.data ?? []).map((s) => {
-                  const service = Array.isArray(s.services) ? s.services[0] : s.services;
-                  return (
-                    <tr key={s.service_id} className="border-b border-outline-variant/40">
-                      <td className="py-sm text-body-md">{service?.name}</td>
-                      <td className="py-sm text-body-md text-on-surface-variant">{service?.category}</td>
-                      <td className="py-sm text-body-md">₱{service?.price}</td>
-                      <td className="py-sm text-body-md">{s.duration_minutes} min</td>
-                    </tr>
-                  );
-                })}
+                {doctorServices.map((s) => (
+                  <tr key={s.service_id} className="border-b border-outline-variant/40">
+                    <td className="py-sm text-body-md">{s.services?.name}</td>
+                    <td className="py-sm text-body-md text-on-surface-variant">{s.services?.category}</td>
+                    <td className="py-sm text-body-md">₱{s.services?.price}</td>
+                    <td className="py-sm text-body-md">{s.duration_minutes} min</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

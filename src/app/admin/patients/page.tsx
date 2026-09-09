@@ -7,7 +7,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
-import { queryPatients } from "@/lib/data/patients";
+import { queryPatients, createPatient } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
 
 const BLANK_NEW_PATIENT = { firstName: "", lastName: "", dateOfBirth: "", contactNumber: "", sex: "" as "" | "Male" | "Female" };
@@ -57,23 +57,14 @@ export default function AdminPatientsPage() {
   async function handleCreate() {
     if (!canCreate) return;
     const supabase = createClient();
-    const patientCode = `MF-${Math.floor(1000 + Math.random() * 9000)}`;
-    const { data, error } = await supabase
-      .from("patients")
-      .insert({
-        patient_code: patientCode,
-        first_name: newPatient.firstName.trim(),
-        last_name: newPatient.lastName.trim(),
+    try {
+      const data = await createPatient(supabase, {
+        first_name: newPatient.firstName,
+        last_name: newPatient.lastName,
         date_of_birth: newPatient.dateOfBirth,
         sex: newPatient.sex as "Male" | "Female",
         contact_number: newPatient.contactNumber || null,
-        email: "",
-        is_guest: true,
-        user_id: null,
-      })
-      .select("*")
-      .single();
-    if (!error && data) {
+      });
       setPatients((prev) => [
         {
           id: data.patient_id,
@@ -87,6 +78,8 @@ export default function AdminPatientsPage() {
         },
         ...prev,
       ]);
+    } catch {
+      /* keep the modal open on failure */
     }
     setNewPatient(BLANK_NEW_PATIENT);
     setAddOpen(false);

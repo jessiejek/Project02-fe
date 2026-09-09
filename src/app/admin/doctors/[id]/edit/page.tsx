@@ -3,7 +3,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { DoctorForm } from "@/components/admin/DoctorForm";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctorById } from "@/lib/data/doctors";
-import { one } from "@/lib/one";
+import { queryDoctorServices } from "@/lib/data/doctorServices";
 import { indexToDayName } from "@/lib/days";
 import type { Doctor } from "@/data/types";
 
@@ -11,9 +11,9 @@ export default async function EditDoctorPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = await createClient();
 
-  const [d, servicesRes, scheduleRes] = await Promise.all([
+  const [d, doctorServices, scheduleRes] = await Promise.all([
     queryDoctorById(supabase, id),
-    supabase.from("doctor_services").select("service_id, duration_minutes, services(name, category, price)").eq("doctor_id", id),
+    queryDoctorServices(supabase, { doctorId: id }),
     supabase.from("doctor_schedules").select("*").eq("doctor_id", id).order("day_of_week"),
   ]);
   if (!d) notFound();
@@ -28,16 +28,13 @@ export default async function EditDoctorPage({ params }: { params: Promise<{ id:
     rating: 0,
     reviewCount: 0,
     dayStatus: "Available",
-    services: (servicesRes.data ?? []).map((s) => {
-      const service = one(s.services);
-      return {
-        id: s.service_id,
-        name: service?.name ?? "",
-        category: service?.category ?? "Consultation",
-        price: Number(service?.price ?? 0),
-        durationMinutes: s.duration_minutes,
-      };
-    }),
+    services: doctorServices.map((s) => ({
+      id: s.service_id,
+      name: s.services?.name ?? "",
+      category: (s.services?.category ?? "Consultation") as Doctor["services"][number]["category"],
+      price: Number(s.services?.price ?? 0),
+      durationMinutes: s.duration_minutes,
+    })),
     schedule: (scheduleRes.data ?? []).map((s) => ({
       day: indexToDayName(s.day_of_week),
       isActive: s.is_active,

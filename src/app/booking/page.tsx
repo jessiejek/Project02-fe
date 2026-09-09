@@ -9,9 +9,9 @@ import { StepIndicator } from "@/components/ui/StepIndicator";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryDoctorServices } from "@/lib/data/doctorServices";
 import { registerPatientAccount } from "@/app/actions/registerPatientAccount";
 import { parseSlotTo24h, addMinutes } from "@/lib/bookingTime";
-import { one } from "@/lib/one";
 import { cn } from "@/lib/cn";
 
 const STEPS = ["Doctor", "Date", "Time", "Review", "Sign in", "Payment"];
@@ -73,10 +73,10 @@ function BookingWizard() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [allDoctors, ratingsRes, servicesRes, schedulesRes, blockedRes] = await Promise.all([
+      const [allDoctors, ratingsRes, doctorServices, schedulesRes, blockedRes] = await Promise.all([
         queryDoctors(supabase),
         supabase.from("v_doctor_ratings").select("*"),
-        supabase.from("doctor_services").select("doctor_id, service_id, services(name, price)"),
+        queryDoctorServices(supabase),
         supabase.from("doctor_schedules").select("*"),
         supabase.from("doctor_blocked_dates").select("*"),
       ]);
@@ -90,12 +90,9 @@ function BookingWizard() {
           consultationFee: Number(d.consultation_fee),
           rating: Number(ratingByDoctor.get(d.doctor_id) ?? 0),
           slotDurationMinutes: d.slot_duration_minutes,
-          services: (servicesRes.data ?? [])
+          services: doctorServices
             .filter((s) => s.doctor_id === d.doctor_id)
-            .map((s) => {
-              const service = one(s.services);
-              return { id: s.service_id, name: service?.name ?? "", price: Number(service?.price ?? 0) };
-            }),
+            .map((s) => ({ id: s.service_id, name: s.services?.name ?? "", price: Number(s.services?.price ?? 0) })),
         })),
       );
 
