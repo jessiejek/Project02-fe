@@ -29,22 +29,31 @@ function newId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function sig(item: PrescriptionLineItem) {
-  const duration =
-    item.durationKind === "Maintain"
-      ? "Maintain"
-      : item.durationValue && item.durationKind
-        ? `${item.durationValue} ${item.durationKind.toLowerCase()}`
-        : "";
+// §16.8 Form 1 — turn the structured Rx-pad fields into a readable directions
+// line, e.g. "After meals, at lunch, maintenance."
+function timingPhrase(timing: string | null | undefined): string {
+  const slots = (timing ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (slots.length === 0) return "";
+  if (slots.length === 1) return `at ${slots[0]}`;
+  return `at ${slots.slice(0, -1).join(", ")} & ${slots[slots.length - 1]}`;
+}
+function durationPhrase(kind: PrescriptionLineItem["durationKind"], value: PrescriptionLineItem["durationValue"]): string {
+  if (kind === "Maintain") return "maintenance";
+  if ((kind === "Days" || kind === "Weeks") && value) {
+    const unit = kind === "Days" ? "day" : "week";
+    return `for ${value} ${unit}${value === 1 ? "" : "s"}`;
+  }
+  return "";
+}
+export function directionsLine(item: PrescriptionLineItem): string {
   const parts = [
-    `Sig. ${item.dosage}`.trim(),
-    item.mealRelation ? `${item.mealRelation} meals` : "",
-    item.timing ?? "",
-    duration,
-    item.indication ? `— ${item.indication}` : "",
-    item.instruction ?? "",
+    item.mealRelation ? `${item.mealRelation.toLowerCase()} meals` : "",
+    timingPhrase(item.timing),
+    durationPhrase(item.durationKind, item.durationValue),
   ].filter(Boolean);
-  return parts.join(" · ");
+  if (parts.length === 0) return "";
+  const s = parts.join(", ");
+  return s.charAt(0).toUpperCase() + s.slice(1) + ".";
 }
 
 interface LineItemListProps {
@@ -92,11 +101,23 @@ function LineItemList({ items, selectedIds, onToggleSelect, onToggleSelectAll, o
                 onChange={() => onToggleSelect(item.id)}
                 className="mt-1 h-4 w-4"
               />
-              <div>
+              <div className="min-w-0">
                 <p className="text-body-md font-medium text-on-surface">
-                  {item.genericName} #{item.quantity}
+                  {item.genericName}
+                  {item.dosage ? <span className="font-normal text-on-surface-variant"> {item.dosage}</span> : null}
                 </p>
-                <p className="text-label-md text-on-surface-variant">{sig(item)}</p>
+                <p className="text-label-sm text-on-surface-variant">Dispense: {item.quantity}</p>
+                {directionsLine(item) && (
+                  <p className="mt-1 text-label-md text-on-surface">
+                    <span className="text-on-surface-variant">Sig:</span> {directionsLine(item)}
+                  </p>
+                )}
+                {item.indication && (
+                  <p className="text-label-sm text-on-surface-variant">For {item.indication}</p>
+                )}
+                {item.instruction && (
+                  <p className="text-label-sm text-on-surface-variant">{item.instruction}</p>
+                )}
               </div>
             </div>
             <button type="button" onClick={() => onEdit(item)} aria-label="Edit item" className="text-on-surface-variant">

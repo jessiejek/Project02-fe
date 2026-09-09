@@ -98,19 +98,34 @@ export function printPrescription(opts: {
 }): boolean {
   const { clinic, doctor, patient, items } = opts;
   const dateStr = fmtDate(opts.date ?? new Date().toISOString());
+  const timingPhrase = (t: string | null | undefined) => {
+    const slots = (t ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+    if (slots.length === 0) return "";
+    if (slots.length === 1) return `at ${slots[0]}`;
+    return `at ${slots.slice(0, -1).join(", ")} & ${slots[slots.length - 1]}`;
+  };
+  const durationPhrase = (kind: string | null | undefined, value: number | null | undefined) => {
+    if (kind === "Maintain") return "maintenance";
+    if ((kind === "Days" || kind === "Weeks") && value) {
+      const unit = kind === "Days" ? "day" : "week";
+      return `for ${value} ${unit}${value === 1 ? "" : "s"}`;
+    }
+    return "";
+  };
   const rows = items
-    .map((i) => {
-      const durTxt =
-        i.duration_kind === "ongoing"
-          ? "ongoing"
-          : i.duration_value && i.duration_kind
-            ? `for ${i.duration_value} ${i.duration_kind}`
-            : "";
-      const sub = [i.timing, i.meal_relation, durTxt, i.indication].filter(Boolean).join(" · ");
+    .map((i, idx) => {
+      const dir = [
+        i.meal_relation ? `${String(i.meal_relation).toLowerCase()} meals` : "",
+        timingPhrase(i.timing),
+        durationPhrase(i.duration_kind, i.duration_value),
+      ].filter(Boolean).join(", ");
+      const sigLine = dir ? dir.charAt(0).toUpperCase() + dir.slice(1) + "." : "";
       return `<div class="rx-item">
-        <div class="name">${e(i.generic_name)} ${e(i.dosage)}${i.is_controlled_substance ? " (controlled)" : ""}</div>
-        <div class="sub">Qty: ${e(i.quantity)}${i.instruction ? ` — ${e(i.instruction)}` : ""}</div>
-        ${sub ? `<div class="sub">${e(sub)}</div>` : ""}
+        <div class="name">${idx + 1}. ${e(i.generic_name)}${i.dosage ? ` ${e(i.dosage)}` : ""}${i.is_controlled_substance ? " (controlled)" : ""}</div>
+        <div class="sub">Dispense #${e(i.quantity)}</div>
+        ${sigLine ? `<div class="sub">Sig: ${e(sigLine)}</div>` : ""}
+        ${i.indication ? `<div class="sub">For ${e(i.indication)}</div>` : ""}
+        ${i.instruction ? `<div class="sub">${e(i.instruction)}</div>` : ""}
       </div>`;
     })
     .join("");
