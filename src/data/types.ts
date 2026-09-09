@@ -428,6 +428,14 @@ export interface ClinicSettings {
   logoUrl?: string;
   faviconUrl?: string;
   websiteUrl?: string;
+  // §16.6 — flat clinic-wide fee schedule. Doctor picks which line applies at
+  // consultation (visit_type / discount category); the backend recomputes the
+  // booking total on consultation save.
+  feeConsultation: number;
+  feeFollowUp: number;
+  feeSeniorPwd: number;
+  feeMedCert: number;
+  discountPct: number;
 }
 
 // Matches clinic_operating_hours (schema.sql) exactly — admin/settings' Hours

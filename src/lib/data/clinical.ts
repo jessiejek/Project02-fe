@@ -180,6 +180,8 @@ export interface VitalReadingRow {
   patient_id?: string;
   template_id: string;
   value: string;
+  /** §16.1 — staff-like user who recorded the reading (set server-side). */
+  recorded_by_user_id?: string | null;
 }
 
 export async function queryVitalReadings(

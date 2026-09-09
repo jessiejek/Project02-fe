@@ -21,6 +21,7 @@ import type { ClinicSettings, OperatingHours } from "@/data/types";
 const TABS = [
   { id: "general", label: "General" },
   { id: "hours", label: "Operating Hours" },
+  { id: "fees", label: "Fees" },
   { id: "payments", label: "Payments" },
   { id: "privacy", label: "Privacy & Consent" },
   { id: "branding", label: "Branding" },
@@ -37,6 +38,11 @@ const EMPTY_SETTINGS: ClinicSettings = {
   defaultPaymentMode: "PayAtClinic",
   acceptedPaymentMethods: [],
   consentVersion: 1,
+  feeConsultation: 450,
+  feeFollowUp: 350,
+  feeSeniorPwd: 400,
+  feeMedCert: 50,
+  discountPct: 0.2,
 };
 
 function defaultHours(): OperatingHours[] {
@@ -87,6 +93,11 @@ export default function AdminSettingsPage() {
           logoUrl: s.logo_url ?? undefined,
           faviconUrl: s.favicon_url ?? undefined,
           websiteUrl: s.website_url ?? undefined,
+          feeConsultation: s.fee_consultation ?? 450,
+          feeFollowUp: s.fee_follow_up ?? 350,
+          feeSeniorPwd: s.fee_senior_pwd ?? 400,
+          feeMedCert: s.fee_med_cert ?? 50,
+          discountPct: s.discount_pct ?? 0.2,
         });
       }
       if (hoursRes.data) {
@@ -126,6 +137,18 @@ export default function AdminSettingsPage() {
 
     await setPaymentMethods(supabase, settings.acceptedPaymentMethods);
 
+    setSavedAt(new Date().toLocaleTimeString());
+  }
+
+  async function saveFees() {
+    const supabase = createClient();
+    await updateClinicSettings(supabase, {
+      fee_consultation: settings.feeConsultation,
+      fee_follow_up: settings.feeFollowUp,
+      fee_senior_pwd: settings.feeSeniorPwd,
+      fee_med_cert: settings.feeMedCert,
+      discount_pct: settings.discountPct,
+    });
     setSavedAt(new Date().toLocaleTimeString());
   }
 
@@ -233,6 +256,57 @@ export default function AdminSettingsPage() {
               </div>
             ))}
             <Button className="mt-md" onClick={saveHours}>Save</Button>
+          </div>
+        )}
+
+        {loaded && tab === "fees" && (
+          <div className="space-y-md">
+            <p className="text-label-md text-on-surface-variant">
+              Flat clinic-wide fee schedule (contract §16.6). The doctor picks which
+              line applies during the consultation; the booking total is recomputed
+              on save.
+            </p>
+            {(
+              [
+                ["feeConsultation", "Standard consultation"],
+                ["feeFollowUp", "Follow-up consultation"],
+                ["feeSeniorPwd", "Senior citizen / PWD"],
+                ["feeMedCert", "Medical certificate (add-on)"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="flex items-center justify-between gap-md">
+                <span className="text-body-md">{label}</span>
+                <span className="flex items-center gap-xs">
+                  <span className="text-on-surface-variant">₱</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={10}
+                    value={settings[key]}
+                    onChange={(e) => setSettings({ ...settings, [key]: Number(e.target.value) })}
+                    className="w-28 rounded-lg border border-outline-variant px-md py-sm text-right"
+                  />
+                </span>
+              </label>
+            ))}
+            <label className="flex items-center justify-between gap-md">
+              <span className="text-body-md">Senior / PWD discount (parked)</span>
+              <span className="flex items-center gap-xs">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(settings.discountPct * 100)}
+                  onChange={(e) =>
+                    setSettings({ ...settings, discountPct: Number(e.target.value) / 100 })
+                  }
+                  className="w-28 rounded-lg border border-outline-variant px-md py-sm text-right"
+                />
+                <span className="text-on-surface-variant">%</span>
+              </span>
+            </label>
+            <Button onClick={saveFees}>Save</Button>
           </div>
         )}
 

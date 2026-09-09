@@ -18,7 +18,7 @@ import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
-import { queryAuditLogs } from "@/lib/data/admin";
+import { queryAuditLogs, queryClinicSettings } from "@/lib/data/admin";
 import {
   queryConsultationByBooking,
   queryConsultationById,
@@ -47,6 +47,10 @@ interface ConsultationBooking {
   appointmentDate: string;
   serviceNames: string[];
   totalFee: number;
+  // §16.6 — doctor-set fee-line inputs, seeded from the booking row.
+  visitType: "New" | "FollowUp";
+  discountCategory: "Senior" | "PWD" | "";
+  medCertRequested: boolean;
 }
 
 interface PatientHistoryEntry {
@@ -326,6 +330,28 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [pfDecision, setPfDecision] = useState<"charge" | "waive" | null>(null);
   const [pfAmount, setPfAmount] = useState("");
   const [pfWaiveReason, setPfWaiveReason] = useState("");
+  // §16.6 — doctor picks the fee line; the backend recomputes the booking total
+  // on consultation save. Seeded from the booking row in the load effect.
+  const [visitType, setVisitType] = useState<"New" | "FollowUp">("New");
+  const [discountCategory, setDiscountCategory] = useState<"Senior" | "PWD" | "">("");
+  const [medCertRequested, setMedCertRequested] = useState(false);
+  const [feeSchedule, setFeeSchedule] = useState<{
+    consultation: number;
+    followUp: number;
+    seniorPwd: number;
+    medCert: number;
+  } | null>(null);
+
+  // §16.6 preview of the flat-line fee the backend will compute on save.
+  const previewFee = (() => {
+    if (!feeSchedule) return null;
+    const subtotal = discountCategory
+      ? feeSchedule.seniorPwd
+      : visitType === "FollowUp"
+        ? feeSchedule.followUp
+        : feeSchedule.consultation;
+    return subtotal + (medCertRequested ? feeSchedule.medCert : 0);
+  })();
 
   // Single load effect: real booking (joined), consultation + diagnoses +
   // follow_up, last-visit SOAP + its vitals, this booking's own vital
@@ -336,7 +362,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const supabase = createClient();
       const { data: bookingRow } = await supabase
         .from("bookings")
-        .select("booking_id, patient_id, doctor_id, appointment_date, total_fee, doctors(staff_accounts(full_name)), booking_services(services(name))")
+        .select("booking_id, patient_id, doctor_id, appointment_date, total_fee, visit_type, discount_category, med_cert_requested, doctors(staff_accounts(full_name)), booking_services(services(name))")
         .eq("booking_id", bookingId)
         .maybeSingle();
       if (cancelled) return;
@@ -347,6 +373,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const doctorRel = one(bookingRow.doctors);
       const staffRel = one(doctorRel?.staff_accounts);
       const bookingServiceNames = serviceNames(bookingRow.booking_services);
+      // §16.6 fee-line fields — added post-Phase-8; not in the generated types yet.
+      const feeRow = bookingRow as typeof bookingRow & {
+        visit_type?: "New" | "FollowUp" | null;
+        discount_category?: "Senior" | "PWD" | null;
+        med_cert_requested?: boolean | null;
+      };
       const realBooking: ConsultationBooking = {
         id: bookingRow.booking_id,
         patientId: bookingRow.patient_id,
@@ -355,6 +387,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         appointmentDate: bookingRow.appointment_date,
         serviceNames: bookingServiceNames,
         totalFee: Number(bookingRow.total_fee),
+        visitType: feeRow.visit_type ?? "New",
+        discountCategory: feeRow.discount_category ?? "",
+        medCertRequested: feeRow.med_cert_requested ?? false,
       };
 
       const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes] = await Promise.all([
@@ -495,6 +530,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setBooking(realBooking);
       setSavedConsultation(loadedConsultation);
       setPfAmount(String(realBooking.totalFee || ""));
+      setVisitType(realBooking.visitType);
+      setDiscountCategory(realBooking.discountCategory);
+      setMedCertRequested(realBooking.medCertRequested);
+      queryClinicSettings(supabase)
+        .then((s) => {
+          if (!cancelled && s) {
+            setFeeSchedule({
+              consultation: s.fee_consultation,
+              followUp: s.fee_follow_up,
+              seniorPwd: s.fee_senior_pwd,
+              medCert: s.fee_med_cert,
+            });
+          }
+        })
+        .catch(() => {});
       if (loadedConsultation) {
         setChiefComplaint(loadedConsultation.chiefComplaint);
         setSubjective(loadedConsultation.subjective);
@@ -650,6 +700,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         objective: objective || null,
         assessment: assessment || null,
         plan: plan || null,
+        // §16.6 — backend recomputes total_fee / amount_due from these.
+        visit_type: visitType,
+        med_cert_requested: medCertRequested,
+        discount_category: discountCategory || null,
       });
     } catch {
       return null;
@@ -1241,6 +1295,54 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 7 && (
                     <div className="mt-md space-y-md">
+                      {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
+                      <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
+                        <div className="flex flex-wrap items-center gap-sm">
+                          <span className="text-label-md text-on-surface-variant">Visit type</span>
+                          {(["New", "FollowUp"] as const).map((vt) => (
+                            <button
+                              key={vt}
+                              type="button"
+                              onClick={() => setVisitType(vt)}
+                              className={cn(
+                                "rounded-full border px-md py-xs text-label-md",
+                                visitType === vt
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-outline-variant text-on-surface-variant",
+                              )}
+                            >
+                              {vt === "New" ? "New" : "Follow-up"}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-sm">
+                          <span className="text-label-md text-on-surface-variant">Discount</span>
+                          <select
+                            value={discountCategory}
+                            onChange={(e) => setDiscountCategory(e.target.value as "Senior" | "PWD" | "")}
+                            className="rounded-lg border border-outline-variant px-md py-xs text-label-md"
+                          >
+                            <option value="">None</option>
+                            <option value="Senior">Senior citizen</option>
+                            <option value="PWD">PWD</option>
+                          </select>
+                        </div>
+                        <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
+                          <input
+                            type="checkbox"
+                            checked={medCertRequested}
+                            onChange={(e) => setMedCertRequested(e.target.checked)}
+                            className="h-5 w-5"
+                          />
+                          Medical certificate requested
+                        </label>
+                        {previewFee !== null && (
+                          <p className="text-label-md text-on-surface">
+                            Computed clinic fee: <strong>₱{previewFee}</strong>
+                            <span className="text-on-surface-variant"> — applied to the booking on save.</span>
+                          </p>
+                        )}
+                      </div>
                       <div className="flex gap-sm border-b border-outline-variant">
                         <button
                           type="button"

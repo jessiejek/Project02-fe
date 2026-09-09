@@ -620,6 +620,11 @@ export const mockSettings: ClinicSettings = {
   secondaryColor: "#565e74",
   privacyPolicyText: "We collect only the information needed to provide safe, accurate care, and never share it with third parties without consent.",
   websiteUrl: "https://gracegavinoclinic.com",
+  feeConsultation: 450,
+  feeFollowUp: 350,
+  feeSeniorPwd: 400,
+  feeMedCert: 50,
+  discountPct: 0.2,
 };
 
 // Matches clinic_operating_hours (schema.sql) — admin/settings' Hours tab
