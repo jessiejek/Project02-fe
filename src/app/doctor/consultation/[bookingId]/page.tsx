@@ -35,6 +35,7 @@ import {
   writeAuditLog,
 } from "@/lib/data/clinical";
 import { queryDoctorById } from "@/lib/data/doctors";
+import { queryBookingById } from "@/lib/data/bookings";
 import { queryPatientById } from "@/lib/data/patients";
 import { printMedicalCertificate } from "@/lib/print-forms";
 import { one, serviceNames } from "@/lib/one";
@@ -369,36 +370,23 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     let cancelled = false;
     async function load() {
       const supabase = createClient();
-      const { data: bookingRow } = await supabase
-        .from("bookings")
-        .select("booking_id, patient_id, doctor_id, appointment_date, total_fee, visit_type, discount_category, med_cert_requested, doctors(staff_accounts(full_name)), booking_services(services(name))")
-        .eq("booking_id", bookingId)
-        .maybeSingle();
+      const bookingRow = await queryBookingById(supabase, bookingId);
       if (cancelled) return;
       if (!bookingRow) {
         setLoaded(true);
         return;
       }
-      const doctorRel = one(bookingRow.doctors);
-      const staffRel = one(doctorRel?.staff_accounts);
-      const bookingServiceNames = serviceNames(bookingRow.booking_services);
-      // §16.6 fee-line fields — added post-Phase-8; not in the generated types yet.
-      const feeRow = bookingRow as typeof bookingRow & {
-        visit_type?: "New" | "FollowUp" | null;
-        discount_category?: "Senior" | "PWD" | null;
-        med_cert_requested?: boolean | null;
-      };
       const realBooking: ConsultationBooking = {
         id: bookingRow.booking_id,
         patientId: bookingRow.patient_id,
         doctorId: bookingRow.doctor_id,
-        doctorName: staffRel?.full_name ?? "",
+        doctorName: bookingRow.doctors?.staff_accounts?.full_name ?? "",
         appointmentDate: bookingRow.appointment_date,
-        serviceNames: bookingServiceNames,
+        serviceNames: bookingRow.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         totalFee: Number(bookingRow.total_fee),
-        visitType: feeRow.visit_type ?? "New",
-        discountCategory: feeRow.discount_category ?? "",
-        medCertRequested: feeRow.med_cert_requested ?? false,
+        visitType: bookingRow.visit_type ?? "New",
+        discountCategory: bookingRow.discount_category ?? "",
+        medCertRequested: bookingRow.med_cert_requested ?? false,
       };
 
       const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes] = await Promise.all([

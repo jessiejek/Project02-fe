@@ -61,6 +61,11 @@ export interface BookingRow {
   total_fee: number;
   amount_due: number;
   is_walk_in: boolean;
+  // §16.6 fee-line fields (Phase 8.4).
+  visit_type: "New" | "FollowUp";
+  discount_category: "Senior" | "PWD" | null;
+  discount_amount: number;
+  med_cert_requested: boolean;
   proof_type: string | null;
   proof_value: string | null;
   proof_submitted_at: string | null;
@@ -113,6 +118,10 @@ function projectBooking(raw: Raw): BookingRow {
     total_fee: Number(raw.total_fee ?? 0),
     amount_due: Number(raw.amount_due ?? 0),
     is_walk_in: Boolean(raw.is_walk_in),
+    visit_type: (raw.visit_type as "New" | "FollowUp") ?? "New",
+    discount_category: (raw.discount_category as "Senior" | "PWD" | null) ?? null,
+    discount_amount: Number(raw.discount_amount ?? 0),
+    med_cert_requested: Boolean(raw.med_cert_requested),
     proof_type: (raw.proof_type as string) ?? null,
     proof_value: (raw.proof_value as string) ?? null,
     proof_submitted_at: (raw.proof_submitted_at as string) ?? null,
