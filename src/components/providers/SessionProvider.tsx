@@ -2,17 +2,10 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { AUTH_MODE } from "@/lib/auth/mode";
+import type { SessionInfo } from "@/lib/auth/types";
 
-export interface SessionInfo {
-  userId: string;
-  role: "Patient" | "Staff" | "Doctor" | "Admin";
-  displayName: string;
-  avatarUrl: string | null;
-  /** staff_accounts.staff_id — also doctors.doctor_id 1:1 when role is Doctor. Only set for Staff/Doctor/Admin. */
-  staffId: string | null;
-  /** patients.patient_id. Only set for Patient. */
-  patientId: string | null;
-}
+export type { SessionInfo };
 
 const SessionContext = createContext<{ session: SessionInfo | null; loading: boolean }>({
   session: null,
@@ -22,11 +15,29 @@ const SessionContext = createContext<{ session: SessionInfo | null; loading: boo
 // Fetched once here at the root layout, which persists across client-side
 // navigations in the App Router — every page's AppShell/Topbar reads this via
 // useSession() instead of each re-fetching the same "who's logged in" query.
-export function SessionProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<SessionInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+//
+// AUTH_MODE=dotnet: `initialSession` is computed on the server from the .NET JWT
+// cookie (see src/lib/auth/session.ts) and passed straight through — no
+// client-side auth call. AUTH_MODE=supabase: unchanged — loaded here from the
+// Supabase client.
+export function SessionProvider({
+  children,
+  initialSession = null,
+}: {
+  children: ReactNode;
+  initialSession?: SessionInfo | null;
+}) {
+  const [session, setSession] = useState<SessionInfo | null>(initialSession);
+  const [loading, setLoading] = useState(AUTH_MODE !== "dotnet");
 
   useEffect(() => {
+    if (AUTH_MODE === "dotnet") {
+      // Server already resolved it; keep in sync on prop change (e.g. router.refresh()).
+      setSession(initialSession);
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
 
     async function loadSession() {
@@ -82,7 +93,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       loadSession();
     });
     return () => subscription.subscription.unsubscribe();
-  }, []);
+  }, [initialSession]);
 
   return <SessionContext.Provider value={{ session, loading }}>{children}</SessionContext.Provider>;
 }
