@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { updatePatientConsent } from "@/lib/data/patients";
 
 // Stitch screen_3_privacy_consent. Per Patient.md §2: checkbox required,
 // then persist consented_at + consent_version for the logged-in patient.
@@ -24,18 +25,14 @@ export default function PrivacyConsentPage() {
     const supabase = createClient();
     const { data: settings } = await supabase.from("clinic_settings").select("consent_version").eq("id", 1).maybeSingle();
     const consentVersion = settings?.consent_version ?? 1;
-    const { error: updateError } = await supabase
-      .from("patients")
-      .update({
-        consented_at: new Date().toISOString(),
-        consent_version: consentVersion,
-      })
-      .eq("patient_id", session.patientId);
-    setSubmitting(false);
-    if (updateError) {
-      setError(updateError.message);
+    try {
+      await updatePatientConsent(supabase, session.patientId, consentVersion);
+    } catch (e) {
+      setSubmitting(false);
+      setError(e instanceof Error ? e.message : "Could not save consent.");
       return;
     }
+    setSubmitting(false);
     router.push("/patient/dashboard");
     router.refresh();
   }

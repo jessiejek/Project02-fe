@@ -10,7 +10,7 @@ import { Toast } from "@/components/ui/Toast";
 import { inviteStaffMember } from "@/app/actions/inviteStaffMember";
 import { revokeStaffInvite } from "@/app/actions/revokeStaffInvite";
 import { createClient } from "@/lib/supabase/client";
-import { queryStaffAccounts } from "@/lib/data/staff";
+import { queryStaffAccounts, updateStaffAccount } from "@/lib/data/staff";
 import type { StaffMember } from "@/data/types";
 
 // Stitch staff_management.
@@ -39,7 +39,7 @@ export default function AdminStaffPage() {
     if (!target) return;
     const nextStatus = target.status === "Active" ? "Inactive" : "Active";
     const supabase = createClient();
-    await supabase.from("staff_accounts").update({ status: nextStatus }).eq("staff_id", id);
+    await updateStaffAccount(supabase, id, { status: nextStatus });
     setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, status: nextStatus } : s)));
   }
 

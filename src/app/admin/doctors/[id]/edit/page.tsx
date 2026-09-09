@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { DoctorForm } from "@/components/admin/DoctorForm";
 import { createClient } from "@/lib/supabase/server";
+import { queryDoctorById } from "@/lib/data/doctors";
 import { one } from "@/lib/one";
 import { indexToDayName } from "@/lib/days";
 import type { Doctor } from "@/data/types";
@@ -10,14 +11,13 @@ export default async function EditDoctorPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const supabase = await createClient();
 
-  const [doctorRes, servicesRes, scheduleRes] = await Promise.all([
-    supabase.from("doctors").select("*, staff_accounts(full_name, email, status)").eq("doctor_id", id).single(),
+  const [d, servicesRes, scheduleRes] = await Promise.all([
+    queryDoctorById(supabase, id),
     supabase.from("doctor_services").select("service_id, duration_minutes, services(name, category, price)").eq("doctor_id", id),
     supabase.from("doctor_schedules").select("*").eq("doctor_id", id).order("day_of_week"),
   ]);
-  if (!doctorRes.data) notFound();
-  const d = doctorRes.data;
-  const staff = one(d.staff_accounts);
+  if (!d) notFound();
+  const staff = d.staff_accounts;
 
   const doctor: Doctor = {
     id: d.doctor_id,

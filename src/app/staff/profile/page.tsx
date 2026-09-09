@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Toast } from "@/components/ui/Toast";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { updateStaffAccount } from "@/lib/data/staff";
 
 interface StaffProfile {
   fullName: string;
@@ -67,13 +68,10 @@ function ProfileCard({ staffId, initial }: { staffId: string; initial: StaffProf
   async function handleSave() {
     setSaving(true);
     const supabase = createClient();
-    await supabase
-      .from("staff_accounts")
-      .update({
-        full_name: form.fullName,
-        contact_number: form.contactNumber || null,
-      })
-      .eq("staff_id", staffId);
+    await updateStaffAccount(supabase, staffId, {
+      full_name: form.fullName,
+      contact_number: form.contactNumber || null,
+    });
     setSaving(false);
     setSavedAt(new Date().toLocaleTimeString());
   }

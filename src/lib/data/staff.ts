@@ -38,6 +38,26 @@ export async function queryStaffAccounts(
   return (data ?? []) as StaffAccountRow[];
 }
 
+export type StaffPatch = Partial<{
+  full_name: string;
+  contact_number: string | null;
+  status: StaffAccountRow["status"];
+}>;
+
+/** Partial update — fetch-merge-put in dotnet mode (PUT replaces the row). */
+export async function updateStaffAccount(
+  supabase: SupabaseClient,
+  staffId: string,
+  patch: StaffPatch,
+): Promise<void> {
+  if (dotnet()) {
+    const current = await api.get<Record<string, unknown>>(`/api/staff-accounts/${staffId}`);
+    await api.put(`/api/staff-accounts/${staffId}`, { ...current, ...patch });
+    return;
+  }
+  await supabase.from("staff_accounts").update(patch).eq("staff_id", staffId);
+}
+
 export async function queryStaffById(
   supabase: SupabaseClient,
   staffId: string,

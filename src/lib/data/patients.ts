@@ -73,6 +73,38 @@ export async function queryPatientById(
   return (data as PatientRow) ?? null;
 }
 
+export type PatientPatch = Partial<Omit<PatientRow, "patient_id" | "created_at" | "updated_at">>;
+
+/** Partial update — fetch-merge-put in dotnet mode (PUT replaces the row). */
+export async function updatePatient(
+  supabase: SupabaseClient,
+  patientId: string,
+  patch: PatientPatch,
+): Promise<void> {
+  if (dotnet()) {
+    const current = await api.get<Record<string, unknown>>(`/api/patients/${patientId}`);
+    await api.put(`/api/patients/${patientId}`, { ...current, ...patch });
+    return;
+  }
+  await supabase.from("patients").update(patch).eq("patient_id", patientId);
+}
+
+/** Consent acceptance. .NET: PUT /api/patients/{id}/consent with the version int. */
+export async function updatePatientConsent(
+  supabase: SupabaseClient,
+  patientId: string,
+  consentVersion: number,
+): Promise<void> {
+  if (dotnet()) {
+    await api.put(`/api/patients/${patientId}/consent`, consentVersion);
+    return;
+  }
+  await supabase
+    .from("patients")
+    .update({ consent_version: consentVersion, consented_at: new Date().toISOString() })
+    .eq("patient_id", patientId);
+}
+
 /** The logged-in patient's own row. */
 export async function queryMyPatient(
   supabase: SupabaseClient,

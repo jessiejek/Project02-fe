@@ -76,6 +76,38 @@ export async function queryDoctors(supabase: SupabaseClient): Promise<DoctorRow[
   return (data ?? []).map((r) => projectDoctor(r as Record<string, unknown>));
 }
 
+/** Doctor scalar fields the FE edits (snake_case, all optional / partial patch). */
+export type DoctorPatch = Partial<{
+  specialization: string;
+  consultation_fee: number;
+  bio: string | null;
+  license_number: string | null;
+  ptr_number: string | null;
+  s2_number: string | null;
+  slot_duration_minutes: number;
+  slot_capacity: number;
+  daily_patient_limit: number | null;
+}>;
+
+/**
+ * Partial update. .NET's PUT /api/doctors/{id} replaces the whole row, so in
+ * dotnet mode we fetch-merge-put to avoid clobbering unsent fields; Supabase
+ * `.update()` is already partial.
+ */
+export async function updateDoctor(
+  supabase: SupabaseClient,
+  doctorId: string,
+  patch: DoctorPatch,
+): Promise<void> {
+  if (resolveMode("doctors") === "dotnet") {
+    const current = await api.get<Record<string, unknown>>(`/api/doctors/${doctorId}`);
+    delete current.staff_accounts;
+    await api.put(`/api/doctors/${doctorId}`, { ...current, ...patch });
+    return;
+  }
+  await supabase.from("doctors").update(patch).eq("doctor_id", doctorId);
+}
+
 export async function queryDoctorById(
   supabase: SupabaseClient,
   doctorId: string,

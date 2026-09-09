@@ -9,6 +9,7 @@ import { Toast } from "@/components/ui/Toast";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryPatientById, updatePatient } from "@/lib/data/patients";
 import type { Patient } from "@/data/types";
 
 const TABS = [
@@ -31,9 +32,10 @@ export default function PatientProfilePage() {
 
   useEffect(() => {
     if (!patientId) return;
+    const id = patientId;
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase.from("patients").select("*").eq("patient_id", patientId).single();
+      const data = await queryPatientById(supabase, id);
       if (data) {
         setPatient({
           id: data.patient_id,
@@ -105,28 +107,25 @@ function ProfileInfoTab({ patient }: { patient: Patient }) {
   async function handleSave() {
     setSaving(true);
     const supabase = createClient();
-    await supabase
-      .from("patients")
-      .update({
-        first_name: form.firstName,
-        middle_name: form.middleName || null,
-        last_name: form.lastName,
-        date_of_birth: form.dateOfBirth,
-        sex: form.sex,
-        civil_status: form.civilStatus || null,
-        address: form.address || null,
-        city: form.city || null,
-        zip_code: form.zipCode || null,
-        contact_number: form.contactNumber || null,
-        emergency_contact_name: form.emergencyContactName || null,
-        emergency_contact_number: form.emergencyContactNumber || null,
-        emergency_contact_relationship: form.emergencyContactRelationship || null,
-        blood_type: form.bloodType || null,
-        philhealth_number: form.philHealthNumber || null,
-        hmo_provider: form.hmoProvider || null,
-        hmo_card_number: form.hmoCardNumber || null,
-      })
-      .eq("patient_id", patient.id);
+    await updatePatient(supabase, patient.id, {
+      first_name: form.firstName,
+      middle_name: form.middleName || null,
+      last_name: form.lastName,
+      date_of_birth: form.dateOfBirth,
+      sex: form.sex,
+      civil_status: form.civilStatus || null,
+      address: form.address || null,
+      city: form.city || null,
+      zip_code: form.zipCode || null,
+      contact_number: form.contactNumber || null,
+      emergency_contact_name: form.emergencyContactName || null,
+      emergency_contact_number: form.emergencyContactNumber || null,
+      emergency_contact_relationship: form.emergencyContactRelationship || null,
+      blood_type: form.bloodType || null,
+      philhealth_number: form.philHealthNumber || null,
+      hmo_provider: form.hmoProvider || null,
+      hmo_card_number: form.hmoCardNumber || null,
+    });
     setSaving(false);
     setSavedAt(new Date().toLocaleTimeString());
   }

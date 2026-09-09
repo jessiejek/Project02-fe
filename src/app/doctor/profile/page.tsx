@@ -9,7 +9,8 @@ import { Icon } from "@/components/ui/Icon";
 import { Toast } from "@/components/ui/Toast";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { one } from "@/lib/one";
+import { queryDoctorById, updateDoctor } from "@/lib/data/doctors";
+import { updateStaffAccount } from "@/lib/data/staff";
 
 interface DoctorProfile {
   fullName: string;
@@ -35,11 +36,12 @@ export default function DoctorProfilePage() {
 
   useEffect(() => {
     if (!doctorId) return;
+    const id = doctorId;
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase.from("doctors").select("*, staff_accounts(full_name, email)").eq("doctor_id", doctorId).single();
+      const data = await queryDoctorById(supabase, id);
       if (data) {
-        const staff = one(data.staff_accounts);
+        const staff = data.staff_accounts;
         setProfile({
           fullName: staff?.full_name ?? "",
           email: staff?.email ?? "",
@@ -83,18 +85,15 @@ function ProfileCard({ doctorId, initial }: { doctorId: string; initial: DoctorP
     setSaving(true);
     const supabase = createClient();
     await Promise.all([
-      supabase
-        .from("doctors")
-        .update({
-          specialization: form.specialization,
-          bio: form.bio || null,
-          consultation_fee: Number(form.consultationFee) || 0,
-          license_number: form.licenseNumber || null,
-          ptr_number: form.ptrNumber || null,
-          s2_number: form.s2Number || null,
-        })
-        .eq("doctor_id", doctorId),
-      supabase.from("staff_accounts").update({ full_name: form.fullName }).eq("staff_id", doctorId),
+      updateDoctor(supabase, doctorId, {
+        specialization: form.specialization,
+        bio: form.bio || null,
+        consultation_fee: Number(form.consultationFee) || 0,
+        license_number: form.licenseNumber || null,
+        ptr_number: form.ptrNumber || null,
+        s2_number: form.s2Number || null,
+      }),
+      updateStaffAccount(supabase, doctorId, { full_name: form.fullName }),
     ]);
     setSaving(false);
     setSavedAt(new Date().toLocaleTimeString());

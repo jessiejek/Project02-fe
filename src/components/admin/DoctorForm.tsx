@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createDoctor } from "@/app/actions/createDoctor";
 import { createClient } from "@/lib/supabase/client";
+import { updateDoctor } from "@/lib/data/doctors";
+import { updateStaffAccount } from "@/lib/data/staff";
 import { DAYS, dayNameToIndex } from "@/lib/days";
 import type { Doctor, DoctorScheduleDay, ManagedService } from "@/data/types";
 
@@ -117,9 +119,8 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
     const supabase = createClient();
     const doctorId = doctor!.id;
 
-    const { error: doctorError } = await supabase
-      .from("doctors")
-      .update({
+    try {
+      await updateDoctor(supabase, doctorId, {
         specialization,
         consultation_fee: Number(consultationFee) || 0,
         bio: bio || null,
@@ -127,15 +128,14 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
         ptr_number: ptrNumber || null,
         s2_number: s2Number || null,
         slot_duration_minutes: Number(slotDurationMinutes) || 30,
-      })
-      .eq("doctor_id", doctorId);
-    if (doctorError) {
+      });
+    } catch {
       setInviting(false);
       setInviteError("Could not save the doctor profile.");
       return;
     }
 
-    await supabase.from("staff_accounts").update({ full_name: name, status }).eq("staff_id", doctorId);
+    await updateStaffAccount(supabase, doctorId, { full_name: name, status });
 
     // Services can shrink or grow arbitrarily (unlike the fixed 7-row weekly
     // schedule), so delete-all-reinsert is the simplest correct approach —
