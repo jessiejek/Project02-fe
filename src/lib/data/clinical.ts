@@ -28,6 +28,30 @@ export interface ConsultationRow {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  // §6 embeds (present on list/by-booking reads)
+  bookings?: { appointment_date: string | null; doctor_id?: string | null } | null;
+  doctors?: { staff_accounts: { full_name: string | null } | null } | null;
+  consultation_diagnoses?: Array<{ custom_description: string | null; type: string }>;
+  follow_ups?: { follow_up_date: string | null; instructions: string | null } | null;
+}
+
+const CONSULT_EMBED =
+  "*, bookings(appointment_date, doctor_id), doctors(staff_accounts(full_name)), consultation_diagnoses(custom_description, type), follow_ups(follow_up_date, instructions)";
+
+// PostgREST returns to-one embeds as object|array — flatten to object.
+function flattenConsultation(c: Record<string, unknown>): ConsultationRow {
+  const pick = (v: unknown) => (Array.isArray(v) ? v[0] : v) ?? null;
+  const b = pick(c.bookings) as Record<string, unknown> | null;
+  const d = pick(c.doctors) as Record<string, unknown> | null;
+  const sa = d ? (pick(d.staff_accounts) as Record<string, unknown> | null) : null;
+  const f = pick(c.follow_ups) as Record<string, unknown> | null;
+  return {
+    ...(c as unknown as ConsultationRow),
+    bookings: b ? { appointment_date: (b.appointment_date as string) ?? null, doctor_id: (b.doctor_id as string) ?? null } : null,
+    doctors: d ? { staff_accounts: sa ? { full_name: (sa.full_name as string) ?? null } : null } : null,
+    consultation_diagnoses: (c.consultation_diagnoses as ConsultationRow["consultation_diagnoses"]) ?? [],
+    follow_ups: f ? { follow_up_date: (f.follow_up_date as string) ?? null, instructions: (f.instructions as string) ?? null } : null,
+  };
 }
 
 export async function queryConsultations(
@@ -35,16 +59,17 @@ export async function queryConsultations(
   f: { patientId?: string; doctorId?: string; bookingId?: string } = {},
 ): Promise<ConsultationRow[]> {
   if (dn("consultations")) {
-    return api.get<ConsultationRow[]>("/api/consultations", {
+    const rows = await api.get<Record<string, unknown>[]>("/api/consultations", {
       query: { patientId: f.patientId, doctorId: f.doctorId, bookingId: f.bookingId },
     });
+    return rows.map(flattenConsultation);
   }
-  let q = supabase.from("consultations").select("*");
+  let q = supabase.from("consultations").select(CONSULT_EMBED);
   if (f.patientId) q = q.eq("patient_id", f.patientId);
   if (f.doctorId) q = q.eq("doctor_id", f.doctorId);
   if (f.bookingId) q = q.eq("booking_id", f.bookingId);
   const { data } = await q.order("created_at", { ascending: false });
-  return (data ?? []) as ConsultationRow[];
+  return (data ?? []).map((r) => flattenConsultation(r as Record<string, unknown>));
 }
 
 export async function queryConsultationByBooking(
@@ -250,6 +275,29 @@ export interface RxGroupRow {
   created_at: string;
   updated_at: string;
   prescription_line_items: RxItem[];
+  bookings?: {
+    appointment_date: string | null;
+    doctors?: { staff_accounts: { full_name: string | null } | null } | null;
+  } | null;
+}
+
+const RX_EMBED = "*, prescription_line_items(*), bookings(appointment_date, doctors(staff_accounts(full_name)))";
+
+function flattenRxGroup(g: Record<string, unknown>): RxGroupRow {
+  const pick = (v: unknown) => (Array.isArray(v) ? v[0] : v) ?? null;
+  const b = pick(g.bookings) as Record<string, unknown> | null;
+  const d = b ? (pick(b.doctors) as Record<string, unknown> | null) : null;
+  const sa = d ? (pick(d.staff_accounts) as Record<string, unknown> | null) : null;
+  return {
+    ...(g as unknown as RxGroupRow),
+    prescription_line_items: (g.prescription_line_items as RxItem[]) ?? [],
+    bookings: b
+      ? {
+          appointment_date: (b.appointment_date as string) ?? null,
+          doctors: d ? { staff_accounts: sa ? { full_name: (sa.full_name as string) ?? null } : null } : null,
+        }
+      : null,
+  };
 }
 
 export async function queryRxGroups(
@@ -257,16 +305,17 @@ export async function queryRxGroups(
   f: { patientId?: string; bookingId?: string; doctorId?: string },
 ): Promise<RxGroupRow[]> {
   if (dn("prescription_groups")) {
-    return api.get<RxGroupRow[]>("/api/prescription-groups", {
+    const rows = await api.get<Record<string, unknown>[]>("/api/prescription-groups", {
       query: { patientId: f.patientId, bookingId: f.bookingId, doctorId: f.doctorId },
     });
+    return rows.map(flattenRxGroup);
   }
-  let q = supabase.from("prescription_groups").select("*, prescription_line_items(*)");
+  let q = supabase.from("prescription_groups").select(RX_EMBED);
   if (f.patientId) q = q.eq("patient_id", f.patientId);
   if (f.bookingId) q = q.eq("booking_id", f.bookingId);
   if (f.doctorId) q = q.eq("doctor_id", f.doctorId);
   const { data } = await q.order("created_at", { ascending: false });
-  return (data ?? []) as RxGroupRow[];
+  return (data ?? []).map((r) => flattenRxGroup(r as Record<string, unknown>));
 }
 
 export async function upsertRxGroupByBooking(

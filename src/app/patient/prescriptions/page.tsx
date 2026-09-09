@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryRxGroups } from "@/lib/data/clinical";
 import { printHtml, escapeHtml } from "@/lib/print";
 import type { Database } from "@/data/supabase-types";
 
@@ -40,27 +41,19 @@ export default function PrescriptionsPage() {
     const patientId = session.patientId;
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("prescription_groups")
-        .select("*, prescription_line_items(*), bookings(appointment_date, doctors(staff_accounts(full_name)))")
-        .eq("patient_id", patientId);
-      const mapped: PrescriptionGroupRow[] = (data ?? []).map((g) => {
-        const booking = Array.isArray(g.bookings) ? g.bookings[0] : g.bookings;
-        const doctor = booking ? (Array.isArray(booking.doctors) ? booking.doctors[0] : booking.doctors) : undefined;
-        const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-        return {
-          id: g.group_id,
-          createdAt: g.created_at.slice(0, 10),
-          doctorName: staff?.full_name ?? "",
-          items: (g.prescription_line_items ?? []).map((i: DbLineItem) => ({
-            id: i.id,
-            genericName: i.generic_name,
-            quantity: i.quantity,
-            dosage: i.dosage,
-            instruction: i.instruction ?? "",
-          })),
-        };
-      });
+      const data = await queryRxGroups(supabase, { patientId });
+      const mapped: PrescriptionGroupRow[] = data.map((g) => ({
+        id: g.group_id,
+        createdAt: g.created_at.slice(0, 10),
+        doctorName: g.bookings?.doctors?.staff_accounts?.full_name ?? "",
+        items: (g.prescription_line_items ?? []).map((i) => ({
+          id: i.id ?? "",
+          genericName: i.generic_name,
+          quantity: i.quantity,
+          dosage: i.dosage,
+          instruction: i.instruction ?? "",
+        })),
+      }));
       mapped.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setGroups(mapped);
     }

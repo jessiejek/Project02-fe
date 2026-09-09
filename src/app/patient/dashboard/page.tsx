@@ -11,6 +11,7 @@ import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { one, serviceNames } from "@/lib/one";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 
 interface BookingRow {
   id: string;
@@ -65,14 +66,8 @@ export default function PatientDashboardPage() {
           .from("bookings")
           .select("*, doctors(staff_accounts(full_name)), booking_services(services(name)), payments(status)")
           .eq("patient_id", patientId),
-        supabase
-          .from("prescription_groups")
-          .select("group_id, created_at, prescription_line_items(generic_name), bookings(doctors(staff_accounts(full_name)))")
-          .eq("patient_id", patientId),
-        supabase
-          .from("consultations")
-          .select("chief_complaint, doctors(staff_accounts(full_name)), bookings(appointment_date)")
-          .eq("patient_id", patientId),
+        queryRxGroups(supabase, { patientId }),
+        queryConsultations(supabase, { patientId }),
         queryDoctors(supabase),
         supabase.from("v_doctor_ratings").select("*"),
       ]);
@@ -99,19 +94,14 @@ export default function PatientDashboardPage() {
         };
       });
       setBookings(mappedBookings);
-      setPrescriptionCount(rxRes.data?.length ?? 0);
+      setPrescriptionCount(rxRes.length);
 
-      const recordItems: RecentItem[] = (consultRes.data ?? []).map((c) => {
-        const doctor = one(c.doctors);
-        const staff = one(doctor?.staff_accounts);
-        const booking = one(c.bookings);
-        const date = booking?.appointment_date ?? "";
-        return { kind: "record" as const, date, title: c.chief_complaint ?? "", subtitle: `${staff?.full_name ?? ""} • ${date}` };
+      const recordItems: RecentItem[] = consultRes.map((c) => {
+        const date = c.bookings?.appointment_date ?? "";
+        return { kind: "record" as const, date, title: c.chief_complaint ?? "", subtitle: `${c.doctors?.staff_accounts?.full_name ?? ""} • ${date}` };
       });
-      const rxItems: RecentItem[] = (rxRes.data ?? []).map((g) => {
-        const booking = one(g.bookings);
-        const doctor = one(booking?.doctors);
-        const staff = one(doctor?.staff_accounts);
+      const rxItems: RecentItem[] = rxRes.map((g) => {
+        const staff = g.bookings?.doctors?.staff_accounts;
         const date = g.created_at.slice(0, 10);
         return {
           kind: "prescription" as const,

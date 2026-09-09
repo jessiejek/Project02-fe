@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
+import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 import { one } from "@/lib/one";
 
 const TABS = [
@@ -64,11 +65,7 @@ export default function StaffPatientDetailPage({ params }: { params: Promise<{ i
           .select("booking_id, appointment_date, status, doctors(staff_accounts(full_name))")
           .eq("patient_id", id)
           .order("appointment_date", { ascending: false }),
-        supabase
-          .from("consultations")
-          .select("consultation_id, chief_complaint, bookings(appointment_date), consultation_diagnoses(custom_description)")
-          .eq("patient_id", id)
-          .order("created_at", { ascending: false }),
+        queryConsultations(supabase, { patientId: id }),
       ]);
 
       if (!patientRes.data) {
@@ -101,15 +98,12 @@ export default function StaffPatientDetailPage({ params }: { params: Promise<{ i
       );
 
       setRecords(
-        (consultationsRes.data ?? []).map((c) => {
-          const booking = one(c.bookings);
-          return {
-            id: c.consultation_id,
-            appointmentDate: booking?.appointment_date ?? "",
-            chiefComplaint: c.chief_complaint ?? "",
-            diagnoses: (c.consultation_diagnoses ?? []).map((d) => d.custom_description),
-          };
-        }),
+        consultationsRes.map((c) => ({
+          id: c.consultation_id,
+          appointmentDate: c.bookings?.appointment_date ?? "",
+          chiefComplaint: c.chief_complaint ?? "",
+          diagnoses: (c.consultation_diagnoses ?? []).map((d) => d.custom_description ?? "").filter(Boolean),
+        })),
       );
 
       setLoading(false);

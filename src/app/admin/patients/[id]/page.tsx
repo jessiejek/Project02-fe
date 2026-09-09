@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Toast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -72,11 +73,7 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
           .select("booking_id, appointment_date, status, doctors(staff_accounts(full_name))")
           .eq("patient_id", id)
           .order("appointment_date", { ascending: false }),
-        supabase
-          .from("consultations")
-          .select("consultation_id, chief_complaint, bookings(appointment_date)")
-          .eq("patient_id", id)
-          .order("created_at", { ascending: false }),
+        queryConsultations(supabase, { patientId: id }),
       ]);
 
       if (!patientRes.data) {
@@ -110,14 +107,11 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
       );
 
       setConsultations(
-        (consultRes.data ?? []).map((c) => {
-          const booking = Array.isArray(c.bookings) ? c.bookings[0] : c.bookings;
-          return {
-            id: c.consultation_id,
-            appointmentDate: booking?.appointment_date ?? "",
-            chiefComplaint: c.chief_complaint ?? "",
-          };
-        }),
+        consultRes.map((c) => ({
+          id: c.consultation_id,
+          appointmentDate: c.bookings?.appointment_date ?? "",
+          chiefComplaint: c.chief_complaint ?? "",
+        })),
       );
     }
     load();

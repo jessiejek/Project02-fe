@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryConsultations } from "@/lib/data/clinical";
 import { printHtml, escapeHtml } from "@/lib/print";
 
 interface MedicalRecordEntry {
@@ -39,29 +40,22 @@ export default function MedicalRecordsPage() {
     const patientId = session.patientId;
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("consultations")
-        .select("*, bookings(appointment_date), doctors(staff_accounts(full_name)), consultation_diagnoses(custom_description, type), follow_ups(follow_up_date, instructions)")
-        .eq("patient_id", patientId);
-      const mapped: MedicalRecordEntry[] = (data ?? []).map((c) => {
-        const b = Array.isArray(c.bookings) ? c.bookings[0] : c.bookings;
-        const doctor = Array.isArray(c.doctors) ? c.doctors[0] : c.doctors;
-        const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
+      const data = await queryConsultations(supabase, { patientId });
+      const mapped: MedicalRecordEntry[] = data.map((c) => {
         const diagnoses = c.consultation_diagnoses ?? [];
-        const primary = diagnoses.find((d: { type: string }) => d.type === "Primary") ?? diagnoses[0];
-        const followUp = Array.isArray(c.follow_ups) ? c.follow_ups[0] : c.follow_ups;
+        const primary = diagnoses.find((d) => d.type === "Primary") ?? diagnoses[0];
         return {
           id: c.consultation_id,
-          appointmentDate: b?.appointment_date ?? "",
-          doctorName: staff?.full_name ?? "",
+          appointmentDate: c.bookings?.appointment_date ?? "",
+          doctorName: c.doctors?.staff_accounts?.full_name ?? "",
           chiefComplaint: c.chief_complaint ?? "",
           subjective: c.subjective ?? "",
           objective: c.objective ?? "",
           assessment: c.assessment ?? "",
           plan: c.plan ?? "",
           primaryDiagnosis: primary?.custom_description ?? "",
-          followUpDate: followUp?.follow_up_date ?? undefined,
-          followUpInstructions: followUp?.instructions ?? undefined,
+          followUpDate: c.follow_ups?.follow_up_date ?? undefined,
+          followUpInstructions: c.follow_ups?.instructions ?? undefined,
         };
       });
       mapped.sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate));

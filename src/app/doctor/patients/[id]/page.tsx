@@ -14,6 +14,7 @@ import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { one, serviceNames } from "@/lib/one";
 import { printHtml, escapeHtml } from "@/lib/print";
@@ -115,12 +116,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
       const supabase = createClient();
       const [patientRes, consultsRes, rxRes, bookingsRes, templates, vitalsRes, labsRes, docsRes, vaxRes] = await Promise.all([
         supabase.from("patients").select("patient_id, first_name, last_name, patient_code, sex, date_of_birth, contact_number").eq("patient_id", id).maybeSingle(),
-        supabase
-          .from("consultations")
-          .select("consultation_id, chief_complaint, bookings!inner(appointment_date, doctor_id), consultation_diagnoses(custom_description)")
-          .eq("patient_id", id)
-          .eq("bookings.doctor_id", doctorId),
-        supabase.from("prescription_groups").select("*, prescription_line_items(*)").eq("patient_id", id).eq("doctor_id", doctorId),
+        queryConsultations(supabase, { patientId: id, doctorId }),
+        queryRxGroups(supabase, { patientId: id, doctorId }),
         supabase
           .from("bookings")
           .select("booking_id, appointment_date, status, queue_number, booking_services(services(name))")
@@ -154,28 +151,25 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         return;
       }
 
-      const consults = (consultsRes.data ?? [])
-        .map((c) => {
-          const b = Array.isArray(c.bookings) ? c.bookings[0] : c.bookings;
-          return {
-            id: c.consultation_id,
-            appointmentDate: b?.appointment_date ?? "",
-            chiefComplaint: c.chief_complaint ?? "",
-            diagnosisDescriptions: (c.consultation_diagnoses ?? []).map((d) => d.custom_description ?? "").filter(Boolean),
-          };
-        })
+      const consults = consultsRes
+        .map((c) => ({
+          id: c.consultation_id,
+          appointmentDate: c.bookings?.appointment_date ?? "",
+          chiefComplaint: c.chief_complaint ?? "",
+          diagnosisDescriptions: (c.consultation_diagnoses ?? []).map((d) => d.custom_description ?? "").filter(Boolean),
+        }))
         .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate));
       setPatientConsultations(consults);
 
       setPrescriptionGroups(
-        (rxRes.data ?? []).map((g) => ({
+        rxRes.map((g) => ({
           id: g.group_id,
           patientId: g.patient_id,
           doctorId: g.doctor_id,
           bookingId: g.booking_id,
           createdAt: g.created_at.slice(0, 10),
-          items: (g.prescription_line_items ?? []).map((i: DbLineItem) => ({
-            id: i.id,
+          items: (g.prescription_line_items ?? []).map((i) => ({
+            id: i.id ?? "",
             rxId: i.medicine_id,
             genericName: i.generic_name,
             dosage: i.dosage,
