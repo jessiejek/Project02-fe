@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryDayStatuses, setDayStatus } from "@/lib/data/scheduling";
 
 type DayStatus = "Available" | "RunningLate" | "UnavailableToday";
 
@@ -29,12 +30,12 @@ export default function DoctorStatusPage() {
     async function load() {
       const supabase = createClient();
       const today = new Date().toISOString().slice(0, 10);
-      const [allDoctors, statusesRes] = await Promise.all([
+      const [allDoctors, statuses] = await Promise.all([
         queryDoctors(supabase),
-        supabase.from("doctor_day_statuses").select("doctor_id, status").eq("status_date", today),
+        queryDayStatuses(supabase, today),
       ]);
 
-      const statusByDoctor = new Map((statusesRes.data ?? []).map((row) => [row.doctor_id, row.status as DayStatus]));
+      const statusByDoctor = new Map(statuses.map((row) => [row.doctor_id, row.status as DayStatus]));
       const rows: DoctorRow[] = allDoctors
         .filter((d) => d.staff_accounts?.status !== "Inactive")
         .map((d) => ({
@@ -57,10 +58,7 @@ export default function DoctorStatusPage() {
   async function setStatus(id: string, status: DayStatus) {
     const supabase = createClient();
     const today = new Date().toISOString().slice(0, 10);
-    await supabase.from("doctor_day_statuses").upsert(
-      { doctor_id: id, status_date: today, status },
-      { onConflict: "doctor_id,status_date" },
-    );
+    await setDayStatus(supabase, id, today, status);
     setDoctors((prev) => prev.map((d) => (d.id === id ? { ...d, dayStatus: status } : d)));
   }
 
@@ -71,14 +69,7 @@ export default function DoctorStatusPage() {
   async function applyBulk(status: DayStatus) {
     const supabase = createClient();
     const today = new Date().toISOString().slice(0, 10);
-    await supabase.from("doctor_day_statuses").upsert(
-      selected.map((doctorId) => ({
-        doctor_id: doctorId,
-        status_date: today,
-        status,
-      })),
-      { onConflict: "doctor_id,status_date" },
-    );
+    await Promise.all(selected.map((doctorId) => setDayStatus(supabase, doctorId, today, status)));
     setDoctors((prev) => prev.map((d) => (selected.includes(d.id) ? { ...d, dayStatus: status } : d)));
     setSelected([]);
     setSelectMode(false);

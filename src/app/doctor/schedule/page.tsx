@@ -11,6 +11,15 @@ import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { DAYS, dayNameToIndex, indexToDayName } from "@/lib/days";
+import { queryDoctorById, updateDoctor } from "@/lib/data/doctors";
+import {
+  queryDoctorSchedules,
+  upsertDoctorSchedule,
+  queryBlockedDates,
+  addBlockedDate as addBlockedDateApi,
+  removeBlockedDate as removeBlockedDateApi,
+} from "@/lib/data/scheduling";
+import { queryBookings } from "@/lib/data/bookings";
 import type { DoctorScheduleDay } from "@/data/types";
 
 function defaultSchedule(): DoctorScheduleDay[] {
@@ -49,8 +58,6 @@ export default function DoctorSchedulePage() {
 function ScheduleEditor({ doctorId }: { doctorId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [schedule, setSchedule] = useState<DoctorScheduleDay[]>(defaultSchedule());
-  const [slotDurationMinutes, setSlotDurationMinutes] = useState("30");
-  const [slotCapacity, setSlotCapacity] = useState("1");
   const [dailyPatientLimit, setDailyPatientLimit] = useState("");
   const [blockedDates, setBlockedDates] = useState<BlockedDate[]>([]);
   const [addingDate, setAddingDate] = useState<{ date: string; reason: string } | null>(null);
@@ -62,19 +69,17 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [doctorRes, scheduleRes, blockedRes] = await Promise.all([
-        supabase.from("doctors").select("slot_duration_minutes, slot_capacity, daily_patient_limit").eq("doctor_id", doctorId).single(),
-        supabase.from("doctor_schedules").select("*").eq("doctor_id", doctorId).order("day_of_week"),
-        supabase.from("doctor_blocked_dates").select("*").eq("doctor_id", doctorId).order("blocked_date"),
+      const [doctor, scheduleRows, blockedRows] = await Promise.all([
+        queryDoctorById(supabase, doctorId),
+        queryDoctorSchedules(supabase, doctorId),
+        queryBlockedDates(supabase, doctorId),
       ]);
-      if (doctorRes.data) {
-        setSlotDurationMinutes(String(doctorRes.data.slot_duration_minutes));
-        setSlotCapacity(String(doctorRes.data.slot_capacity));
-        setDailyPatientLimit(doctorRes.data.daily_patient_limit != null ? String(doctorRes.data.daily_patient_limit) : "");
+      if (doctor) {
+        setDailyPatientLimit(doctor.daily_patient_limit != null ? String(doctor.daily_patient_limit) : "");
       }
-      if (scheduleRes.data && scheduleRes.data.length > 0) {
+      if (scheduleRows.length > 0) {
         setSchedule(
-          scheduleRes.data.map((d) => ({
+          scheduleRows.map((d) => ({
             day: indexToDayName(d.day_of_week),
             isActive: d.is_active,
             startTime: d.start_time.slice(0, 5),
@@ -82,9 +87,7 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
           })),
         );
       }
-      if (blockedRes.data) {
-        setBlockedDates(blockedRes.data.map((b) => ({ id: b.id, date: b.blocked_date, reason: b.reason ?? "" })));
-      }
+      setBlockedDates(blockedRows.map((b) => ({ id: b.id, date: b.blocked_date, reason: b.reason ?? "" })));
       setLoaded(true);
     }
     load();
@@ -103,14 +106,9 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
     async function countAffected() {
       setAffectedLoading(true);
       const supabase = createClient();
-      const { count } = await supabase
-        .from("bookings")
-        .select("*", { count: "exact", head: true })
-        .eq("doctor_id", doctorId)
-        .eq("appointment_date", date)
-        .neq("status", "Cancelled");
+      const rows = await queryBookings(supabase, { doctorId, date });
       if (!cancelled) {
-        setAffectedCount(count ?? 0);
+        setAffectedCount(rows.filter((b) => b.status !== "Cancelled").length);
         setAffectedLoading(false);
       }
     }
@@ -140,25 +138,18 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
     setError("");
 
     const supabase = createClient();
-    await supabase
-      .from("doctors")
-      .update({
-        slot_duration_minutes: Number(slotDurationMinutes) || 30,
-        slot_capacity: Number(slotCapacity) || 1,
-        daily_patient_limit: dailyPatientLimit.trim() ? Number(dailyPatientLimit) : null,
-      })
-      .eq("doctor_id", doctorId);
+    await updateDoctor(supabase, doctorId, {
+      daily_patient_limit: dailyPatientLimit.trim() ? Number(dailyPatientLimit) : null,
+    });
 
-    await supabase.from("doctor_schedules").upsert(
-      schedule.map((d) => ({
-        doctor_id: doctorId,
+    for (const d of schedule) {
+      await upsertDoctorSchedule(supabase, doctorId, {
         day_of_week: dayNameToIndex(d.day),
         is_active: d.isActive,
         start_time: d.startTime,
         end_time: d.endTime,
-      })),
-      { onConflict: "doctor_id,day_of_week" },
-    );
+      });
+    }
 
     setSavedAt(new Date().toLocaleTimeString());
   }
@@ -166,20 +157,14 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
   async function addBlockedDate() {
     if (!addingDate?.date) return;
     const supabase = createClient();
-    const { data } = await supabase
-      .from("doctor_blocked_dates")
-      .insert({ doctor_id: doctorId, blocked_date: addingDate.date, reason: addingDate.reason || null })
-      .select("id")
-      .single();
-    if (data) {
-      setBlockedDates((prev) => [...prev, { id: data.id, date: addingDate.date, reason: addingDate.reason }]);
-    }
+    const row = await addBlockedDateApi(supabase, doctorId, addingDate.date, addingDate.reason || null);
+    setBlockedDates((prev) => [...prev, { id: row.id, date: addingDate.date, reason: addingDate.reason }]);
     setAddingDate(null);
   }
 
   async function removeBlockedDate(id: string) {
     const supabase = createClient();
-    await supabase.from("doctor_blocked_dates").delete().eq("id", id);
+    await removeBlockedDateApi(supabase, id);
     setBlockedDates((prev) => prev.filter((b) => b.id !== id));
   }
 
@@ -198,8 +183,14 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
         <h2 className="text-headline-lg text-on-surface">Schedule Management</h2>
         {error && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{error}</p>}
 
+        <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
+          The clinic runs a walk-in FCFS queue — there are no appointment slots.
+          These hours are informational (shown to patients); day-to-day availability
+          is set from the dashboard status toggle.
+        </p>
+
         <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Weekly Schedule</h3>
+          <h3 className="mb-md text-headline-sm text-on-surface">Weekly Hours</h3>
           <div className="space-y-sm">
             {schedule.map((d) => (
               <div key={d.day} className="flex flex-wrap items-center gap-sm sm:gap-md">
@@ -230,27 +221,13 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
         </Card>
 
         <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Slot Settings</h3>
-          <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
-            <input
-              placeholder="Slot Duration (min)"
-              value={slotDurationMinutes}
-              onChange={(e) => setSlotDurationMinutes(e.target.value)}
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <input
-              placeholder="Slot Capacity"
-              value={slotCapacity}
-              onChange={(e) => setSlotCapacity(e.target.value)}
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <input
-              placeholder="Daily Patient Limit"
-              value={dailyPatientLimit}
-              onChange={(e) => setDailyPatientLimit(e.target.value)}
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-          </div>
+          <h3 className="mb-md text-headline-sm text-on-surface">Daily Patient Limit</h3>
+          <input
+            placeholder="Max walk-ins per day (blank = no limit)"
+            value={dailyPatientLimit}
+            onChange={(e) => setDailyPatientLimit(e.target.value)}
+            className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-72"
+          />
         </Card>
 
         <Card>

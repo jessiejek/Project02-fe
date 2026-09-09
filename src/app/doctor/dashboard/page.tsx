@@ -10,6 +10,7 @@ import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { one, serviceNames } from "@/lib/one";
 import { queryDoctorEarnings, type DoctorEarningsRow } from "@/lib/data/admin";
+import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/scheduling";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
 
@@ -40,9 +41,9 @@ export default function DoctorDashboardPage() {
     async function load() {
       const supabase = createClient();
       const today = new Date().toISOString().slice(0, 10);
-      const [staffRes, statusRes, bookingsRes] = await Promise.all([
+      const [staffRes, statusRow, bookingsRes] = await Promise.all([
         supabase.from("staff_accounts").select("full_name").eq("staff_id", meDoctorId).single(),
-        supabase.from("doctor_day_statuses").select("status").eq("doctor_id", meDoctorId).eq("status_date", today).maybeSingle(),
+        queryDayStatus(supabase, meDoctorId, today),
         supabase
           .from("bookings")
           .select("*, patients(first_name, last_name), booking_services(services(name))")
@@ -50,7 +51,7 @@ export default function DoctorDashboardPage() {
           .eq("appointment_date", today),
       ]);
       if (staffRes.data) setName(staffRes.data.full_name);
-      setDayStatus((statusRes.data?.status as DayStatus) ?? "Available");
+      setDayStatus((statusRow?.status as DayStatus) ?? "Available");
       const rows: QueueRow[] = (bookingsRes.data ?? [])
         .map((b) => {
           const patient = one(b.patients);
@@ -81,9 +82,7 @@ export default function DoctorDashboardPage() {
   async function setStatus(status: DayStatus) {
     const supabase = createClient();
     const today = new Date().toISOString().slice(0, 10);
-    await supabase
-      .from("doctor_day_statuses")
-      .upsert({ doctor_id: meDoctorId, status_date: today, status }, { onConflict: "doctor_id,status_date" });
+    await saveDayStatus(supabase, meDoctorId, today, status);
     setDayStatus(status);
   }
 
