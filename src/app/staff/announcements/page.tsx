@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { createClient } from "@/lib/supabase/client";
+import { queryAnnouncements } from "@/lib/data/admin";
+import { queryStaffAccounts } from "@/lib/data/staff";
 
 interface AnnouncementRow {
   id: string;
@@ -23,12 +25,8 @@ export default function StaffAnnouncementsPage() {
     async function load() {
       const supabase = createClient();
       const [announcementsRes, staffRes] = await Promise.all([
-        supabase
-          .from("announcements")
-          .select("id, title, body, is_active, posted_by_user_id, created_at")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false }),
-        supabase.from("staff_accounts").select("user_id, full_name"),
+        queryAnnouncements(supabase, { activeOnly: true }).then((data) => ({ data })),
+        queryStaffAccounts(supabase).then((data) => ({ data })),
       ]);
 
       const nameByUserId = new Map((staffRes.data ?? []).map((s) => [s.user_id, s.full_name]));

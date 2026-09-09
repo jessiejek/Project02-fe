@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/shell/AppShell";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryDoctorRatings } from "@/lib/data/admin";
 import { DoctorsBrowseClient } from "./DoctorsBrowseClient";
 
 // Stitch screen_4_browse_doctors. Retiring mockDoctors per
@@ -10,7 +11,7 @@ export default async function BrowseDoctorsPage() {
   const today = new Date().toISOString().slice(0, 10);
   const [allDoctors, ratingsRes, dayStatusRes] = await Promise.all([
     queryDoctors(supabase),
-    supabase.from("v_doctor_ratings").select("*"),
+    queryDoctorRatings(supabase).then((data) => ({ data })),
     supabase.from("doctor_day_statuses").select("*").eq("status_date", today),
   ]);
   const doctors = allDoctors.filter((d) => d.staff_accounts?.status !== "Inactive");

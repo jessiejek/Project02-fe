@@ -9,6 +9,7 @@ import { StepIndicator } from "@/components/ui/StepIndicator";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryDoctorRatings } from "@/lib/data/admin";
 import { queryDoctorServices } from "@/lib/data/doctorServices";
 import { registerPatientAccount } from "@/app/actions/registerPatientAccount";
 import { parseSlotTo24h, addMinutes } from "@/lib/bookingTime";
@@ -75,7 +76,7 @@ function BookingWizard() {
       const supabase = createClient();
       const [allDoctors, ratingsRes, doctorServices, schedulesRes, blockedRes] = await Promise.all([
         queryDoctors(supabase),
-        supabase.from("v_doctor_ratings").select("*"),
+        queryDoctorRatings(supabase).then((data) => ({ data })),
         queryDoctorServices(supabase),
         supabase.from("doctor_schedules").select("*"),
         supabase.from("doctor_blocked_dates").select("*"),

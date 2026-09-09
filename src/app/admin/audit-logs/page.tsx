@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { createClient } from "@/lib/supabase/client";
+import { queryAuditLogs } from "@/lib/data/admin";
+import { queryStaffAccounts } from "@/lib/data/staff";
 
 interface AuditLogRow {
   id: string;
@@ -40,23 +42,19 @@ export default function AdminAuditLogsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("audit_logs")
-        .select("*")
-        .order("performed_at", { ascending: false });
+      const data = await queryAuditLogs(supabase, { take: 200 });
 
-      const userIds = [...new Set((data ?? []).map((r) => r.performed_by_user_id).filter(Boolean))] as string[];
+      const userIds = [...new Set(data.map((r) => r.performed_by_user_id).filter(Boolean))] as string[];
       const nameByUserId = new Map<string, string>();
       if (userIds.length > 0) {
-        const { data: staffRows } = await supabase
-          .from("staff_accounts")
-          .select("user_id, full_name")
-          .in("user_id", userIds);
-        (staffRows ?? []).forEach((s) => nameByUserId.set(s.user_id, s.full_name));
+        const staffRows = await queryStaffAccounts(supabase);
+        staffRows
+          .filter((s) => userIds.includes(s.user_id))
+          .forEach((s) => nameByUserId.set(s.user_id, s.full_name));
       }
 
       setLogs(
-        (data ?? []).map((r) => ({
+        data.map((r) => ({
           id: r.id,
           timestamp: r.performed_at.replace("T", " ").slice(0, 16),
           entityType: r.entity_type,

@@ -11,6 +11,7 @@ import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { one, serviceNames } from "@/lib/one";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryDoctorRatings } from "@/lib/data/admin";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 
 interface BookingRow {
@@ -69,7 +70,7 @@ export default function PatientDashboardPage() {
         queryRxGroups(supabase, { patientId }),
         queryConsultations(supabase, { patientId }),
         queryDoctors(supabase),
-        supabase.from("v_doctor_ratings").select("*"),
+        queryDoctorRatings(supabase).then((data) => ({ data })),
       ]);
 
       if (patientRes.data) {

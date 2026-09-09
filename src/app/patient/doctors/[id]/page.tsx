@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryDoctorServices } from "@/lib/data/doctorServices";
 import { queryReviews } from "@/lib/data/patientFiles";
+import { queryDoctorRatings } from "@/lib/data/admin";
 import { indexToDayName } from "@/lib/days";
 
 // Stitch screen_5_doctor_profile. Retiring mockDoctors per
@@ -22,7 +23,7 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
     queryDoctorById(supabase, id),
     queryDoctorServices(supabase, { doctorId: id }),
     supabase.from("doctor_schedules").select("*").eq("doctor_id", id).order("day_of_week"),
-    supabase.from("v_doctor_ratings").select("*").eq("doctor_id", id).single(),
+    queryDoctorRatings(supabase).then((rows) => ({ data: rows.find((r) => r.doctor_id === id) ?? null })),
     supabase.from("doctor_day_statuses").select("status").eq("doctor_id", id).eq("status_date", today).maybeSingle(),
     queryReviews(supabase, { doctorId: id }).then((data) => ({ data })),
   ]);

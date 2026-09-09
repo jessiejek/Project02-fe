@@ -91,6 +91,12 @@ const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
   "patient_lab_results",
   "patient_vaccinations",
   "reviews",
+  // Phase 7 — admin settings / announcements / audit / reports via src/lib/data/admin.ts
+  "clinic_settings",
+  "clinic_operating_hours",
+  "clinic_accepted_payment_methods",
+  "announcements",
+  "reports",
 ]);
 
 export function resolveMode(resource: DataResource): ApiMode {

@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
+import { queryAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } from "@/lib/data/admin";
 
 const BLANK_FORM = { title: "", body: "", isActive: true };
 interface AnnouncementRow {
@@ -31,9 +32,9 @@ export default function AdminAnnouncementsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase.from("announcements").select("id, title, body, is_active, created_at").order("created_at", { ascending: false });
+      const data = await queryAnnouncements(supabase);
       setAnnouncements(
-        (data ?? []).map((a) => ({
+        data.map((a) => ({
           id: a.id,
           title: a.title ?? "",
           body: a.body ?? "",
@@ -52,7 +53,7 @@ export default function AdminAnnouncementsPage() {
     if (!target) return;
     const nextState = !target.isActive;
     const supabase = createClient();
-    await supabase.from("announcements").update({ is_active: nextState }).eq("id", id);
+    await updateAnnouncement(supabase, id, { is_active: nextState });
     setAnnouncements((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: nextState } : a)));
   }
 
@@ -70,32 +71,23 @@ export default function AdminAnnouncementsPage() {
     if (!form.title.trim() || !form.body.trim()) return;
     const supabase = createClient();
     if (editingId === "new") {
-      const { data } = await supabase
-        .from("announcements")
-        .insert({ title: form.title.trim(), body: form.body.trim(), is_active: form.isActive })
-        .select("id, title, body, is_active, created_at")
-        .single();
-      if (data) {
-        setAnnouncements((prev) => [
-          {
-            id: data.id,
-            title: data.title,
-            body: data.body,
-            postedDate: data.created_at.slice(0, 10),
-            isActive: data.is_active,
-          },
-          ...prev,
-        ]);
-      }
+      const data = await createAnnouncement(supabase, {
+        title: form.title.trim(),
+        body: form.body.trim(),
+        is_active: form.isActive,
+      });
+      setAnnouncements((prev) => [
+        {
+          id: data.id,
+          title: data.title,
+          body: data.body,
+          postedDate: data.created_at.slice(0, 10),
+          isActive: data.is_active,
+        },
+        ...prev,
+      ]);
     } else if (editingId) {
-      await supabase
-        .from("announcements")
-        .update({
-          title: form.title.trim(),
-          body: form.body.trim(),
-          is_active: form.isActive,
-        })
-        .eq("id", editingId);
+      await updateAnnouncement(supabase, editingId, { title: form.title.trim(), body: form.body.trim(), is_active: form.isActive });
       setAnnouncements((prev) =>
         prev.map((a) => (a.id === editingId ? { ...a, title: form.title, body: form.body, isActive: form.isActive } : a)),
       );
@@ -192,7 +184,7 @@ export default function AdminAnnouncementsPage() {
               onClick={async () => {
                 if (!deletingId) return;
                 const supabase = createClient();
-                await supabase.from("announcements").delete().eq("id", deletingId);
+                await deleteAnnouncement(supabase, deletingId);
                 setAnnouncements((prev) => prev.filter((a) => a.id !== deletingId));
                 setDeletingId(null);
               }}

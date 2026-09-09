@@ -7,6 +7,14 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
+import {
+  queryClinicSettings,
+  updateClinicSettings,
+  queryOperatingHours,
+  setOperatingHours,
+  queryPaymentMethods,
+  setPaymentMethods,
+} from "@/lib/data/admin";
 import { DAYS, dayNameToIndex, indexToDayName } from "@/lib/days";
 import type { ClinicSettings, OperatingHours } from "@/data/types";
 
@@ -57,9 +65,9 @@ export default function AdminSettingsPage() {
     async function load() {
       const supabase = createClient();
       const [settingsRes, hoursRes, methodsRes] = await Promise.all([
-        supabase.from("clinic_settings").select("*").eq("id", 1).single(),
-        supabase.from("clinic_operating_hours").select("*").order("day_of_week"),
-        supabase.from("clinic_accepted_payment_methods").select("payment_method"),
+        queryClinicSettings(supabase).then((data) => ({ data })),
+        queryOperatingHours(supabase).then((data) => ({ data })),
+        queryPaymentMethods(supabase).then((rows) => ({ data: rows.map((m) => ({ payment_method: m })) })),
       ]);
       if (settingsRes.data) {
         const s = settingsRes.data;
@@ -69,7 +77,7 @@ export default function AdminSettingsPage() {
           contactNumber: s.contact_number ?? undefined,
           email: s.email ?? undefined,
           description: s.description ?? undefined,
-          defaultPaymentMode: s.default_payment_mode,
+          defaultPaymentMode: s.default_payment_mode as "Online" | "PayAtClinic",
           acceptedPaymentMethods: (methodsRes.data ?? []).map((m) => m.payment_method),
           refundPolicy: s.refund_policy ?? undefined,
           consentVersion: s.consent_version,
@@ -102,47 +110,35 @@ export default function AdminSettingsPage() {
     // produce a local blob: preview today (real Storage upload is Phase 9),
     // and a blob: URL is meaningless outside this browser session, so it's
     // never written to the real row.
-    await supabase
-      .from("clinic_settings")
-      .update({
-        clinic_name: settings.clinicName,
-        address: settings.address,
-        contact_number: settings.contactNumber || null,
-        email: settings.email || null,
-        description: settings.description || null,
-        default_payment_mode: settings.defaultPaymentMode,
-        refund_policy: settings.refundPolicy || null,
-        primary_color: settings.primaryColor || null,
-        secondary_color: settings.secondaryColor || null,
-        website_url: settings.websiteUrl || null,
-        privacy_policy_text: settings.privacyPolicyText || null,
-      })
-      .eq("id", 1);
+    await updateClinicSettings(supabase, {
+      clinic_name: settings.clinicName,
+      address: settings.address,
+      contact_number: settings.contactNumber || null,
+      email: settings.email || null,
+      description: settings.description || null,
+      default_payment_mode: settings.defaultPaymentMode,
+      refund_policy: settings.refundPolicy || null,
+      primary_color: settings.primaryColor || null,
+      secondary_color: settings.secondaryColor || null,
+      website_url: settings.websiteUrl || null,
+      privacy_policy_text: settings.privacyPolicyText || null,
+    });
 
-    // Presence-based table (Database-Schema-Design.md §... — a row's
-    // existence means "accepted," no boolean column) — delete-all-reinsert
-    // is the documented simplest-correct approach, diffing is an optimization
-    // for later if it's ever needed.
-    await supabase.from("clinic_accepted_payment_methods").delete().not("payment_method", "is", null);
-    if (settings.acceptedPaymentMethods.length > 0) {
-      await supabase
-        .from("clinic_accepted_payment_methods")
-        .insert(settings.acceptedPaymentMethods.map((m) => ({ payment_method: m as "Cash" | "GCash" | "Maya" | "BankTransfer" })));
-    }
+    await setPaymentMethods(supabase, settings.acceptedPaymentMethods);
 
     setSavedAt(new Date().toLocaleTimeString());
   }
 
   async function saveHours() {
     const supabase = createClient();
-    await supabase.from("clinic_operating_hours").upsert(
+    await setOperatingHours(
+      supabase,
       hours.map((h) => ({
         day_of_week: dayNameToIndex(h.day),
         is_closed: h.isClosed,
         open_time: h.openTime || null,
         close_time: h.closeTime || null,
       })),
-      { onConflict: "day_of_week" },
     );
     setSavedAt(new Date().toLocaleTimeString());
   }
@@ -294,7 +290,7 @@ export default function AdminSettingsPage() {
                 }
                 const nextVersion = settings.consentVersion + 1;
                 const supabase = createClient();
-                await supabase.from("clinic_settings").update({ consent_version: nextVersion }).eq("id", 1);
+                await updateClinicSettings(supabase, { consent_version: nextVersion });
                 setSettings((prev) => ({ ...prev, consentVersion: nextVersion }));
                 setBumpConfirmOpen(false);
               }}

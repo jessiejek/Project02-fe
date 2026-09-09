@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { createClient } from "@/lib/supabase/client";
+import { queryReport } from "@/lib/data/admin";
 
 interface UnpaidVisitRow {
   bookingId: string;
@@ -49,26 +50,24 @@ export default function AdminReportsPage() {
     async function load() {
       setLoading(true);
       const supabase = createClient();
-      const [unpaidRes, servicesRes, followUpsRes, summaryRes] = await Promise.all([
-        supabase
-          .from("v_unpaid_completed_visits")
-          .select("booking_id, patient_name, doctor_name, appointment_date, amount_due, payment_status")
-          .gte("appointment_date", dateFrom)
-          .lte("appointment_date", dateTo),
+      const inRange = (d: string | null | undefined, lo: string, hi: string) => !!d && d >= lo && d <= hi;
+      const [unpaidAll, servicesRes, followUpsAll, summaryAll] = await Promise.all([
+        queryReport<Record<string, any>>(supabase, "v_unpaid_completed_visits"),
         supabase.from("booking_services").select("booking_id, services(name)"),
-        supabase
-          .from("v_pending_follow_ups")
-          .select("follow_up_id, patient_name, doctor_name, reason, follow_up_date, status")
-          .eq("status", "Pending")
-          .gte("follow_up_date", dateFrom)
-          .lte("follow_up_date", dateTo),
-        supabase
-          .from("v_daily_booking_summary")
-          .select("appointment_date, total_bookings, completed_count, paid_count, unpaid_count, no_show_count, revenue")
-          .gte("appointment_date", dateFrom)
-          .lte("appointment_date", dateTo)
-          .order("appointment_date", { ascending: true }),
+        queryReport<Record<string, any>>(supabase, "v_pending_follow_ups"),
+        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary"),
       ]);
+      const unpaidRes = { data: unpaidAll.filter((b) => inRange(b.appointment_date as string, dateFrom, dateTo)) };
+      const followUpsRes = {
+        data: followUpsAll.filter(
+          (f) => f.status === "Pending" && inRange(f.follow_up_date as string, dateFrom, dateTo),
+        ),
+      };
+      const summaryRes = {
+        data: summaryAll
+          .filter((r) => inRange(r.appointment_date as string, dateFrom, dateTo))
+          .sort((a, b) => String(a.appointment_date).localeCompare(String(b.appointment_date))),
+      };
 
       const servicesByBooking = new Map<string, string[]>();
       for (const row of servicesRes.data ?? []) {

@@ -63,6 +63,8 @@ const ORDER = [
   "patient_vaccinations",
   "patient_documents",
   "patient_lab_results",
+  "announcements",
+  "audit_logs",
 ];
 
 const wanted = process.argv.slice(2);

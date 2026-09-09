@@ -7,6 +7,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryReport } from "@/lib/data/admin";
 
 interface BookingRow {
   id: string;
@@ -60,13 +61,21 @@ export default function AdminDashboardPage() {
         doctorsRes,
         recentRes,
       ] = await Promise.all([
-        supabase.from("v_daily_booking_summary").select("*").eq("appointment_date", today).maybeSingle(),
+        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary").then((rows) => ({
+          data: rows.find((r) => r.appointment_date === today) ?? null,
+        })),
         supabase.from("bookings").select("booking_id", { count: "exact", head: true }).gte("appointment_date", monthStart),
-        supabase.from("v_daily_booking_summary").select("revenue").gte("appointment_date", monthStart),
+        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary").then((rows) => ({
+          data: rows.filter((r) => (r.appointment_date as string) >= monthStart),
+        })),
         supabase.from("bookings").select("booking_id", { count: "exact", head: true }).eq("status", "ProofSubmitted"),
         supabase.from("bookings").select("booking_id", { count: "exact", head: true }).eq("status", "OnHold").gte("appointment_date", monthStart),
-        supabase.from("v_unpaid_completed_visits").select("booking_id", { count: "exact", head: true }),
-        supabase.from("v_pending_follow_ups").select("follow_up_id", { count: "exact", head: true }).gte("follow_up_date", today).lte("follow_up_date", in7Days),
+        queryReport<Record<string, any>>(supabase, "v_unpaid_completed_visits").then((rows) => ({ count: rows.length })),
+        queryReport<Record<string, any>>(supabase, "v_pending_follow_ups").then((rows) => ({
+          count: rows.filter(
+            (r) => (r.follow_up_date as string) >= today && (r.follow_up_date as string) <= in7Days,
+          ).length,
+        })),
         queryDoctors(supabase),
         supabase
           .from("bookings")
