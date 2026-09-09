@@ -18,6 +18,19 @@ import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
+import {
+  queryConsultationByBooking,
+  queryConsultationById,
+  queryConsultations,
+  queryDiagnoses,
+  queryFollowUps,
+  querySoapTemplates,
+  upsertConsultationByBooking,
+  replaceDiagnoses,
+  upsertFollowUpByConsultation,
+  deleteFollowUpByConsultation,
+  writeAuditLog,
+} from "@/lib/data/clinical";
 import { one, serviceNames } from "@/lib/one";
 import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFieldTemplate } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -347,15 +360,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       };
 
       const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes] = await Promise.all([
-        supabase.from("consultations").select("*").eq("booking_id", bookingId).maybeSingle(),
+        queryConsultationByBooking(supabase, bookingId).then((data) => ({ data })),
         queryVitalFieldTemplates(supabase),
         supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", bookingId),
-        supabase.from("soap_templates").select("*").or(`doctor_id.eq.${realBooking.doctorId},is_system_template.eq.true`),
-        supabase
-          .from("consultations")
-          .select("consultation_id, booking_id, chief_complaint, status, bookings(appointment_date)")
-          .eq("patient_id", realBooking.patientId)
-          .neq("booking_id", bookingId),
+        querySoapTemplates(supabase, realBooking.doctorId).then((data) => ({ data })),
+        queryConsultations(supabase, { patientId: realBooking.patientId }).then((rows) => ({
+          data: rows
+            .filter((c) => c.booking_id !== bookingId)
+            .map((c) => ({
+              consultation_id: c.consultation_id,
+              booking_id: c.booking_id,
+              chief_complaint: c.chief_complaint,
+              status: c.status,
+              bookings: c.bookings,
+            })),
+        })),
         supabase.from("prescription_groups").select("*, prescription_line_items(*)").eq("booking_id", bookingId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       ]);
       if (cancelled) return;
@@ -410,7 +429,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const prior = patientConsults[0];
       if (prior) {
         const [priorRes, priorReadingsRes] = await Promise.all([
-          supabase.from("consultations").select("*").eq("consultation_id", prior.consultationId).single(),
+          queryConsultationById(supabase, prior.consultationId).then((data) => ({ data })),
           supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", prior.bookingId),
         ]);
         if (priorRes.data) {
@@ -435,13 +454,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       if (consultRes.data) {
         setConsultationId(consultRes.data.consultation_id);
         const [diagRes, followRes] = await Promise.all([
-          supabase.from("consultation_diagnoses").select("*").eq("consultation_id", consultRes.data.consultation_id),
-          supabase.from("follow_ups").select("*").eq("consultation_id", consultRes.data.consultation_id).maybeSingle(),
+          queryDiagnoses(supabase, consultRes.data.consultation_id).then((data) => ({ data })),
+          queryFollowUps(supabase, { consultationId: consultRes.data.consultation_id }).then((rows) => ({ data: rows[0] ?? null })),
         ]);
         const diagnosesLoaded: Diagnosis[] = (diagRes.data ?? []).map((d) => ({
           code: d.icd10_code ?? "—",
           description: d.custom_description ?? "",
-          type: d.type,
+          type: d.type as Diagnosis["type"],
         }));
         loadedConsultation = {
           id: consultRes.data.consultation_id,
@@ -623,48 +642,43 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   async function persistConsultation(status: "Draft" | "Completed" | "Amended"): Promise<string | null> {
     if (!booking) return null;
     const supabase = createClient();
-    const payload: Record<string, unknown> = {
-      booking_id: bookingId,
-      patient_id: booking.patientId,
-      doctor_id: booking.doctorId,
-      chief_complaint: chiefComplaint || null,
-      subjective: subjective || null,
-      objective: objective || null,
-      assessment: assessment || null,
-      plan: plan || null,
-      status,
-    };
-    if (status === "Completed") {
-      payload.completed_by_user_id = session?.userId ?? null;
-      payload.completed_at = new Date().toISOString();
+
+    let saved;
+    try {
+      saved = await upsertConsultationByBooking(supabase, bookingId, {
+        patient_id: booking.patientId,
+        doctor_id: booking.doctorId,
+        status,
+        chief_complaint: chiefComplaint || null,
+        subjective: subjective || null,
+        objective: objective || null,
+        assessment: assessment || null,
+        plan: plan || null,
+      });
+    } catch {
+      return null;
     }
-    const { data, error } = await supabase.from("consultations").upsert(payload, { onConflict: "booking_id" }).select().single();
-    if (error || !data) return null;
-    const savedId = data.consultation_id;
+    const savedId = saved.consultation_id;
     setConsultationId(savedId);
 
-    await supabase.from("consultation_diagnoses").delete().eq("consultation_id", savedId);
-    if (diagnoses.length > 0) {
-      await supabase
-        .from("consultation_diagnoses")
-        .insert(diagnoses.map((d) => ({ consultation_id: savedId, custom_description: d.description, type: toDiagnosisType(d) })));
-    }
+    await replaceDiagnoses(
+      supabase,
+      savedId,
+      diagnoses.map((d) => ({ icd10_code: null, custom_description: d.description, type: toDiagnosisType(d) })),
+    );
 
     if (followUpDate) {
-      await supabase.from("follow_ups").upsert(
-        {
-          consultation_id: savedId,
-          patient_id: booking.patientId,
-          doctor_id: booking.doctorId,
-          follow_up_date: followUpDate,
-          reason: followUpReason || null,
-          instructions: followUpInstructions || null,
-          reminder_enabled: followUpReminder,
-        },
-        { onConflict: "consultation_id" },
-      );
+      await upsertFollowUpByConsultation(supabase, savedId, {
+        patient_id: booking.patientId,
+        doctor_id: booking.doctorId,
+        follow_up_date: followUpDate,
+        reason: followUpReason || null,
+        instructions: followUpInstructions || null,
+        reminder_enabled: followUpReminder,
+        status: "Pending",
+      });
     } else {
-      await supabase.from("follow_ups").delete().eq("consultation_id", savedId);
+      await deleteFollowUpByConsultation(supabase, savedId);
     }
 
     return savedId;
@@ -733,11 +747,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (!savedId) return;
     const supabase = createClient();
     const details = "Consultation record";
-    await supabase.from("audit_logs").insert({
+    await writeAuditLog(supabase, {
       entity_type: "Consultation",
       entity_id: savedId,
       action: "Amended",
-      performed_by_user_id: session?.userId ?? null,
       details,
     });
     setSavedConsultation(buildConsultationRecord());

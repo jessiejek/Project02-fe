@@ -72,6 +72,21 @@ export async function queryConsultations(
   return (data ?? []).map((r) => flattenConsultation(r as Record<string, unknown>));
 }
 
+export async function queryConsultationById(
+  supabase: SupabaseClient,
+  consultationId: string,
+): Promise<ConsultationRow | null> {
+  if (dn("consultations")) {
+    try {
+      return flattenConsultation(await api.get<Record<string, unknown>>(`/api/consultations/${consultationId}`));
+    } catch {
+      return null;
+    }
+  }
+  const { data } = await supabase.from("consultations").select(CONSULT_EMBED).eq("consultation_id", consultationId).maybeSingle();
+  return data ? flattenConsultation(data as Record<string, unknown>) : null;
+}
+
 export async function queryConsultationByBooking(
   supabase: SupabaseClient,
   bookingId: string,
