@@ -5,7 +5,7 @@ import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { createClient } from "@/lib/supabase/client";
-import { querySoapPhrases } from "@/lib/data/clinical";
+import { querySoapPhrases, createSoapPhrase } from "@/lib/data/clinical";
 import type { SoapField, SoapPhrase } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -57,14 +57,12 @@ export function SoapFieldToolbar({ doctorId, field, fieldLabel, value, onInsert 
   async function savePhrase() {
     if (!label.trim() || !value.trim()) return;
     const supabase = createClient();
-    const { data } = await supabase
-      .from("soap_phrases")
-      .insert({ doctor_id: doctorId, field: toDbField(field), label: label.trim(), body: value.trim() })
-      .select("id, doctor_id, field, label, body")
-      .single();
-    if (data) {
-      setPhrases((prev) => [...prev, { id: data.id, doctorId: data.doctor_id, field, label: data.label, text: data.body }]);
-    }
+    const data = await createSoapPhrase(supabase, doctorId, {
+      field: toDbField(field),
+      label: label.trim(),
+      body: value.trim(),
+    });
+    setPhrases((prev) => [...prev, { id: data.id, doctorId: data.doctor_id, field, label: data.label, text: data.body }]);
     setLabel("");
     setSaveOpen(false);
   }

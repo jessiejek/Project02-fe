@@ -11,7 +11,14 @@ import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { createClient } from "@/lib/supabase/client";
 import { queryMedicines } from "@/lib/data/lookups";
-import { queryFavoriteMedicines, queryRxTemplates } from "@/lib/data/clinical";
+import {
+  queryFavoriteMedicines,
+  queryRxTemplates,
+  addFavoriteMedicine,
+  createRxTemplate,
+  updateRxTemplate,
+  deleteRxTemplate,
+} from "@/lib/data/clinical";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -476,17 +483,17 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     addLineItem(item);
     if (addToFavorites && !wasDuplicate) {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("doctor_favorite_medicines")
-        .insert({ doctor_id: doctorId, medicine_id: item.rxId, generic_name: item.genericName, dosage: item.dosage, quantity: item.quantity, instruction: item.instruction || null })
-        .select()
-        .single();
-      if (data) {
-        setFavorites((prev) => [
-          ...prev,
-          { id: data.id, item: { id: data.id, rxId: data.medicine_id, genericName: data.generic_name, dosage: data.dosage, quantity: data.quantity, instruction: data.instruction ?? "" } },
-        ]);
-      }
+      const data = await addFavoriteMedicine(supabase, doctorId, {
+        medicine_id: item.rxId,
+        generic_name: item.genericName,
+        dosage: item.dosage,
+        quantity: item.quantity,
+        instruction: item.instruction || null,
+      });
+      setFavorites((prev) => [
+        ...prev,
+        { id: data.id, item: { id: data.id, rxId: data.medicine_id, genericName: data.generic_name, dosage: data.dosage, quantity: data.quantity, instruction: data.instruction ?? "" } },
+      ]);
     }
   }
 
@@ -539,24 +546,18 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     // alongside the group/line-items write — a separate, additional insert,
     // not a substitute for the Templates tab's own Add/Edit modal.
     if (isAddToTemplate) {
-      const { data: tplData } = await supabase
-        .from("prescription_templates")
-        .insert({ doctor_id: doctorId, title: templateTitle.trim() })
-        .select()
-        .single();
-      if (tplData) {
-        await supabase.from("prescription_template_items").insert(
-          items.map((i) => ({
-            template_id: tplData.template_id,
-            medicine_id: i.rxId,
-            generic_name: i.genericName,
-            dosage: i.dosage,
-            quantity: i.quantity,
-            instruction: i.instruction || null,
-            is_controlled_substance: i.isControlledSubstance ?? false,
-          })),
-        );
-      }
+      await createRxTemplate(supabase, doctorId, {
+        title: templateTitle.trim(),
+        is_system_template: false,
+        items: items.map((i) => ({
+          medicine_id: i.rxId,
+          generic_name: i.genericName,
+          dosage: i.dosage,
+          quantity: i.quantity,
+          instruction: i.instruction || null,
+          is_controlled_substance: i.isControlledSubstance ?? false,
+        })),
+      });
     }
 
     if (embedded) {
@@ -651,35 +652,18 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         onClose={() => setTemplateModalOpen(false)}
         onSave={async (title, tplItems) => {
           const supabase = createClient();
+          const items = tplItems.map((i) => ({
+            medicine_id: i.rxId,
+            generic_name: i.genericName,
+            dosage: i.dosage,
+            quantity: i.quantity,
+            instruction: i.instruction || null,
+            is_controlled_substance: i.isControlledSubstance ?? false,
+          }));
           if (editingTemplate) {
-            await supabase.from("prescription_templates").update({ title }).eq("template_id", editingTemplate.id);
-            await supabase.from("prescription_template_items").delete().eq("template_id", editingTemplate.id);
-            await supabase.from("prescription_template_items").insert(
-              tplItems.map((i) => ({
-                template_id: editingTemplate.id,
-                medicine_id: i.rxId,
-                generic_name: i.genericName,
-                dosage: i.dosage,
-                quantity: i.quantity,
-                instruction: i.instruction || null,
-                is_controlled_substance: i.isControlledSubstance ?? false,
-              })),
-            );
+            await updateRxTemplate(supabase, editingTemplate.id, doctorId, { title, is_system_template: false, items });
           } else {
-            const { data: tplData } = await supabase.from("prescription_templates").insert({ doctor_id: doctorId, title }).select().single();
-            if (tplData) {
-              await supabase.from("prescription_template_items").insert(
-                tplItems.map((i) => ({
-                  template_id: tplData.template_id,
-                  medicine_id: i.rxId,
-                  generic_name: i.genericName,
-                  dosage: i.dosage,
-                  quantity: i.quantity,
-                  instruction: i.instruction || null,
-                  is_controlled_substance: i.isControlledSubstance ?? false,
-                })),
-              );
-            }
+            await createRxTemplate(supabase, doctorId, { title, is_system_template: false, items });
           }
           await reloadFavoritesAndTemplates();
           setTemplateModalOpen(false);
@@ -699,7 +683,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
               variant="danger"
               onClick={async () => {
                 const supabase = createClient();
-                await supabase.from("prescription_templates").delete().eq("template_id", templateDeleteTarget!.id);
+                await deleteRxTemplate(supabase, templateDeleteTarget!.id);
                 setTemplates((prev) => prev.filter((t) => t.id !== templateDeleteTarget!.id));
                 setTemplateDeleteTarget(null);
               }}

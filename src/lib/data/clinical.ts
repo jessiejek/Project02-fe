@@ -443,6 +443,143 @@ export async function querySoapPhrases(supabase: SupabaseClient, doctorId: strin
   return (data ?? []) as SoapPhraseRow[];
 }
 
+export async function createSoapPhrase(
+  supabase: SupabaseClient,
+  doctorId: string,
+  input: { field: string; label: string; body: string },
+): Promise<SoapPhraseRow> {
+  if (dn("soap_phrases")) {
+    return api.post<SoapPhraseRow>("/api/soap-phrases", input, { query: { doctorId } });
+  }
+  const { data } = await supabase
+    .from("soap_phrases")
+    .insert({ doctor_id: doctorId, ...input })
+    .select("*")
+    .single();
+  return data as SoapPhraseRow;
+}
+
+export async function deleteSoapPhrase(supabase: SupabaseClient, id: string): Promise<void> {
+  if (dn("soap_phrases")) {
+    await api.delete(`/api/soap-phrases/${id}`);
+    return;
+  }
+  await supabase.from("soap_phrases").delete().eq("id", id);
+}
+
+export async function createSoapTemplate(
+  supabase: SupabaseClient,
+  doctorId: string,
+  input: Omit<SoapTemplateRow, "id" | "doctor_id">,
+): Promise<SoapTemplateRow> {
+  if (dn("soap_templates")) {
+    return api.post<SoapTemplateRow>("/api/soap-templates", input, { query: { doctorId } });
+  }
+  const { data } = await supabase
+    .from("soap_templates")
+    .insert({ doctor_id: doctorId, ...input })
+    .select("*")
+    .single();
+  return data as SoapTemplateRow;
+}
+
+export async function deleteSoapTemplate(supabase: SupabaseClient, id: string): Promise<void> {
+  if (dn("soap_templates")) {
+    await api.delete(`/api/soap-templates/${id}`);
+    return;
+  }
+  await supabase.from("soap_templates").delete().eq("id", id);
+}
+
+export async function createRxTemplate(
+  supabase: SupabaseClient,
+  doctorId: string,
+  input: { title: string; is_system_template: boolean; items: Omit<RxItem, "id">[] },
+): Promise<RxTemplateRow> {
+  if (dn("prescription_templates")) {
+    return api.post<RxTemplateRow>("/api/prescription-templates", {
+      doctor_id: doctorId,
+      title: input.title,
+      is_system_template: input.is_system_template,
+      items: input.items,
+    });
+  }
+  const { data: t } = await supabase
+    .from("prescription_templates")
+    .insert({ doctor_id: doctorId, title: input.title, is_system_template: input.is_system_template })
+    .select("*")
+    .single();
+  if (input.items.length) {
+    await supabase
+      .from("prescription_template_items")
+      .insert(input.items.map((i) => ({ ...i, template_id: t!.template_id })));
+  }
+  const { data } = await supabase
+    .from("prescription_templates")
+    .select("*, prescription_template_items(*)")
+    .eq("template_id", t!.template_id)
+    .single();
+  return data as RxTemplateRow;
+}
+
+/** Edit = replace (title + items). .NET has no template PUT; delete + recreate. */
+export async function updateRxTemplate(
+  supabase: SupabaseClient,
+  templateId: string,
+  doctorId: string,
+  input: { title: string; is_system_template: boolean; items: Omit<RxItem, "id">[] },
+): Promise<RxTemplateRow> {
+  if (dn("prescription_templates")) {
+    await deleteRxTemplate(supabase, templateId);
+    return createRxTemplate(supabase, doctorId, input);
+  }
+  await supabase.from("prescription_templates").update({ title: input.title }).eq("template_id", templateId);
+  await supabase.from("prescription_template_items").delete().eq("template_id", templateId);
+  if (input.items.length) {
+    await supabase
+      .from("prescription_template_items")
+      .insert(input.items.map((i) => ({ ...i, template_id: templateId })));
+  }
+  const { data } = await supabase
+    .from("prescription_templates")
+    .select("*, prescription_template_items(*)")
+    .eq("template_id", templateId)
+    .single();
+  return data as RxTemplateRow;
+}
+
+export async function deleteRxTemplate(supabase: SupabaseClient, templateId: string): Promise<void> {
+  if (dn("prescription_templates")) {
+    await api.delete(`/api/prescription-templates/${templateId}`);
+    return;
+  }
+  await supabase.from("prescription_templates").delete().eq("template_id", templateId);
+}
+
+export async function addFavoriteMedicine(
+  supabase: SupabaseClient,
+  doctorId: string,
+  input: Omit<FavoriteMedicineRow, "id" | "doctor_id">,
+): Promise<FavoriteMedicineRow> {
+  if (dn("doctor_favorite_medicines")) {
+    return api.post<FavoriteMedicineRow>("/api/doctor-favorite-medicines", input, { query: { doctorId } });
+  }
+  const { data } = await supabase
+    .from("doctor_favorite_medicines")
+    .insert({ doctor_id: doctorId, ...input })
+    .select("*")
+    .single();
+  return data as FavoriteMedicineRow;
+}
+
+export async function deleteFavoriteMedicine(supabase: SupabaseClient, id: string): Promise<void> {
+  if (dn("doctor_favorite_medicines")) {
+    await api.delete(`/api/doctor-favorite-medicines/${id}`);
+    return;
+  }
+  await supabase.from("doctor_favorite_medicines").delete().eq("id", id);
+}
+
 // ── audit_logs write ──────────────────────────────────────────────────────
 export async function writeAuditLog(
   supabase: SupabaseClient,

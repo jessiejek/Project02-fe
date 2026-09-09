@@ -25,6 +25,7 @@ import {
   queryDiagnoses,
   queryFollowUps,
   querySoapTemplates,
+  createSoapTemplate,
   upsertConsultationByBooking,
   replaceDiagnoses,
   upsertFollowUpByConsultation,
@@ -210,21 +211,18 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   async function saveAsTemplate() {
     if (!newTemplateTitle.trim() || !booking) return;
     const supabase = createClient();
-    const { data } = await supabase
-      .from("soap_templates")
-      .insert({
-        doctor_id: booking.doctorId,
-        title: newTemplateTitle.trim(),
-        chief_complaint: chiefComplaint || null,
-        subjective: subjective || null,
-        objective: objective || null,
-        assessment: assessment || null,
-        plan: plan || null,
-      })
-      .select()
-      .single();
-    if (data) {
-      const template: SoapTemplate = {
+    const data = await createSoapTemplate(supabase, booking.doctorId, {
+      title: newTemplateTitle.trim(),
+      is_system_template: false,
+      chief_complaint: chiefComplaint || null,
+      subjective: subjective || null,
+      objective: objective || null,
+      assessment: assessment || null,
+      plan: plan || null,
+    });
+    setSoapTemplates((prev) => [
+      ...prev,
+      {
         id: data.id,
         doctorId: data.doctor_id,
         title: data.title,
@@ -234,9 +232,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         objective: data.objective ?? undefined,
         assessment: data.assessment ?? undefined,
         plan: data.plan ?? undefined,
-      };
-      setSoapTemplates((prev) => [...prev, template]);
-    }
+      },
+    ]);
     setNewTemplateTitle("");
     setSaveTemplateOpen(false);
   }
