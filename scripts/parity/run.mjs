@@ -30,9 +30,11 @@ const env = Object.fromEntries(
     }),
 );
 
+// Prefer the service-role key: parity is about data correctness, not RLS
+// behaviour. (Falls back to anon if the service key isn't set.)
 const sb = createClient(
   env.NEXT_PUBLIC_SUPABASE_URL,
-  env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  env.SUPABASE_SERVICE_ROLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 );
 const API_BASE = (env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
 const api = {

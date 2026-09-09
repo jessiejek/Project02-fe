@@ -6,7 +6,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/server";
-import { one } from "@/lib/one";
+import { queryDoctorById } from "@/lib/data/doctors";
 import { indexToDayName } from "@/lib/days";
 
 // Stitch screen_5_doctor_profile. Retiring mockDoctors per
@@ -16,17 +16,16 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const [doctorRes, servicesRes, scheduleRes, ratingRes, dayStatusRes, reviewsRes] = await Promise.all([
-    supabase.from("doctors").select("*, staff_accounts(full_name, status)").eq("doctor_id", id).single(),
+  const [doctor, servicesRes, scheduleRes, ratingRes, dayStatusRes, reviewsRes] = await Promise.all([
+    queryDoctorById(supabase, id),
     supabase.from("doctor_services").select("service_id, duration_minutes, services(name, category, price)").eq("doctor_id", id),
     supabase.from("doctor_schedules").select("*").eq("doctor_id", id).order("day_of_week"),
     supabase.from("v_doctor_ratings").select("*").eq("doctor_id", id).single(),
     supabase.from("doctor_day_statuses").select("status").eq("doctor_id", id).eq("status_date", today).maybeSingle(),
     supabase.from("reviews").select("review_id, rating, comment, created_at").eq("doctor_id", id).order("created_at", { ascending: false }),
   ]);
-  const staff = one(doctorRes.data?.staff_accounts);
-  if (!doctorRes.data || staff?.status === "Inactive") notFound();
-  const doctor = doctorRes.data;
+  const staff = doctor?.staff_accounts ?? null;
+  if (!doctor || staff?.status === "Inactive") notFound();
   const doctorName = staff?.full_name ?? "";
   const dayStatus = dayStatusRes.data?.status ?? "Available";
 

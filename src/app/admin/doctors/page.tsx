@@ -8,8 +8,8 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctors } from "@/lib/data/doctors";
 import { indexToDayName } from "@/lib/days";
-import { one } from "@/lib/one";
 
 interface DoctorRow {
   id: string;
@@ -30,27 +30,22 @@ export default function AdminDoctorsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [doctorsRes, schedulesRes] = await Promise.all([
-        supabase.from("doctors").select("*, staff_accounts(full_name, status)"),
+      const [allDoctors, schedulesRes] = await Promise.all([
+        queryDoctors(supabase),
         supabase.from("doctor_schedules").select("*").eq("is_active", true),
       ]);
-      if (doctorsRes.data) {
-        setDoctors(
-          doctorsRes.data.map((d) => {
-            const staff = one(d.staff_accounts);
-            return {
-              id: d.doctor_id,
-              name: staff?.full_name ?? "",
-              specialization: d.specialization,
-              consultationFee: Number(d.consultation_fee),
-              status: staff?.status ?? "Invited",
-              activeDays: (schedulesRes.data ?? [])
-                .filter((s) => s.doctor_id === d.doctor_id)
-                .map((s) => indexToDayName(s.day_of_week)),
-            };
-          }),
-        );
-      }
+      setDoctors(
+        allDoctors.map((d) => ({
+          id: d.doctor_id,
+          name: d.staff_accounts?.full_name ?? "",
+          specialization: d.specialization,
+          consultationFee: Number(d.consultation_fee),
+          status: d.staff_accounts?.status ?? "Invited",
+          activeDays: (schedulesRes.data ?? [])
+            .filter((s) => s.doctor_id === d.doctor_id)
+            .map((s) => indexToDayName(s.day_of_week)),
+        })),
+      );
     }
     load();
   }, []);
