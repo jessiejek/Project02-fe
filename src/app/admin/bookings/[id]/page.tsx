@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { createClient } from "@/lib/supabase/client";
-import { queryBookingById } from "@/lib/data/bookings";
+import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
+import { waivePayment, refundPayment } from "@/lib/data/payments";
 import { printHtml, escapeHtml } from "@/lib/print";
 
 const TIMELINE = ["Pending", "ProofSubmitted", "Confirmed", "Completed"];
@@ -93,10 +94,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
 
   async function updateBooking(patch: { status?: string; cancellationReason?: string }) {
     const supabase = createClient();
-    await supabase
-      .from("bookings")
-      .update({ status: patch.status, cancellation_reason: patch.cancellationReason })
-      .eq("booking_id", id);
+    if (patch.status) await updateBookingStatus(supabase, id, patch.status, { reason: patch.cancellationReason });
     setBooking((prev) => (prev ? { ...prev, ...(patch.status && { status: patch.status }) } : prev));
   }
 
@@ -109,19 +107,14 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
   }) {
     const supabase = createClient();
     const orNumber = patch.withOrNumber ? newOrNumber(id) : undefined;
-    await supabase
-      .from("payments")
-      .update({
-        status: patch.status,
-        waived_reason: patch.waivedReason,
-        waived_at: patch.waivedReason ? new Date().toISOString() : undefined,
-        refund_reason: patch.refundReason,
-        refund_amount: patch.refundAmount,
-        refunded_at: patch.refundReason ? new Date().toISOString() : undefined,
-        confirmed_at: patch.status === "Paid" ? new Date().toISOString() : undefined,
-        ...(orNumber && { or_number: orNumber }),
-      })
-      .eq("booking_id", id);
+    if (patch.status === "Refunded") {
+      await refundPayment(supabase, id, {
+        amount: patch.refundAmount ?? 0,
+        reason: patch.refundReason ?? "",
+      });
+    } else if (patch.status === "Waived") {
+      await waivePayment(supabase, id, patch.waivedReason ?? "");
+    }
     setBooking((prev) => (prev ? { ...prev, paymentStatus: patch.status, orNumber: orNumber ?? prev.orNumber } : prev));
   }
 

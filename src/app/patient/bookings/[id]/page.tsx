@@ -11,7 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { queryBookingById } from "@/lib/data/bookings";
+import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
 
 const TIMELINE = ["Pending", "Confirmed", "CheckedIn", "Completed"];
 
@@ -94,19 +94,14 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     setActionError("");
     setSubmitting(true);
     const supabase = createClient();
-    const { error } = await supabase
-      .from("bookings")
-      .update({
-        status: "Cancelled",
-        cancellation_reason: cancelReason.trim() || null,
-      })
-      .eq("booking_id", id)
-      .eq("patient_id", session!.patientId!);
-    setSubmitting(false);
-    if (error) {
-      setActionError(error.message);
+    try {
+      await updateBookingStatus(supabase, id, "Cancelled", { reason: cancelReason.trim() || undefined });
+    } catch (e) {
+      setSubmitting(false);
+      setActionError(e instanceof Error ? e.message : "Could not cancel this booking.");
       return;
     }
+    setSubmitting(false);
     setBooking((prev) => (prev ? { ...prev, status: "Cancelled" } : prev));
     setCancelOpen(false);
     setCancelReason("");

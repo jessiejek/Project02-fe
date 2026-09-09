@@ -8,7 +8,8 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
-import { queryBookingById } from "@/lib/data/bookings";
+import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
+import { confirmPayment, waivePayment } from "@/lib/data/payments";
 
 interface BookingView {
   id: string;
@@ -98,10 +99,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
 
   async function updateBooking(patch: { status?: string; cancellationReason?: string }) {
     const supabase = createClient();
-    await supabase
-      .from("bookings")
-      .update({ status: patch.status, cancellation_reason: patch.cancellationReason })
-      .eq("booking_id", id);
+    if (patch.status) await updateBookingStatus(supabase, id, patch.status, { reason: patch.cancellationReason });
     setBooking((prev) => (prev ? { ...prev, ...(patch.status && { status: patch.status }) } : prev));
   }
 
@@ -115,19 +113,16 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
   }) {
     const supabase = createClient();
     const orNumber = patch.withOrNumber ? newOrNumber(id) : undefined;
-    await supabase
-      .from("payments")
-      .update({
-        status: patch.status,
-        payment_method: patch.paymentMethod,
-        amount_received: patch.amountReceived,
-        confirm_notes: patch.confirmNotes,
-        waived_reason: patch.waivedReason,
-        waived_at: patch.waivedReason ? new Date().toISOString() : undefined,
-        confirmed_at: patch.status === "Paid" ? new Date().toISOString() : undefined,
-        ...(orNumber && { or_number: orNumber }),
-      })
-      .eq("booking_id", id);
+    if (patch.status === "Waived") {
+      await waivePayment(supabase, id, patch.waivedReason ?? "");
+    } else {
+      await confirmPayment(supabase, id, {
+        paymentMethod: patch.paymentMethod ?? "Cash",
+        amountReceived: patch.amountReceived ?? booking!.amountDue,
+        confirmNotes: patch.confirmNotes,
+        orNumber,
+      });
+    }
     setBooking((prev) =>
       prev ? { ...prev, paymentStatus: patch.status, orNumber: orNumber ?? prev.orNumber, waivedReason: patch.waivedReason ?? prev.waivedReason } : prev,
     );

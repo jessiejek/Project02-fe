@@ -240,6 +240,30 @@ export async function queryDoctorBookings(
   return rows;
 }
 
+/**
+ * Booking status transition (Phase 4c). .NET: PUT /api/bookings/{id}/status
+ * `{ status, reason }`. `proofType`/`proofValue` (patient online-payment proof)
+ * has no .NET endpoint yet — that path stays on Supabase (flagged, Phase 8).
+ */
+export async function updateBookingStatus(
+  supabase: SupabaseClient,
+  bookingId: string,
+  status: string,
+  opts: { reason?: string; proofType?: string; proofValue?: string } = {},
+): Promise<void> {
+  if (resolveMode("bookings") === "dotnet" && !opts.proofType) {
+    await api.put(`/api/bookings/${bookingId}/status`, { status, reason: opts.reason ?? null });
+    return;
+  }
+  const patch: Record<string, unknown> = { status };
+  if (opts.reason) patch.cancellation_reason = opts.reason;
+  if (opts.proofType) {
+    patch.proof_type = opts.proofType;
+    patch.proof_value = opts.proofValue;
+  }
+  await supabase.from("bookings").update(patch).eq("booking_id", bookingId);
+}
+
 export async function queryBookingById(supabase: SupabaseClient, bookingId: string): Promise<BookingRow | null> {
   if (resolveMode("bookings") === "dotnet") {
     try {

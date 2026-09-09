@@ -69,8 +69,10 @@ const DOTNET_RESOURCES: ReadonlySet<DataResource> = new Set<DataResource>([
   "medicines",
   "vital_field_templates",
   "icd10_codes",
-  // Phase 4b — booking reads (list + detail) via src/lib/data/bookings.ts
+  // Phase 4b/4c — booking reads + status transitions via src/lib/data/bookings.ts
   "bookings",
+  // Phase 4d — confirm / waive / refund via src/lib/data/payments.ts
+  "payments",
 ]);
 
 export function resolveMode(resource: DataResource): ApiMode {

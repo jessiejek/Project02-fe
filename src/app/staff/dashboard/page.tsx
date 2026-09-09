@@ -9,6 +9,7 @@ import { Toast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
+import { updateBookingStatus } from "@/lib/data/bookings";
 
 interface QueueRow {
   id: string;
@@ -65,7 +66,7 @@ export default function StaffDashboardPage() {
   async function toggleCheckIn(id: string, currentStatus: string) {
     const nextStatus = currentStatus === "Confirmed" ? "CheckedIn" : "Confirmed";
     const supabase = createClient();
-    await supabase.from("bookings").update({ status: nextStatus }).eq("booking_id", id);
+    await updateBookingStatus(supabase, id, nextStatus);
     setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: nextStatus } : b)));
   }
 

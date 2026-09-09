@@ -7,6 +7,8 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
+import { queryBookings } from "@/lib/data/bookings";
+import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
 import { one, serviceNames } from "@/lib/one";
 
 interface QueueRow {
@@ -43,31 +45,17 @@ export default function PaymentsQueuePage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("bookings")
-        .select("booking_id, appointment_date, queue_number, amount_due, status, doctors(staff_accounts(full_name)), booking_services(services(name)), payments(status)")
-        .eq("status", "Completed")
-        .order("appointment_date", { ascending: true })
-        .order("queue_number", { ascending: true, nullsFirst: false });
-
-      const mapped: QueueRow[] = (data ?? [])
-        .map((b) => {
-          const doctor = one(b.doctors);
-          const staff = one(doctor?.staff_accounts);
-          const payment = one(b.payments);
-          const row: QueueRowWithPayment = {
-            id: b.booking_id,
-            doctorName: staff?.full_name ?? "",
-            serviceNames: serviceNames(b.booking_services),
-            appointmentDate: b.appointment_date,
-            queueNumber: b.queue_number,
-            amountDue: Number(b.amount_due),
-            paymentStatus: payment?.status ?? "Unpaid",
-          };
-          return row;
-        })
-        .filter((row) => row.paymentStatus === "Unpaid")
-        .map(({ paymentStatus: _paymentStatus, ...row }) => row);
+      const rows = await queryBookings(supabase, { status: "Completed" });
+      const mapped: QueueRow[] = rows
+        .filter((b) => (b.payments?.status ?? "Unpaid") === "Unpaid")
+        .map((b) => ({
+          id: b.booking_id,
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+          appointmentDate: b.appointment_date,
+          queueNumber: b.queue_number,
+          amountDue: Number(b.amount_due),
+        }));
 
       setQueue(mapped);
       setLoading(false);
@@ -76,22 +64,17 @@ export default function PaymentsQueuePage() {
     load();
   }, []);
 
-  async function confirmPayment() {
+  async function handleConfirm() {
     if (!activeBooking) return;
     setSubmitting(true);
     const supabase = createClient();
-    await supabase
-      .from("payments")
-      .update({
-        status: "Paid",
-        payment_method: paymentMethod,
-        amount_received: Number(amountReceived) || activeBooking.amountDue,
-        reference_number: referenceNumber.trim() || null,
-        confirm_notes: confirmNotes.trim() || null,
-        confirmed_at: new Date().toISOString(),
-        or_number: newOrNumber(activeBooking.id),
-      })
-      .eq("booking_id", activeBooking.id);
+    await confirmPaymentApi(supabase, activeBooking.id, {
+      paymentMethod,
+      amountReceived: Number(amountReceived) || activeBooking.amountDue,
+      referenceNumber: referenceNumber.trim() || null,
+      confirmNotes: confirmNotes.trim() || null,
+      orNumber: newOrNumber(activeBooking.id),
+    });
 
     setQueue((prev) => prev.filter((b) => b.id !== activeBooking.id));
     setSubmitting(false);
@@ -186,7 +169,7 @@ export default function PaymentsQueuePage() {
             <Button variant="secondary" onClick={() => setActiveId(null)} disabled={submitting}>
               Cancel
             </Button>
-            <Button onClick={confirmPayment} disabled={submitting || !activeBooking}>
+            <Button onClick={handleConfirm} disabled={submitting || !activeBooking}>
               {submitting ? "Confirming..." : "Confirm"}
             </Button>
           </>
