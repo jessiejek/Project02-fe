@@ -112,6 +112,11 @@ export interface ConsultationUpsert {
   assessment?: string | null;
   plan?: string | null;
   doctor_notes?: string | null;
+  // §16.6 — doctor picks the fee line at consultation; backend recomputes the
+  // flat clinic fee on the linked booking. Omit to leave the booking untouched.
+  visit_type?: "New" | "FollowUp" | null;
+  med_cert_requested?: boolean | null;
+  discount_category?: "Senior" | "PWD" | null;
 }
 
 export async function upsertConsultationByBooking(
@@ -122,9 +127,12 @@ export async function upsertConsultationByBooking(
   if (dn("consultations")) {
     return api.put<ConsultationRow>(`/api/consultations/by-booking/${bookingId}`, body);
   }
+  // Supabase fallback: strip the booking-only fee fields — they don't exist on
+  // the `consultations` table (the .NET endpoint applies them to the booking).
+  const { visit_type: _vt, med_cert_requested: _mc, discount_category: _dc, ...consultBody } = body;
   const { data } = await supabase
     .from("consultations")
-    .upsert({ booking_id: bookingId, ...body }, { onConflict: "booking_id" })
+    .upsert({ booking_id: bookingId, ...consultBody }, { onConflict: "booking_id" })
     .select("*")
     .single();
   return data as ConsultationRow;

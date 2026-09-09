@@ -24,6 +24,12 @@ export interface ClinicSettingsRow {
   favicon_url: string | null;
   website_url: string | null;
   privacy_policy_text: string | null;
+  // §16.6 flat clinic-wide fee schedule.
+  fee_consultation: number;
+  fee_follow_up: number;
+  fee_senior_pwd: number;
+  fee_med_cert: number;
+  discount_pct: number;
   updated_at: string;
 }
 
