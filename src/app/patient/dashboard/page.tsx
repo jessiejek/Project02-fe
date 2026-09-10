@@ -9,10 +9,12 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { one, serviceNames } from "@/lib/one";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorRatings } from "@/lib/data/admin";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
+import { queryPatientById } from "@/lib/data/patients";
+import { queryMyBookings } from "@/lib/data/bookings";
+import { resendVerification } from "@/lib/auth/account";
 
 interface BookingRow {
   id: string;
@@ -61,33 +63,28 @@ export default function PatientDashboardPage() {
     const patientId = session.patientId;
     async function load() {
       const supabase = createClient();
-      const [patientRes, bookingsRes, rxRes, consultRes, doctorsRes, ratingsRes] = await Promise.all([
-        supabase.from("patients").select("first_name, email, is_email_verified, consented_at").eq("patient_id", patientId).single(),
-        supabase
-          .from("bookings")
-          .select("*, doctors(staff_accounts(full_name)), booking_services(services(name)), payments(status)")
-          .eq("patient_id", patientId),
+      const [patientRow, bookingRows, rxRes, consultRes, doctorsRes, ratingsRes] = await Promise.all([
+        queryPatientById(supabase, patientId),
+        queryMyBookings(supabase, patientId),
         queryRxGroups(supabase, { patientId }),
         queryConsultations(supabase, { patientId }),
         queryDoctors(supabase),
         queryDoctorRatings(supabase).then((data) => ({ data })),
       ]);
 
-      if (patientRes.data) {
-        setFirstName(patientRes.data.first_name);
-        setPatientEmail(patientRes.data.email);
-        setIsEmailVerified(patientRes.data.is_email_verified);
-        setConsentedAt(patientRes.data.consented_at);
+      if (patientRow) {
+        setFirstName(patientRow.first_name);
+        setPatientEmail(patientRow.email);
+        setIsEmailVerified(patientRow.is_email_verified);
+        setConsentedAt(patientRow.consented_at);
       }
 
-      const mappedBookings: BookingRow[] = (bookingsRes.data ?? []).map((b) => {
-        const doctor = one(b.doctors);
-        const staff = one(doctor?.staff_accounts);
-        const payment = one(b.payments);
+      const mappedBookings: BookingRow[] = bookingRows.map((b) => {
+        const payment = b.payments;
         return {
           id: b.booking_id,
-          doctorName: staff?.full_name ?? "",
-          serviceNames: serviceNames(b.booking_services),
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
           appointmentDate: b.appointment_date,
           slotStartTime: b.slot_start_time.slice(0, 5),
           status: b.status,
@@ -150,12 +147,7 @@ export default function PatientDashboardPage() {
       setBannerToast({ variant: "error", message: "No email on file for this account." });
       return;
     }
-    const supabase = createClient();
-    const { error } = await supabase.auth.resend({ type: "signup", email: patientEmail });
-    if (error) {
-      setBannerToast({ variant: "error", message: error.message });
-      return;
-    }
+    await resendVerification(patientEmail);
     setBannerToast({ variant: "success", message: "Verification email sent. Check your inbox." });
   }
 

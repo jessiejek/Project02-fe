@@ -10,6 +10,7 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { queryPatientById, updatePatient } from "@/lib/data/patients";
+import { changePassword } from "@/lib/auth/account";
 import type { Patient } from "@/data/types";
 
 const TABS = [
@@ -80,7 +81,7 @@ export default function PatientProfilePage() {
       <Card className="mx-auto max-w-[40rem]">
         <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
         {tab === "info" && <ProfileInfoTab key={patient.id} patient={patient} />}
-        {tab === "password" && <ChangePasswordTab email={patient.email} />}
+        {tab === "password" && <ChangePasswordTab />}
         {tab === "consent" && (
           <div className="space-y-md text-body-md text-on-surface-variant">
             {patient.consentedAt ? (
@@ -191,7 +192,7 @@ function ProfileInfoTab({ patient }: { patient: Patient }) {
   );
 }
 
-function ChangePasswordTab({ email }: { email: string }) {
+function ChangePasswordTab() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -205,22 +206,14 @@ function ChangePasswordTab({ email }: { email: string }) {
     if (!canUpdate) return;
     setError("");
     setUpdating(true);
-    const supabase = createClient();
-    // Re-verify the current password before changing it — updateUser()
-    // itself doesn't require it, so this is the app's own defense against
-    // someone with a still-open session changing the password unattended.
-    const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
-    if (verifyError) {
+    try {
+      await changePassword(currentPassword, newPassword);
+    } catch (e) {
       setUpdating(false);
-      setError("Current password is incorrect.");
+      setError(e instanceof Error ? e.message : "Could not update the password.");
       return;
     }
-    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setUpdating(false);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");

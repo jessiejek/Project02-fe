@@ -11,6 +11,7 @@ import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctorById, updateDoctor } from "@/lib/data/doctors";
 import { updateStaffAccount } from "@/lib/data/staff";
+import { changePassword } from "@/lib/auth/account";
 
 interface DoctorProfile {
   fullName: string;
@@ -154,12 +155,12 @@ function ProfileCard({ doctorId, initial }: { doctorId: string; initial: DoctorP
         </Link>
       </div>
 
-      <ChangePasswordSection email={form.email} />
+      <ChangePasswordSection />
     </Card>
   );
 }
 
-function ChangePasswordSection({ email }: { email: string }) {
+function ChangePasswordSection() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -173,19 +174,14 @@ function ChangePasswordSection({ email }: { email: string }) {
     if (!canUpdate) return;
     setError("");
     setUpdating(true);
-    const supabase = createClient();
-    const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
-    if (verifyError) {
+    try {
+      await changePassword(currentPassword, newPassword);
+    } catch (e) {
       setUpdating(false);
-      setError("Current password is incorrect.");
+      setError(e instanceof Error ? e.message : "Could not update the password.");
       return;
     }
-    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setUpdating(false);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");

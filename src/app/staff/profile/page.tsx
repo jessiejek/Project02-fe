@@ -8,7 +8,8 @@ import { Icon } from "@/components/ui/Icon";
 import { Toast } from "@/components/ui/Toast";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { updateStaffAccount } from "@/lib/data/staff";
+import { updateStaffAccount, queryStaffById } from "@/lib/data/staff";
+import { changePassword } from "@/lib/auth/account";
 
 interface StaffProfile {
   fullName: string;
@@ -27,12 +28,7 @@ export default function StaffProfilePage() {
 
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("staff_accounts")
-        .select("full_name, contact_number, email")
-        .eq("staff_id", staffId)
-        .single();
-
+      const data = await queryStaffById(supabase, staffId);
       if (data) {
         setProfile({
           fullName: data.full_name,
@@ -121,12 +117,12 @@ function ProfileCard({ staffId, initial }: { staffId: string; initial: StaffProf
         </Button>
       </div>
 
-      <ChangePasswordSection email={form.email} />
+      <ChangePasswordSection />
     </Card>
   );
 }
 
-function ChangePasswordSection({ email }: { email: string }) {
+function ChangePasswordSection() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -140,19 +136,14 @@ function ChangePasswordSection({ email }: { email: string }) {
     if (!canUpdate) return;
     setError("");
     setUpdating(true);
-    const supabase = createClient();
-    const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
-    if (verifyError) {
+    try {
+      await changePassword(currentPassword, newPassword);
+    } catch (e) {
       setUpdating(false);
-      setError("Current password is incorrect.");
+      setError(e instanceof Error ? e.message : "Could not update the password.");
       return;
     }
-    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setUpdating(false);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
