@@ -5,7 +5,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { createClient } from "@/lib/supabase/client";
 import { queryAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } from "@/lib/data/admin";
 
 const BLANK_FORM = { title: "", body: "", isActive: true };
@@ -31,7 +30,7 @@ export default function AdminAnnouncementsPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryAnnouncements(supabase);
       setAnnouncements(
         data.map((a) => ({
@@ -52,7 +51,7 @@ export default function AdminAnnouncementsPage() {
     const target = announcements.find((a) => a.id === id);
     if (!target) return;
     const nextState = !target.isActive;
-    const supabase = createClient();
+    const supabase = null as never;
     await updateAnnouncement(supabase, id, { is_active: nextState });
     setAnnouncements((prev) => prev.map((a) => (a.id === id ? { ...a, isActive: nextState } : a)));
   }
@@ -69,7 +68,7 @@ export default function AdminAnnouncementsPage() {
 
   async function saveAnnouncement() {
     if (!form.title.trim() || !form.body.trim()) return;
-    const supabase = createClient();
+    const supabase = null as never;
     if (editingId === "new") {
       const data = await createAnnouncement(supabase, {
         title: form.title.trim(),
@@ -183,7 +182,7 @@ export default function AdminAnnouncementsPage() {
               variant="danger"
               onClick={async () => {
                 if (!deletingId) return;
-                const supabase = createClient();
+                const supabase = null as never;
                 await deleteAnnouncement(supabase, deletingId);
                 setAnnouncements((prev) => prev.filter((a) => a.id !== deletingId));
                 setDeletingId(null);

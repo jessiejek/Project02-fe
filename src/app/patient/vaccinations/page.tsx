@@ -6,7 +6,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryVaccinations } from "@/lib/data/patientFiles";
 import { printHtml, escapeHtml } from "@/lib/print";
 
@@ -30,7 +29,7 @@ export default function VaccinationsPage() {
     const patientId = session.patientId;
 
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryVaccinations(supabase, patientId);
 
       setVaccinations(

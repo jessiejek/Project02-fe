@@ -17,7 +17,6 @@ import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
 import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
 import { queryAuditLogs, queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
@@ -252,7 +251,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   async function saveAsTemplate() {
     if (!newTemplateTitle.trim() || !booking) return;
-    const supabase = createClient();
+    const supabase = null as never;
     const data = await createSoapTemplate(supabase, booking.doctorId, {
       title: newTemplateTitle.trim(),
       is_system_template: false,
@@ -291,7 +290,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     defaultVitalTemplates.map((t) => [t.formKey, vitalReadings.find((r) => r.templateId === t.id)?.value ?? ""]),
   );
   async function reloadVitalReadings() {
-    const supabase = createClient();
+    const supabase = null as never;
     const data = await queryVitalReadings(supabase, { bookingId });
     setVitalReadings(data.map((r) => ({ templateId: r.template_id, value: r.value })));
   }
@@ -353,7 +352,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   async function handleSaveLabOrders(printAfter: boolean) {
     if (!booking) return;
     setSavingLabs(true);
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       const consultId = consultationId ?? (await persistConsultation("Draft"));
       if (!consultId) return;
@@ -470,7 +469,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const bookingRow = await queryBookingById(supabase, bookingId);
       if (cancelled) return;
       if (!bookingRow) {
@@ -808,7 +807,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // (Implementation-Phases/07-consultations-vitals.md §7a/7b/7d).
   async function persistConsultation(status: "Draft" | "Completed" | "Amended"): Promise<string | null> {
     if (!booking) return null;
-    const supabase = createClient();
+    const supabase = null as never;
 
     let saved;
     try {
@@ -887,7 +886,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   async function handleIssueMedCert(printAfter: boolean) {
     if (!booking || !clinicRow) return;
     setIssuingCert(true);
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       const consultId = consultationId ?? (await persistConsultation("Draft"));
       if (!consultId) return;
@@ -988,7 +987,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (!canComplete || !booking) return;
     const savedId = await persistConsultation("Amended");
     if (!savedId) return;
-    const supabase = createClient();
+    const supabase = null as never;
     const details = "Consultation record";
     await writeAuditLog(supabase, {
       entity_type: "Consultation",
@@ -1386,7 +1385,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         group={prescriptionGroup}
                         embedded
                         onSaved={async () => {
-                          const supabase = createClient();
+                          const supabase = null as never;
                           const rows = await queryRxGroups(supabase, { bookingId });
                           if (rows[0]) setPrescriptionGroup(mapRxGroup(rows[0]));
                           setRxVersion((v) => v + 1);

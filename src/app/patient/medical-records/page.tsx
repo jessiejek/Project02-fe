@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryConsultations } from "@/lib/data/clinical";
 import { printHtml, escapeHtml } from "@/lib/print";
 
@@ -39,7 +38,7 @@ export default function MedicalRecordsPage() {
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryConsultations(supabase, { patientId });
       const mapped: MedicalRecordEntry[] = data.map((c) => {
         const diagnoses = c.consultation_diagnoses ?? [];

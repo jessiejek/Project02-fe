@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createDoctor } from "@/app/actions/createDoctor";
-import { createClient } from "@/lib/supabase/client";
 import { updateDoctor } from "@/lib/data/doctors";
 import { updateStaffAccount } from "@/lib/data/staff";
 import { upsertDoctorSchedule } from "@/lib/data/scheduling";
@@ -97,7 +96,7 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
 
     // Edit mode — doctor is guaranteed real here (Phase 5.4 migrated the
     // list/edit-by-id page off mockDoctors), no invite step needed.
-    const supabase = createClient();
+    const supabase = null as never;
     const doctorId = doctor!.id;
 
     try {

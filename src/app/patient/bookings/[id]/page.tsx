@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
 
 const TIMELINE = ["Pending", "Confirmed", "CheckedIn", "Completed"];
@@ -40,10 +39,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const { session } = useSession();
   const [booking, setBooking] = useState<BookingView | null | undefined>(undefined);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [proofOpen, setProofOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const [referenceNumber, setReferenceNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
 
@@ -55,7 +52,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const b = await queryBookingById(supabase, id);
       if (!b || b.patient_id !== patientId) {
         setBooking(null);
@@ -93,7 +90,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   async function handleCancel() {
     setActionError("");
     setSubmitting(true);
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       await updateBookingStatus(supabase, id, "Cancelled", { reason: cancelReason.trim() || undefined });
     } catch (e) {
@@ -107,39 +104,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     setCancelReason("");
   }
 
-  async function handleSubmitProof() {
-    if (!referenceNumber.trim()) {
-      setActionError("Reference number is required.");
-      return;
-    }
-    setActionError("");
-    setSubmitting(true);
-    const supabase = createClient();
-    const [{ error: bookingError }, { error: paymentError }] = await Promise.all([
-      supabase
-        .from("bookings")
-        .update({
-          status: "ProofSubmitted",
-          proof_type: "ReferenceNumber",
-          proof_value: referenceNumber.trim(),
-        })
-        .eq("booking_id", id)
-        .eq("patient_id", session!.patientId!),
-      supabase
-        .from("payments")
-        .update({ reference_number: referenceNumber.trim() })
-        .eq("booking_id", id),
-    ]);
-    setSubmitting(false);
-    if (bookingError || paymentError) {
-      setActionError(bookingError?.message ?? paymentError?.message ?? "Could not submit payment proof.");
-      return;
-    }
-    setBooking((prev) => (prev ? { ...prev, status: "ProofSubmitted" } : prev));
-    setProofOpen(false);
-    setReferenceNumber("");
-  }
-
   const isClosed = ["Cancelled", "NoShow", "Expired"].includes(booking.status);
   const isUpcoming = ["Confirmed", "CheckedIn"].includes(booking.status);
   const isCompleted = booking.status === "Completed";
@@ -147,10 +111,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   // status==="Completed" for both, which doesn't match either spec'd rule
   // (found during the flow-completeness audit).
   const canShowReceipt = ["Paid", "Waived"].includes(booking.paymentStatus);
-  const canSubmitProof =
-    booking.paymentMode === "Online" &&
-    booking.paymentStatus === "Unpaid" &&
-    ["Pending", "OnHold"].includes(booking.status);
   const timelineIndex = TIMELINE.indexOf(booking.status);
   const orNumber = `OR-${booking.id.toUpperCase()}`;
 
@@ -216,13 +176,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
             <Link href={`/patient/reviews/${booking.id}`}>
               <Button>Leave a Review</Button>
             </Link>
-          </Card>
-        )}
-
-        {canSubmitProof && (
-          <Card className="flex flex-wrap items-center justify-between gap-md">
-            <p className="text-body-md text-on-surface">Payment not yet collected.</p>
-            <Button onClick={() => setProofOpen(true)}>Submit Payment Proof</Button>
           </Card>
         )}
 
@@ -292,47 +245,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           className="w-full rounded-lg border border-outline-variant p-md text-body-md"
           rows={3}
         />
-      </Modal>
-
-      <Modal
-        isOpen={proofOpen}
-        onClose={() => {
-          setProofOpen(false);
-          setReferenceNumber("");
-          setActionError("");
-        }}
-        title="Submit Payment Proof"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setProofOpen(false);
-                setReferenceNumber("");
-                setActionError("");
-              }}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleSubmitProof} disabled={submitting || !referenceNumber.trim()}>
-              {submitting ? "Submitting..." : "Submit"}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-md">
-          {actionError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{actionError}</p>}
-          <input
-            value={referenceNumber}
-            onChange={(e) => setReferenceNumber(e.target.value)}
-            placeholder="Reference Number"
-            className="w-full rounded-lg border border-outline-variant px-md py-md"
-          />
-          <div className="rounded-lg border border-dashed border-outline-variant p-lg text-center text-body-md text-on-surface-variant">
-            Screenshot upload comes in Phase 6 (Storage). Reference number is enough for now.
-          </div>
-        </div>
       </Modal>
 
       {/* Patient.md §7: "modal with OR number, names, services, amount,

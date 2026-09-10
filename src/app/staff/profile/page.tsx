@@ -7,7 +7,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Icon } from "@/components/ui/Icon";
 import { Toast } from "@/components/ui/Toast";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { updateStaffAccount, queryStaffById } from "@/lib/data/staff";
 import { changePassword } from "@/lib/auth/account";
 
@@ -27,7 +26,7 @@ export default function StaffProfilePage() {
     const staffId = session.staffId;
 
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryStaffById(supabase, staffId);
       if (data) {
         setProfile({
@@ -63,7 +62,7 @@ function ProfileCard({ staffId, initial }: { staffId: string; initial: StaffProf
 
   async function handleSave() {
     setSaving(true);
-    const supabase = createClient();
+    const supabase = null as never;
     await updateStaffAccount(supabase, staffId, {
       full_name: form.fullName,
       contact_number: form.contactNumber || null,

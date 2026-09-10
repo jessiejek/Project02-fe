@@ -8,7 +8,6 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
-import { createClient } from "@/lib/supabase/client";
 import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
 import { waivePayment, refundPayment } from "@/lib/data/payments";
 import { printHtml, escapeHtml } from "@/lib/print";
@@ -55,7 +54,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const b = await queryBookingById(supabase, id);
       if (!b) {
         setBooking(null);
@@ -93,7 +92,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
   }
 
   async function updateBooking(patch: { status?: string; cancellationReason?: string }) {
-    const supabase = createClient();
+    const supabase = null as never;
     if (patch.status) await updateBookingStatus(supabase, id, patch.status, { reason: patch.cancellationReason });
     setBooking((prev) => (prev ? { ...prev, ...(patch.status && { status: patch.status }) } : prev));
   }
@@ -105,7 +104,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
     refundAmount?: number;
     withOrNumber?: boolean;
   }) {
-    const supabase = createClient();
+    const supabase = null as never;
     const orNumber = patch.withOrNumber ? newOrNumber(id) : undefined;
     if (patch.status === "Refunded") {
       await refundPayment(supabase, id, {

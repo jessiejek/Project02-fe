@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Toast } from "@/components/ui/Toast";
-import { createClient } from "@/lib/supabase/client";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 import { queryPatientById, updatePatient } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
@@ -67,7 +66,7 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [patientRow, bookingRows, consultRes] = await Promise.all([
         queryPatientById(supabase, id),
         queryBookings(supabase, { patientId: id }),
@@ -139,7 +138,7 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
     }
     setSaving(true);
     setSaveError("");
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       await updatePatient(supabase, patient!.id, {
         first_name: editForm.firstName.trim(),

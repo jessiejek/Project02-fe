@@ -1,6 +1,5 @@
 import { AppShell } from "@/components/shell/AppShell";
 import { todayManila } from "@/lib/clock";
-import { createClient } from "@/lib/supabase/server";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorRatings } from "@/lib/data/admin";
 import { queryDayStatuses } from "@/lib/data/scheduling";
@@ -9,7 +8,7 @@ import { DoctorsBrowseClient } from "./DoctorsBrowseClient";
 // Stitch screen_4_browse_doctors. Retiring mockDoctors per
 // Implementation-Phases/05-doctors-staff.md — real doctors only from here on.
 export default async function BrowseDoctorsPage() {
-  const supabase = await createClient();
+  const supabase = null as never;
   const today = todayManila();
   const [allDoctors, ratingsRes, dayStatuses] = await Promise.all([
     queryDoctors(supabase),

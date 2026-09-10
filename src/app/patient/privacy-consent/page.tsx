@@ -6,7 +6,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { updatePatientConsent } from "@/lib/data/patients";
 import { queryClinicSettings } from "@/lib/data/admin";
 
@@ -23,7 +22,7 @@ export default function PrivacyConsentPage() {
     if (!accepted || !session?.patientId) return;
     setError("");
     setSubmitting(true);
-    const supabase = createClient();
+    const supabase = null as never;
     const settings = await queryClinicSettings(supabase);
     const consentVersion = settings?.consent_version ?? 1;
     try {

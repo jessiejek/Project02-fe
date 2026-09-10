@@ -13,7 +13,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryConsultations, queryRxGroups, queryVitalReadings, deleteRxGroup } from "@/lib/data/clinical";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { queryPatientById } from "@/lib/data/patients";
@@ -115,7 +114,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
     if (!doctorId) return;
 
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [patientRow, consultsRes, rxRes, bookingRows, templates, vitalRows, labRows, docRows, vaxRows] = await Promise.all([
         queryPatientById(supabase, id),
         queryConsultations(supabase, { patientId: id, doctorId }),
@@ -643,7 +642,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
             <Button
               variant="danger"
               onClick={async () => {
-                const supabase = createClient();
+                const supabase = null as never;
                 await deleteRxGroup(supabase, deleteRxGroupId!);
                 setPrescriptionGroups((prev) => prev.filter((g) => g.id !== deleteRxGroupId));
                 setDeleteRxGroupId(null);

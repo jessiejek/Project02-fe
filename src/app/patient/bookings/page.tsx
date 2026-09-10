@@ -6,7 +6,6 @@ import { Tabs } from "@/components/ui/Tabs";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryMyBookings } from "@/lib/data/bookings";
 
 const TABS = [
@@ -54,7 +53,7 @@ export default function MyBookingsPage() {
     const patientId = session.patientId;
 
     async function loadBookings() {
-      const supabase = createClient();
+      const supabase = null as never;
       const rows = await queryMyBookings(supabase, patientId);
       setBookings(
         rows.map((b) => ({

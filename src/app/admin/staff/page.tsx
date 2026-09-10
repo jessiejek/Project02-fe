@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { inviteStaffMember } from "@/app/actions/inviteStaffMember";
 import { revokeStaffInvite } from "@/app/actions/revokeStaffInvite";
-import { createClient } from "@/lib/supabase/client";
 import { queryStaffAccounts, updateStaffAccount } from "@/lib/data/staff";
 import type { StaffMember } from "@/data/types";
 
@@ -27,7 +26,7 @@ export default function AdminStaffPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryStaffAccounts(supabase, { role: "Staff" });
       setStaff(data.map((s) => ({ id: s.staff_id, fullName: s.full_name, email: s.email, role: "Staff", status: s.status })));
     }
@@ -38,7 +37,7 @@ export default function AdminStaffPage() {
     const target = staff.find((s) => s.id === id);
     if (!target) return;
     const nextStatus = target.status === "Active" ? "Inactive" : "Active";
-    const supabase = createClient();
+    const supabase = null as never;
     await updateStaffAccount(supabase, id, { status: nextStatus });
     setStaff((prev) => prev.map((s) => (s.id === id ? { ...s, status: nextStatus } : s)));
   }

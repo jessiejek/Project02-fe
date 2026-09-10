@@ -7,7 +7,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorSchedules } from "@/lib/data/scheduling";
 import { updateStaffAccount } from "@/lib/data/staff";
@@ -31,7 +30,7 @@ export default function AdminDoctorsPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const allDoctors = await queryDoctors(supabase);
       const schedules = await Promise.all(allDoctors.map((d) => queryDoctorSchedules(supabase, d.doctor_id)));
       setDoctors(
@@ -50,7 +49,7 @@ export default function AdminDoctorsPage() {
 
   async function confirmDeactivate() {
     if (!deactivating) return;
-    const supabase = createClient();
+    const supabase = null as never;
     await updateStaffAccount(supabase, deactivating, { status: "Inactive" });
     setDoctors((prev) => prev.map((d) => (d.id === deactivating ? { ...d, status: "Inactive" } : d)));
     setDeactivating(null);

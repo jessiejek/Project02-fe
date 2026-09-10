@@ -7,7 +7,6 @@ import { Modal } from "@/components/ui/Modal";
 import { Toast } from "@/components/ui/Toast";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
-import { createClient } from "@/lib/supabase/client";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { queryVitalReadings, upsertVitalsByBooking } from "@/lib/data/clinical";
 import type { VitalFieldTemplate } from "@/data/types";
@@ -69,7 +68,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
   const [visibleOtherIds, setVisibleOtherIds] = useState<string[]>([]);
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [templates, readings] = await Promise.all([
         queryVitalFieldTemplates(supabase),
         queryVitalReadings(supabase, { bookingId }),
@@ -119,7 +118,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
     setConfirmOpen(false);
     // One row per template with a non-empty value; blank fields delete the
     // row (Implementation-Phases/07-consultations-vitals.md §7c).
-    const supabase = createClient();
+    const supabase = null as never;
     const relevantTemplateIds = [...defaultTemplates.map((t) => t.id), ...visibleOtherIds];
     await upsertVitalsByBooking(
       supabase,

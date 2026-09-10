@@ -8,7 +8,6 @@ import { Toast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorRatings } from "@/lib/data/admin";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
@@ -62,7 +61,7 @@ export default function PatientDashboardPage() {
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [patientRow, bookingRows, rxRes, consultRes, doctorsRes, ratingsRes] = await Promise.all([
         queryPatientById(supabase, patientId),
         queryMyBookings(supabase, patientId),

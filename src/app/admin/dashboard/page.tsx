@@ -6,7 +6,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryReport } from "@/lib/data/admin";
 import { queryBookings } from "@/lib/data/bookings";
@@ -47,7 +46,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const today = todayManila();
       const monthStart = `${today.slice(0, 7)}-01`;
       const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);

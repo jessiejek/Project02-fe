@@ -7,7 +7,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
-import { createClient } from "@/lib/supabase/client";
 import { queryReport } from "@/lib/data/admin";
 
 interface UnpaidVisitRow {
@@ -50,7 +49,7 @@ export default function AdminReportsPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const supabase = createClient();
+      const supabase = null as never;
       const inRange = (d: string | null | undefined, lo: string, hi: string) => !!d && d >= lo && d <= hi;
       const [unpaidAll, followUpsAll, summaryAll] = await Promise.all([
         queryReport<Record<string, any>>(supabase, "v_unpaid_completed_visits"),

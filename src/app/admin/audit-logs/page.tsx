@@ -5,7 +5,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/lib/supabase/client";
 import { queryAuditLogsPaged } from "@/lib/data/admin";
 import { queryStaffAccounts } from "@/lib/data/staff";
 
@@ -36,7 +35,7 @@ export default function AdminAuditLogsPage() {
     let cancelled = false;
     setLoading(true);
     const handle = setTimeout(async () => {
-      const supabase = createClient();
+      const supabase = null as never;
       const res = await queryAuditLogsPaged(supabase, {
         q: search.trim() || undefined,
         entityType: entityFilter === "all" ? undefined : entityFilter,

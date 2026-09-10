@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryRxGroups } from "@/lib/data/clinical";
 import { queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
 import { queryPatientById } from "@/lib/data/patients";
@@ -50,7 +49,7 @@ export default function PrescriptionsPage() {
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [data, settings, pat] = await Promise.all([
         queryRxGroups(supabase, { patientId }),
         queryClinicSettings(supabase),

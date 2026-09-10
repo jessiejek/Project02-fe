@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryPatientById, updatePatient } from "@/lib/data/patients";
 import { changePassword } from "@/lib/auth/account";
 import type { Patient } from "@/data/types";
@@ -35,7 +34,7 @@ export default function PatientProfilePage() {
     if (!patientId) return;
     const id = patientId;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryPatientById(supabase, id);
       if (data) {
         setPatient({
@@ -107,7 +106,7 @@ function ProfileInfoTab({ patient }: { patient: Patient }) {
 
   async function handleSave() {
     setSaving(true);
-    const supabase = createClient();
+    const supabase = null as never;
     await updatePatient(supabase, patient.id, {
       first_name: form.firstName,
       middle_name: form.middleName || null,

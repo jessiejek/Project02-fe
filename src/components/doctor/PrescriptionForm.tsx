@@ -9,7 +9,6 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Toast, type ToastVariant } from "@/components/ui/Toast";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
-import { createClient } from "@/lib/supabase/client";
 import { queryMedicines } from "@/lib/data/lookups";
 import {
   queryFavoriteMedicines,
@@ -575,7 +574,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   }
 
   async function reloadFavoritesAndTemplates() {
-    const supabase = createClient();
+    const supabase = null as never;
     const [favRes, tplRes] = await Promise.all([
       queryFavoriteMedicines(supabase, doctorId),
       queryRxTemplates(supabase, doctorId),
@@ -591,7 +590,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryMedicines(supabase);
       setMedicines(data.map((m) => ({ id: m.medicine_id, genericName: m.generic_name })));
       await reloadFavoritesAndTemplates();
@@ -622,7 +621,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     const wasDuplicate = isDuplicate(item.genericName, item.dosage);
     addLineItem(item);
     if (addToFavorites && !wasDuplicate) {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await addFavoriteMedicine(supabase, doctorId, {
         medicine_id: item.rxId || "00000000-0000-0000-0000-000000000000",
         generic_name: item.genericName,
@@ -655,7 +654,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       return;
     }
 
-    const supabase = createClient();
+    const supabase = null as never;
     await upsertRxGroupByBooking(supabase, effectiveBookingId, {
       patient_id: patientId,
       doctor_id: doctorId,
@@ -784,7 +783,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         favorites={favorites}
         onClose={() => setTemplateModalOpen(false)}
         onSave={async (title, tplItems) => {
-          const supabase = createClient();
+          const supabase = null as never;
           const items = tplItems.map((i) => ({
             medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
             generic_name: i.genericName,
@@ -815,7 +814,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
             <Button
               variant="danger"
               onClick={async () => {
-                const supabase = createClient();
+                const supabase = null as never;
                 await deleteRxTemplate(supabase, templateDeleteTarget!.id);
                 setTemplates((prev) => prev.filter((t) => t.id !== templateDeleteTarget!.id));
                 setTemplateDeleteTarget(null);

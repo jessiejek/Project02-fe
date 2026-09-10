@@ -7,7 +7,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Icon } from "@/components/ui/Icon";
 import { VitalsEditor } from "@/components/doctor/VitalsEditor";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryBookingById } from "@/lib/data/bookings";
 
 interface BookingHeader {
@@ -24,7 +23,7 @@ function VitalsDetailWorkflow({ bookingId }: { bookingId: string }) {
     if (!session?.staffId) return;
     const doctorId = session.staffId;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const b = await queryBookingById(supabase, bookingId);
       if (!b || b.doctor_id !== doctorId) {
         setBooking(null);

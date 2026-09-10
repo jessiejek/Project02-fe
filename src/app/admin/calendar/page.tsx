@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryBookings } from "@/lib/data/bookings";
 
@@ -65,7 +64,7 @@ export default function AdminCalendarPage() {
 
   useEffect(() => {
     async function loadDoctors() {
-      const supabase = createClient();
+      const supabase = null as never;
       const rows = await queryDoctors(supabase);
       setDoctors(
         rows
@@ -80,7 +79,7 @@ export default function AdminCalendarPage() {
     let cancelled = false;
     async function loadBookings() {
       setLoaded(false);
-      const supabase = createClient();
+      const supabase = null as never;
       const rows = await queryBookings(supabase, { from: weekStartIso, to: weekEndIso });
       if (cancelled) return;
       setBookings(

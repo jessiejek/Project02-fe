@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { createClient } from "@/lib/supabase/client";
 import { queryPatients } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
 
@@ -21,7 +20,7 @@ export default function StaffPatientsPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = (await queryPatients(supabase)).sort((a, b) =>
         (b.created_at ?? "").localeCompare(a.created_at ?? ""),
       );

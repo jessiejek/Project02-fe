@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryPatientDocuments, uploadPatientDocument } from "@/lib/data/patientFiles";
+import { queryMyBookings } from "@/lib/data/bookings";
 
 interface BookingOption {
   id: string;
@@ -44,29 +44,20 @@ export default function DocumentsPage() {
     const patientId = session.patientId;
 
     async function load() {
-      const supabase = createClient();
-      const [bookingsRes, docsRes] = await Promise.all([
-        supabase
-          .from("bookings")
-          .select("booking_id, appointment_date, doctors(staff_accounts(full_name))")
-          .eq("patient_id", patientId)
-          .order("appointment_date", { ascending: false }),
-        queryPatientDocuments(supabase, { patientId }).then((data) => ({ data })),
+      const [bookingRows, docsData] = await Promise.all([
+        queryMyBookings(null as never, patientId),
+        queryPatientDocuments(null as never, { patientId }),
       ]);
 
       setBookings(
-        (bookingsRes.data ?? []).map((b) => {
-          const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-          const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-          return {
-            id: b.booking_id,
-            label: `${staff?.full_name ?? "Doctor"} — ${b.appointment_date}`,
-          };
-        }),
+        bookingRows.map((b) => ({
+          id: b.booking_id,
+          label: `${b.doctors?.staff_accounts?.full_name ?? "Doctor"} — ${b.appointment_date}`,
+        })),
       );
 
       setDocuments(
-        (docsRes.data ?? []).map((doc) => {
+        (docsData ?? []).map((doc) => {
           const booking = Array.isArray(doc.bookings) ? doc.bookings[0] : doc.bookings;
           const doctor = booking ? (Array.isArray(booking.doctors) ? booking.doctors[0] : booking.doctors) : undefined;
           const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;

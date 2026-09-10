@@ -6,7 +6,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { createClient } from "@/lib/supabase/client";
 import { queryPatientsPaged, createPatient } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
 
@@ -38,7 +37,7 @@ export default function AdminPatientsPage() {
     let cancelled = false;
     setLoading(true);
     const handle = setTimeout(async () => {
-      const supabase = createClient();
+      const supabase = null as never;
       const res = await queryPatientsPaged(supabase, {
         q: search.trim() || undefined,
         page,
@@ -75,7 +74,7 @@ export default function AdminPatientsPage() {
 
   async function handleCreate() {
     if (!canCreate) return;
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       const data = await createPatient(supabase, {
         first_name: newPatient.firstName,

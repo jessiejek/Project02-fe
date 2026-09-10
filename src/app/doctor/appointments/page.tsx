@@ -7,7 +7,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctorBookings } from "@/lib/data/bookings";
 
 interface AppointmentRow {
@@ -30,7 +29,7 @@ export default function DoctorAppointmentsPage() {
   useEffect(() => {
     if (!meDoctorId) return;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const rows = await queryDoctorBookings(supabase, meDoctorId);
       setBookings(
         rows.map((b) => ({

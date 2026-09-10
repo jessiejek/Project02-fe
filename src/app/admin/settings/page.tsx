@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { Toast } from "@/components/ui/Toast";
-import { createClient } from "@/lib/supabase/client";
 import {
   queryClinicSettings,
   updateClinicSettings,
@@ -69,7 +68,7 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [settingsRes, hoursRes, methodsRes] = await Promise.all([
         queryClinicSettings(supabase).then((data) => ({ data })),
         queryOperatingHours(supabase).then((data) => ({ data })),
@@ -116,7 +115,7 @@ export default function AdminSettingsPage() {
   }, []);
 
   async function saveSettings() {
-    const supabase = createClient();
+    const supabase = null as never;
     // logoUrl/faviconUrl deliberately excluded — Upload Logo/Favicon only
     // produce a local blob: preview today (real Storage upload is Phase 9),
     // and a blob: URL is meaningless outside this browser session, so it's
@@ -141,7 +140,7 @@ export default function AdminSettingsPage() {
   }
 
   async function saveFees() {
-    const supabase = createClient();
+    const supabase = null as never;
     await updateClinicSettings(supabase, {
       fee_consultation: settings.feeConsultation,
       fee_follow_up: settings.feeFollowUp,
@@ -153,7 +152,7 @@ export default function AdminSettingsPage() {
   }
 
   async function saveHours() {
-    const supabase = createClient();
+    const supabase = null as never;
     await setOperatingHours(
       supabase,
       hours.map((h) => ({
@@ -363,7 +362,7 @@ export default function AdminSettingsPage() {
                   return;
                 }
                 const nextVersion = settings.consentVersion + 1;
-                const supabase = createClient();
+                const supabase = null as never;
                 await updateClinicSettings(supabase, { consent_version: nextVersion });
                 setSettings((prev) => ({ ...prev, consentVersion: nextVersion }));
                 setBumpConfirmOpen(false);

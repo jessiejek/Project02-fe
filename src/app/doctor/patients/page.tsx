@@ -6,7 +6,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctorBookings } from "@/lib/data/bookings";
 
 interface DoctorPatientRow {
@@ -30,7 +29,7 @@ export default function DoctorPatientsPage() {
     const doctorId = session.staffId;
 
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const bookings = await queryDoctorBookings(supabase, doctorId);
 
       const byPatient = new Map<string, DoctorPatientRow>();

@@ -10,7 +10,6 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryStaffBookings } from "@/lib/data/bookings";
 
@@ -62,7 +61,7 @@ function StaffBookingsContent() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [rows, doctorsRes] = await Promise.all([
         queryStaffBookings(supabase, "all"),
         queryDoctors(supabase),

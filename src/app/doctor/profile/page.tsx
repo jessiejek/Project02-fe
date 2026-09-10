@@ -8,7 +8,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Icon } from "@/components/ui/Icon";
 import { Toast } from "@/components/ui/Toast";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctorById, updateDoctor } from "@/lib/data/doctors";
 import { updateStaffAccount } from "@/lib/data/staff";
 import { changePassword } from "@/lib/auth/account";
@@ -39,7 +38,7 @@ export default function DoctorProfilePage() {
     if (!doctorId) return;
     const id = doctorId;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const data = await queryDoctorById(supabase, id);
       if (data) {
         const staff = data.staff_accounts;
@@ -84,7 +83,7 @@ function ProfileCard({ doctorId, initial }: { doctorId: string; initial: DoctorP
 
   async function handleSave() {
     setSaving(true);
-    const supabase = createClient();
+    const supabase = null as never;
     await Promise.all([
       updateDoctor(supabase, doctorId, {
         specialization: form.specialization,

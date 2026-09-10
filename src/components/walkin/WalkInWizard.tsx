@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/Button";
 import { StepIndicator } from "@/components/ui/StepIndicator";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Icon } from "@/components/ui/Icon";
-import { createClient } from "@/lib/supabase/client";
 import { queryPatients, createPatient } from "@/lib/data/patients";
 import { checkInWalkIn, type QueueTicket } from "@/lib/data/queue";
 import { cn } from "@/lib/cn";
@@ -56,7 +55,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const allPatients = await queryPatients(supabase);
       setPatients(
         allPatients.map((p) => ({
@@ -87,7 +86,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
     if (!canQuickRegister) return;
     setRegisterError("");
     setRegistering(true);
-    const supabase = createClient();
+    const supabase = null as never;
     let data;
     try {
       data = await createPatient(supabase, {
@@ -122,7 +121,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
     if (!patient) return;
     setCreateError("");
     setCreating(true);
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       const t = await checkInWalkIn(supabase, {
         patient_id: patient.id,

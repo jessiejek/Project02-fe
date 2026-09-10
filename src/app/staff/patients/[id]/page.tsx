@@ -6,9 +6,9 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/lib/supabase/client";
-import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
-import { one } from "@/lib/one";
+import { queryConsultations } from "@/lib/data/clinical";
+import { queryPatientById } from "@/lib/data/patients";
+import { queryBookings } from "@/lib/data/bookings";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -53,48 +53,36 @@ export default function StaffPatientDetailPage({ params }: { params: Promise<{ i
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const [patientRes, bookingsRes, consultationsRes] = await Promise.all([
-        supabase
-          .from("patients")
-          .select("patient_id, patient_code, first_name, last_name, sex, date_of_birth, contact_number, email, user_id, is_guest")
-          .eq("patient_id", id)
-          .maybeSingle(),
-        supabase
-          .from("bookings")
-          .select("booking_id, appointment_date, status, doctors(staff_accounts(full_name))")
-          .eq("patient_id", id)
-          .order("appointment_date", { ascending: false }),
-        queryConsultations(supabase, { patientId: id }),
+      const [patientData, bookingRows, consultationsRes] = await Promise.all([
+        queryPatientById(null as never, id),
+        queryBookings(null as never, { patientId: id }),
+        queryConsultations(null as never, { patientId: id }),
       ]);
 
-      if (!patientRes.data) {
+      if (!patientData) {
         setPatient(null);
         setLoading(false);
         return;
       }
 
       setPatient({
-        id: patientRes.data.patient_id,
-        fullName: `${patientRes.data.first_name} ${patientRes.data.last_name}`,
-        patientCode: patientRes.data.patient_code,
-        sex: patientRes.data.sex,
-        dateOfBirth: patientRes.data.date_of_birth,
-        contactNumber: patientRes.data.contact_number ?? "",
-        email: patientRes.data.email,
-        accountStatus: patientRes.data.user_id ? "LinkedAccount" : patientRes.data.is_guest ? "NoAccount" : "AccountUnknown",
+        id: patientData.patient_id,
+        fullName: `${patientData.first_name} ${patientData.last_name}`,
+        patientCode: patientData.patient_code,
+        sex: patientData.sex,
+        dateOfBirth: patientData.date_of_birth,
+        contactNumber: patientData.contact_number ?? "",
+        email: patientData.email,
+        accountStatus: patientData.user_id ? "LinkedAccount" : patientData.is_guest ? "NoAccount" : "AccountUnknown",
       });
 
       setBookings(
-        (bookingsRes.data ?? []).map((b) => {
-          const staff = one(one(b.doctors)?.staff_accounts);
-          return {
-            id: b.booking_id,
-            doctorName: staff?.full_name ?? "",
-            appointmentDate: b.appointment_date,
-            status: b.status,
-          };
-        }),
+        bookingRows.map((b) => ({
+          id: b.booking_id,
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+          appointmentDate: b.appointment_date,
+          status: b.status,
+        })),
       );
 
       setRecords(

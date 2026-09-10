@@ -4,7 +4,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Icon } from "@/components/ui/Icon";
-import { createClient } from "@/lib/supabase/server";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryReviews } from "@/lib/data/patientFiles";
 import { queryDoctorRatings } from "@/lib/data/admin";
@@ -15,7 +14,7 @@ import { indexToDayName } from "@/lib/days";
 // Implementation-Phases/05-doctors-staff.md.
 export default async function DoctorProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const supabase = null as never;
   const today = todayManila();
 
   const [doctor, schedule, ratingRes, dayStatusRow, reviewsRes] = await Promise.all([

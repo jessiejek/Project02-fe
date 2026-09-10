@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { todayManila } from "@/lib/clock";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
@@ -9,8 +8,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Toast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { createClient } from "@/lib/supabase/client";
-import { updateBookingStatus } from "@/lib/data/bookings";
+import { queryStaffBookings, updateBookingStatus } from "@/lib/data/bookings";
 
 interface QueueRow {
   id: string;
@@ -32,28 +30,17 @@ export default function StaffDashboardPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const today = todayManila();
-      const { data } = await supabase
-        .from("bookings")
-        .select("*, patients(first_name, last_name), doctors(staff_accounts(full_name)), payments(status)")
-        .eq("appointment_date", today);
-      const rows: QueueRow[] = (data ?? []).map((b) => {
-        const patient = Array.isArray(b.patients) ? b.patients[0] : b.patients;
-        const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-        const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-        const payment = Array.isArray(b.payments) ? b.payments[0] : b.payments;
-        return {
-          id: b.booking_id,
-          patientName: patient ? `${patient.first_name} ${patient.last_name}` : "",
-          doctorName: staff?.full_name ?? "",
-          slotStartTime: b.slot_start_time.slice(0, 5),
-          queueNumber: b.queue_number,
-          status: b.status,
-          paymentStatus: payment?.status ?? "Unpaid",
-          isWalkIn: b.is_walk_in,
-        };
-      });
+      const data = await queryStaffBookings(null as never, "today");
+      const rows: QueueRow[] = data.map((b) => ({
+        id: b.booking_id,
+        patientName: b.patients ? `${b.patients.first_name ?? ""} ${b.patients.last_name ?? ""}`.trim() : "",
+        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+        slotStartTime: b.slot_start_time.slice(0, 5),
+        queueNumber: b.queue_number,
+        status: b.status,
+        paymentStatus: b.payments?.status ?? "Unpaid",
+        isWalkIn: b.is_walk_in,
+      }));
       setBookings(rows);
       setLoaded(true);
     }
@@ -66,7 +53,7 @@ export default function StaffDashboardPage() {
 
   async function toggleCheckIn(id: string, currentStatus: string) {
     const nextStatus = currentStatus === "Confirmed" ? "CheckedIn" : "Confirmed";
-    const supabase = createClient();
+    const supabase = null as never;
     await updateBookingStatus(supabase, id, nextStatus);
     setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: nextStatus } : b)));
   }

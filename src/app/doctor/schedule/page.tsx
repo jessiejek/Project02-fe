@@ -9,7 +9,6 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { Toast } from "@/components/ui/Toast";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { DAYS, dayNameToIndex, indexToDayName } from "@/lib/days";
 import { queryDoctorById, updateDoctor } from "@/lib/data/doctors";
 import {
@@ -68,7 +67,7 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [doctor, scheduleRows, blockedRows] = await Promise.all([
         queryDoctorById(supabase, doctorId),
         queryDoctorSchedules(supabase, doctorId),
@@ -105,7 +104,7 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
     let cancelled = false;
     async function countAffected() {
       setAffectedLoading(true);
-      const supabase = createClient();
+      const supabase = null as never;
       const rows = await queryBookings(supabase, { doctorId, date });
       if (!cancelled) {
         setAffectedCount(rows.filter((b) => b.status !== "Cancelled").length);
@@ -137,7 +136,7 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
     }
     setError("");
 
-    const supabase = createClient();
+    const supabase = null as never;
     await updateDoctor(supabase, doctorId, {
       daily_patient_limit: dailyPatientLimit.trim() ? Number(dailyPatientLimit) : null,
     });
@@ -156,14 +155,14 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
 
   async function addBlockedDate() {
     if (!addingDate?.date) return;
-    const supabase = createClient();
+    const supabase = null as never;
     const row = await addBlockedDateApi(supabase, doctorId, addingDate.date, addingDate.reason || null);
     setBlockedDates((prev) => [...prev, { id: row.id, date: addingDate.date, reason: addingDate.reason }]);
     setAddingDate(null);
   }
 
   async function removeBlockedDate(id: string) {
-    const supabase = createClient();
+    const supabase = null as never;
     await removeBlockedDateApi(supabase, id);
     setBlockedDates((prev) => prev.filter((b) => b.id !== id));
   }

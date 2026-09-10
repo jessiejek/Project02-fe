@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { createClient } from "@/lib/supabase/client";
 import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
 import { confirmPayment, waivePayment } from "@/lib/data/payments";
 
@@ -56,7 +55,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const b = await queryBookingById(supabase, id);
       if (!b) {
         setBooking(null);
@@ -98,7 +97,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
   }
 
   async function updateBooking(patch: { status?: string; cancellationReason?: string }) {
-    const supabase = createClient();
+    const supabase = null as never;
     if (patch.status) await updateBookingStatus(supabase, id, patch.status, { reason: patch.cancellationReason });
     setBooking((prev) => (prev ? { ...prev, ...(patch.status && { status: patch.status }) } : prev));
   }
@@ -111,7 +110,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
     waivedReason?: string;
     withOrNumber?: boolean;
   }) {
-    const supabase = createClient();
+    const supabase = null as never;
     const orNumber = patch.withOrNumber ? newOrNumber(id) : undefined;
     if (patch.status === "Waived") {
       await waivePayment(supabase, id, patch.waivedReason ?? "");

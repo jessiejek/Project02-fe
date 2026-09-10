@@ -6,7 +6,6 @@ import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { createClient } from "@/lib/supabase/client";
 import { queryBookings } from "@/lib/data/bookings";
 import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
 import { one, serviceNames } from "@/lib/one";
@@ -44,7 +43,7 @@ export default function PaymentsQueuePage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const rows = await queryBookings(supabase, { status: "Completed" });
       const mapped: QueueRow[] = rows
         .filter((b) => (b.payments?.status ?? "Unpaid") === "Unpaid")
@@ -67,7 +66,7 @@ export default function PaymentsQueuePage() {
   async function handleConfirm() {
     if (!activeBooking) return;
     setSubmitting(true);
-    const supabase = createClient();
+    const supabase = null as never;
     await confirmPaymentApi(supabase, activeBooking.id, {
       paymentMethod,
       amountReceived: Number(amountReceived) || activeBooking.amountDue,

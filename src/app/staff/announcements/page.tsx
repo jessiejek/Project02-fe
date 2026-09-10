@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
-import { createClient } from "@/lib/supabase/client";
 import { queryAnnouncements } from "@/lib/data/admin";
 import { queryStaffAccounts } from "@/lib/data/staff";
 
@@ -23,7 +22,7 @@ export default function StaffAnnouncementsPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const [announcementsRes, staffRes] = await Promise.all([
         queryAnnouncements(supabase, { activeOnly: true }).then((data) => ({ data })),
         queryStaffAccounts(supabase).then((data) => ({ data })),

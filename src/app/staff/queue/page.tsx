@@ -6,7 +6,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { createClient } from "@/lib/supabase/client";
 import { queryQueue, updateQueueEntry, type QueueBoard } from "@/lib/data/queue";
 
 // §16.3 — today's walk-in FCFS queue board.
@@ -16,7 +15,7 @@ export default function StaffQueuePage() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       setBoard(await queryQueue(supabase));
     } finally {
@@ -32,7 +31,7 @@ export default function StaffQueuePage() {
 
   async function act(bookingId: string, action: "call" | "hold" | "complete" | "no-show") {
     setBusyId(bookingId);
-    const supabase = createClient();
+    const supabase = null as never;
     try {
       await updateQueueEntry(supabase, bookingId, action);
       await refresh();

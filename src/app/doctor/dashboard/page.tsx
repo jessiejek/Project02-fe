@@ -8,7 +8,6 @@ import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctorEarnings, type DoctorEarningsRow } from "@/lib/data/admin";
 import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/scheduling";
 import { queryDoctorBookings } from "@/lib/data/bookings";
@@ -40,7 +39,7 @@ export default function DoctorDashboardPage() {
   useEffect(() => {
     if (!meDoctorId) return;
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const today = todayManila();
       const [statusRow, todaysBookings] = await Promise.all([
         queryDayStatus(supabase, meDoctorId, today),
@@ -73,7 +72,7 @@ export default function DoctorDashboardPage() {
   const upNext = queue.find((b) => b.status === "Confirmed");
 
   async function setStatus(status: DayStatus) {
-    const supabase = createClient();
+    const supabase = null as never;
     const today = todayManila();
     await saveDayStatus(supabase, meDoctorId, today, status);
     setDayStatus(status);

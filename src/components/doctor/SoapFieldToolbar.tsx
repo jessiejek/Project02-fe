@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/lib/supabase/client";
 import { querySoapPhrases, createSoapPhrase } from "@/lib/data/clinical";
 import type { SoapField, SoapPhrase } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -36,7 +35,7 @@ export function SoapFieldToolbar({ doctorId, field, fieldLabel, value, onInsert 
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const all = await querySoapPhrases(supabase, doctorId);
       const dbField = toDbField(field);
       setPhrases(
@@ -56,7 +55,7 @@ export function SoapFieldToolbar({ doctorId, field, fieldLabel, value, onInsert 
 
   async function savePhrase() {
     if (!label.trim() || !value.trim()) return;
-    const supabase = createClient();
+    const supabase = null as never;
     const data = await createSoapPhrase(supabase, doctorId, {
       field: toDbField(field),
       label: label.trim(),

@@ -11,8 +11,8 @@ import { faStar } from "@fortawesome/free-solid-svg-icons";
 import { faStar as faStarOutline } from "@fortawesome/free-regular-svg-icons";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
-import { createClient } from "@/lib/supabase/client";
 import { queryReviews, createReview } from "@/lib/data/patientFiles";
+import { queryBookingById } from "@/lib/data/bookings";
 
 interface ReviewBooking {
   id: string;
@@ -42,25 +42,20 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
-      const supabase = createClient();
-      const [bookingRes, reviewRes] = await Promise.all([
-        supabase
-          .from("bookings")
-          .select("booking_id, doctor_id, patient_id, doctors(staff_accounts(full_name))")
-          .eq("booking_id", bookingId)
-          .eq("patient_id", patientId)
-          .maybeSingle(),
-        queryReviews(supabase, { bookingId }).then((rows) => ({ data: rows[0] ?? null })),
+      const [b, reviewRows] = await Promise.all([
+        queryBookingById(null as never, bookingId),
+        queryReviews(null as never, { bookingId }),
       ]);
-      if (!bookingRes.data) {
+      if (!b || b.patient_id !== patientId) {
         setBooking(null);
         return;
       }
-      const b = bookingRes.data;
-      const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-      const doctorStaff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-      setBooking({ id: b.booking_id, doctorId: b.doctor_id, doctorName: doctorStaff?.full_name ?? "" });
-      setAlreadyReviewed(!!reviewRes.data);
+      setBooking({
+        id: b.booking_id,
+        doctorId: b.doctor_id,
+        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+      });
+      setAlreadyReviewed(reviewRows.length > 0);
     }
     load();
   }, [bookingId, session?.patientId]);
@@ -79,22 +74,16 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
     const patientId = session.patientId;
     setSubmitError("");
     setSubmitting(true);
-    const supabase = createClient();
     // Re-check ownership at submit time so a stale UI cannot insert a review
     // for someone else's booking if the session changed mid-page.
-    const { data: owned } = await supabase
-      .from("bookings")
-      .select("booking_id")
-      .eq("booking_id", booking.id)
-      .eq("patient_id", patientId)
-      .maybeSingle();
-    if (!owned) {
+    const owned = await queryBookingById(null as never, booking.id);
+    if (!owned || owned.patient_id !== patientId) {
       setSubmitting(false);
       setSubmitError("You can only review your own visits.");
       return;
     }
     try {
-      await createReview(supabase, {
+      await createReview(null as never, {
         booking_id: booking.id,
         doctor_id: booking.doctorId,
         patient_id: patientId,

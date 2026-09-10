@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDayStatuses, setDayStatus } from "@/lib/data/scheduling";
 
@@ -29,7 +28,7 @@ export default function DoctorStatusPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
+      const supabase = null as never;
       const today = todayManila();
       const [allDoctors, statuses] = await Promise.all([
         queryDoctors(supabase),
@@ -57,7 +56,7 @@ export default function DoctorStatusPage() {
   const unavailable = doctors.filter((d) => d.dayStatus === "UnavailableToday").length;
 
   async function setStatus(id: string, status: DayStatus) {
-    const supabase = createClient();
+    const supabase = null as never;
     const today = todayManila();
     await setDayStatus(supabase, id, today, status);
     setDoctors((prev) => prev.map((d) => (d.id === id ? { ...d, dayStatus: status } : d)));
@@ -68,7 +67,7 @@ export default function DoctorStatusPage() {
   }
 
   async function applyBulk(status: DayStatus) {
-    const supabase = createClient();
+    const supabase = null as never;
     const today = todayManila();
     await Promise.all(selected.map((doctorId) => setDayStatus(supabase, doctorId, today, status)));
     setDoctors((prev) => prev.map((d) => (selected.includes(d.id) ? { ...d, dayStatus: status } : d)));
