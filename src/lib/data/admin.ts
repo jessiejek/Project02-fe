@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
 import { resolveMode } from "./mode";
+import { type PagedResult, type PageOpts, clientPage, clampPage } from "./paging";
 
 const dn = (r: Parameters<typeof resolveMode>[0]) => resolveMode(r) === "dotnet";
 
@@ -184,6 +185,24 @@ export async function queryAuditLogs(
   if (opts.entityId) q = q.eq("entity_id", opts.entityId);
   const { data } = await q.order("performed_at", { ascending: false }).limit(opts.take ?? 100);
   return (data ?? []) as AuditLogRow[];
+}
+
+/** §16.2 — server-side paged + searched audit trail (admin screen). */
+export async function queryAuditLogsPaged(
+  supabase: SupabaseClient,
+  opts: PageOpts & { entityType?: string } = {},
+): Promise<PagedResult<AuditLogRow>> {
+  const { page, pageSize } = clampPage(opts);
+  if (dn("audit_logs")) {
+    return api.get<PagedResult<AuditLogRow>>("/api/audit-logs/search", {
+      query: { q: opts.q || undefined, entityType: opts.entityType, page, pageSize },
+    });
+  }
+  let q = supabase.from("audit_logs").select("*");
+  if (opts.entityType) q = q.eq("entity_type", opts.entityType);
+  if (opts.q) q = q.or(`action.ilike.%${opts.q}%,details.ilike.%${opts.q}%`);
+  const { data } = await q.order("performed_at", { ascending: false }).limit(500);
+  return clientPage((data ?? []) as AuditLogRow[], opts);
 }
 
 export interface DoctorRatingRow {

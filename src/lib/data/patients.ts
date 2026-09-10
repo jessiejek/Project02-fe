@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
 import { resolveMode } from "./mode";
+import { type PagedResult, type PageOpts, clientPage, clampPage } from "./paging";
 
 export interface PatientRow {
   patient_id: string;
@@ -38,20 +39,9 @@ export interface PatientRow {
 
 const dotnet = () => resolveMode("patients") === "dotnet";
 
-export interface PagedResult<T> {
-  items: T[];
-  totalCount: number;
-  page: number;
-  pageSize: number;
-}
-
-export interface PatientsPageOpts {
-  q?: string;
-  page?: number;
-  pageSize?: number;
-  /** name | code | created, prefix "-" for descending. */
-  sort?: string;
-}
+export type { PagedResult, PageOpts } from "./paging";
+/** @deprecated use PageOpts from ./paging */
+export type PatientsPageOpts = PageOpts;
 
 /**
  * §16.2 — server-side paged + searched patient list. Falls back to a
@@ -59,22 +49,15 @@ export interface PatientsPageOpts {
  */
 export async function queryPatientsPaged(
   supabase: SupabaseClient,
-  opts: PatientsPageOpts = {},
+  opts: PageOpts = {},
 ): Promise<PagedResult<PatientRow>> {
-  const page = Math.max(opts.page ?? 1, 1);
-  const pageSize = Math.min(Math.max(opts.pageSize ?? 25, 1), 200);
+  const { page, pageSize } = clampPage(opts);
   if (dotnet()) {
     return api.get<PagedResult<PatientRow>>("/api/patients/search", {
       query: { q: opts.q || undefined, page, pageSize, sort: opts.sort || undefined },
     });
   }
-  const all = await queryPatients(supabase, { search: opts.q });
-  return {
-    items: all.slice((page - 1) * pageSize, page * pageSize),
-    totalCount: all.length,
-    page,
-    pageSize,
-  };
+  return clientPage(await queryPatients(supabase, { search: opts.q }), opts);
 }
 
 export async function queryPatients(

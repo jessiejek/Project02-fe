@@ -46,12 +46,15 @@ export default function AdminBookingsPage() {
   const [dateFilter, setDateFilter] = useState("");
 
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+    // §16.2 — debounce the free-text search into a server query.
+    const handle = setTimeout(async () => {
       const supabase = createClient();
       const [rows, doctorsRes] = await Promise.all([
-        queryStaffBookings(supabase, "all"),
+        queryStaffBookings(supabase, "all", { q: search.trim() || undefined }),
         queryDoctors(supabase),
       ]);
+      if (cancelled) return;
       setBookings(
         rows.map((b) => ({
           id: b.booking_id,
@@ -68,9 +71,12 @@ export default function AdminBookingsPage() {
       setDoctors(
         doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
       );
-    }
-    load();
-  }, []);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [search]);
 
   const rows = bookings.filter((b) => {
     if (doctorFilter !== "all" && b.doctorId !== doctorFilter) return false;

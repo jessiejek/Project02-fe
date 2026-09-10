@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
 import { resolveMode } from "./mode";
+import { type PagedResult, type PageOpts, clientPage, clampPage } from "./paging";
 
 export interface StaffAccountRow {
   staff_id: string;
@@ -36,6 +37,23 @@ export async function queryStaffAccounts(
   if (opts.role) q = q.eq("role", opts.role);
   const { data } = await q.order("full_name");
   return (data ?? []) as StaffAccountRow[];
+}
+
+/** §16.2 — server-side paged + searched staff list (admin Staff Management). */
+export async function queryStaffAccountsPaged(
+  supabase: SupabaseClient,
+  opts: PageOpts & { role?: "Staff" | "Doctor" | "Admin" } = {},
+): Promise<PagedResult<StaffAccountRow>> {
+  const { page, pageSize } = clampPage(opts);
+  if (dotnet()) {
+    return api.get<PagedResult<StaffAccountRow>>("/api/staff-accounts/search", {
+      query: { q: opts.q || undefined, role: opts.role, sort: opts.sort || undefined, page, pageSize },
+    });
+  }
+  const all = await queryStaffAccounts(supabase, { role: opts.role });
+  const q = (opts.q ?? "").toLowerCase();
+  const filtered = q ? all.filter((s) => `${s.full_name} ${s.email}`.toLowerCase().includes(q)) : all;
+  return clientPage(filtered, opts);
 }
 
 export type StaffPatch = Partial<{

@@ -217,9 +217,12 @@ export async function queryMyBookings(supabase: SupabaseClient, patientId: strin
 export async function queryStaffBookings(
   supabase: SupabaseClient,
   scope: "all" | "today" | "for-payment" = "all",
+  opts: { q?: string } = {},
 ): Promise<BookingRow[]> {
   if (resolveMode("bookings") === "dotnet") {
-    const res = await api.get<{ items?: Raw[] }>(`/api/bookings/staff/${scope}`, { query: { pageSize: 500 } });
+    const res = await api.get<{ items?: Raw[] }>(`/api/bookings/staff/${scope}`, {
+      query: { pageSize: 500, q: opts.q || undefined },
+    });
     return unwrap(res).map(projectBooking);
   }
   let q = supabase.from("bookings").select(SELECT);
@@ -227,6 +230,14 @@ export async function queryStaffBookings(
   const { data } = await q.order("appointment_date", { ascending: false });
   let rows = (data ?? []).map((r) => projectBooking(r as Raw));
   if (scope === "for-payment") rows = rows.filter((b) => b.payments?.status === "Unpaid");
+  if (opts.q) {
+    const s = opts.q.toLowerCase();
+    rows = rows.filter((b) =>
+      `${b.patients?.first_name ?? ""} ${b.patients?.last_name ?? ""} ${b.patients?.patient_code ?? ""} ${b.queue_number ?? ""}`
+        .toLowerCase()
+        .includes(s),
+    );
+  }
   return rows;
 }
 

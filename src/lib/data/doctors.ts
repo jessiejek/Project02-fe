@@ -12,6 +12,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
 import { one } from "@/lib/one";
 import { resolveMode } from "./mode";
+import { type PagedResult, type PageOpts, clientPage, clampPage } from "./paging";
 
 export interface DoctorStaffEmbed {
   full_name: string | null;
@@ -74,6 +75,28 @@ export async function queryDoctors(supabase: SupabaseClient): Promise<DoctorRow[
   }
   const { data } = await supabase.from("doctors").select(`*, staff_accounts(${STAFF_SELECT})`);
   return (data ?? []).map((r) => projectDoctor(r as Record<string, unknown>));
+}
+
+/** §16.2 — server-side paged + searched doctor list (admin management screen). */
+export async function queryDoctorsPaged(
+  supabase: SupabaseClient,
+  opts: PageOpts = {},
+): Promise<PagedResult<DoctorRow>> {
+  const { page, pageSize } = clampPage(opts);
+  if (resolveMode("doctors") === "dotnet") {
+    const res = await api.get<PagedResult<Record<string, unknown>>>("/api/doctors/search", {
+      query: { q: opts.q || undefined, sort: opts.sort || undefined, page, pageSize },
+    });
+    return { ...res, items: res.items.map(projectDoctor) };
+  }
+  const all = await queryDoctors(supabase);
+  const q = (opts.q ?? "").toLowerCase();
+  const filtered = q
+    ? all.filter((d) =>
+        `${d.staff_accounts?.full_name ?? ""} ${d.specialization} ${d.license_number ?? ""}`.toLowerCase().includes(q),
+      )
+    : all;
+  return clientPage(filtered, opts);
 }
 
 /** Doctor scalar fields the FE edits (snake_case, all optional / partial patch). */
