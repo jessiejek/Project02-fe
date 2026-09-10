@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { todayManila } from "@/lib/clock";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctorById } from "@/lib/data/doctors";
@@ -103,13 +101,9 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
           )}
         </Card>
 
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-outline-variant bg-surface-container-lowest p-md md:left-sidebar">
-          <div className="mx-auto max-w-content">
-            <Link href={`/booking?doctorId=${doctor.doctor_id}`}>
-              <Button className="w-full">Book with {doctorName}</Button>
-            </Link>
-          </div>
-        </div>
+        <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
+          The clinic is walk-in only — no appointment booking. Visit during clinic hours and check in at the front desk.
+        </p>
       </div>
     </AppShell>
   );

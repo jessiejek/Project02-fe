@@ -21,8 +21,7 @@ function isPublicPath(pathname: string) {
   return (
     pathname === "/" ||
     pathname === "/login" ||
-    pathname === "/forgot-password" ||
-    pathname.startsWith("/booking")
+    pathname === "/forgot-password"
   );
 }
 

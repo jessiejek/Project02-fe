@@ -90,16 +90,6 @@ export default function LoginPage() {
             {submitting ? "Logging in…" : "Log in"}
           </Button>
         </form>
-        <div className="my-lg flex items-center gap-md text-label-sm text-on-surface-variant">
-          <div className="h-px flex-1 bg-outline-variant" />
-          New here?
-          <div className="h-px flex-1 bg-outline-variant" />
-        </div>
-        <Link href="/booking" className="block">
-          <Button type="button" variant="secondary" className="w-full">
-            Create an account
-          </Button>
-        </Link>
       </div>
     </div>
   );

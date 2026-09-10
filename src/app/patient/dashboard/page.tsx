@@ -200,8 +200,8 @@ export default function PatientDashboardPage() {
           <div className="flex min-w-max gap-md">
             <Link href="/patient/doctors">
               <Button>
-                <Icon name="add_circle" className="text-[20px]" />
-                Book Appointment
+                <Icon name="medical_services" className="text-[20px]" />
+                Find a Doctor
               </Button>
             </Link>
             <Link href="/patient/bookings">
