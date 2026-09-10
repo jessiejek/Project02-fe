@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryDoctorBookings } from "@/lib/data/bookings";
 
 interface AppointmentRow {
   id: string;
@@ -30,27 +31,15 @@ export default function DoctorAppointmentsPage() {
     if (!meDoctorId) return;
     async function load() {
       const supabase = createClient();
-      const [bookingsRes, servicesRes, paymentsRes] = await Promise.all([
-        supabase.from("bookings").select("*").eq("doctor_id", meDoctorId).order("appointment_date", { ascending: false }),
-        supabase.from("booking_services").select("booking_id, services(name)"),
-        supabase.from("payments").select("booking_id, status"),
-      ]);
-      const paymentByBooking = new Map((paymentsRes.data ?? []).map((p) => [p.booking_id, p.status]));
-      const servicesByBooking = new Map<string, string[]>();
-      for (const row of servicesRes.data ?? []) {
-        const service = Array.isArray(row.services) ? row.services[0] : row.services;
-        const list = servicesByBooking.get(row.booking_id) ?? [];
-        list.push(service?.name ?? "");
-        servicesByBooking.set(row.booking_id, list);
-      }
+      const rows = await queryDoctorBookings(supabase, meDoctorId);
       setBookings(
-        (bookingsRes.data ?? []).map((b) => ({
+        rows.map((b) => ({
           id: b.booking_id,
-          serviceNames: servicesByBooking.get(b.booking_id) ?? [],
-          slotStartTime: b.slot_start_time.slice(0, 5),
+          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+          slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
           queueNumber: b.queue_number,
           status: b.status,
-          paymentStatus: paymentByBooking.get(b.booking_id) ?? "Unpaid",
+          paymentStatus: b.payments?.status ?? "Unpaid",
         })),
       );
     }

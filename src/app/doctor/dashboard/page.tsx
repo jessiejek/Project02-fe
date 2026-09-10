@@ -9,9 +9,9 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { one, serviceNames } from "@/lib/one";
 import { queryDoctorEarnings, type DoctorEarningsRow } from "@/lib/data/admin";
 import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/scheduling";
+import { queryDoctorBookings } from "@/lib/data/bookings";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
 
@@ -42,30 +42,22 @@ export default function DoctorDashboardPage() {
     async function load() {
       const supabase = createClient();
       const today = todayManila();
-      const [staffRes, statusRow, bookingsRes] = await Promise.all([
-        supabase.from("staff_accounts").select("full_name").eq("staff_id", meDoctorId).single(),
+      const [statusRow, todaysBookings] = await Promise.all([
         queryDayStatus(supabase, meDoctorId, today),
-        supabase
-          .from("bookings")
-          .select("*, patients(first_name, last_name), booking_services(services(name))")
-          .eq("doctor_id", meDoctorId)
-          .eq("appointment_date", today),
+        queryDoctorBookings(supabase, meDoctorId, { today: true }),
       ]);
-      if (staffRes.data) setName(staffRes.data.full_name);
+      setName(session?.displayName ?? "");
       setDayStatus((statusRow?.status as DayStatus) ?? "Available");
-      const rows: QueueRow[] = (bookingsRes.data ?? [])
-        .map((b) => {
-          const patient = one(b.patients);
-          return {
-            id: b.booking_id,
-            patientId: b.patient_id,
-            patientName: patient ? `${patient.first_name} ${patient.last_name}` : "",
-            serviceNames: serviceNames(b.booking_services),
-            slotStartTime: b.slot_start_time.slice(0, 5),
-            queueNumber: b.queue_number,
-            status: b.status,
-          };
-        })
+      const rows: QueueRow[] = todaysBookings
+        .map((b) => ({
+          id: b.booking_id,
+          patientId: b.patient_id,
+          patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+          slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+          queueNumber: b.queue_number,
+          status: b.status,
+        }))
         .sort((a, b) => (a.queueNumber ?? "").localeCompare(b.queueNumber ?? ""));
       setQueue(rows);
       try {

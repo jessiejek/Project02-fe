@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { createClient } from "@/lib/supabase/server";
-import { one, serviceNames } from "@/lib/one";
+import { getServerSession } from "@/lib/auth/session";
+import { queryBookingById } from "@/lib/data/bookings";
+import { queryConsultationByBooking } from "@/lib/data/clinical";
 
 // Stitch appointment_overview_states — 3 states driven by booking status,
 // per React-Conversion-Guide.md §4. Screen 3b (View/Edit split on Completed)
@@ -16,39 +17,25 @@ import { one, serviceNames } from "@/lib/one";
 export default async function AppointmentOverviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: staff } = await supabase.from("staff_accounts").select("staff_id").eq("user_id", user.id).single();
-  if (!staff) redirect("/login");
+  const session = await getServerSession();
+  if (!session || (session.role !== "Doctor" && session.role !== "Admin")) redirect("/login");
 
-  // Booking + consultation in parallel — sequential awaits were adding an
-  // extra Supabase round-trip before any HTML could stream back.
-  const [{ data: b }, { data: consultation }] = await Promise.all([
-    supabase
-      .from("bookings")
-      .select("*, patients(first_name, last_name, contact_number, email), booking_services(services(name)), payments(status)")
-      .eq("booking_id", id)
-      .eq("doctor_id", staff.staff_id)
-      .maybeSingle(),
-    supabase.from("consultations").select("chief_complaint, assessment, plan").eq("booking_id", id).maybeSingle(),
+  const [b, consultation] = await Promise.all([
+    queryBookingById(null as never, id),
+    queryConsultationByBooking(null as never, id),
   ]);
-  if (!b) notFound();
-
-  const patientRel = one(b.patients);
-  const serviceNamesList = serviceNames(b.booking_services);
-  const paymentRel = one(b.payments);
+  if (!b || (session.role === "Doctor" && session.staffId && b.doctor_id !== session.staffId)) notFound();
 
   const booking = {
     id: b.booking_id,
-    patientName: patientRel ? `${patientRel.first_name} ${patientRel.last_name}` : "Unknown patient",
-    patientContact: patientRel?.contact_number ?? "",
-    patientEmail: patientRel?.email ?? "",
-    serviceNames: serviceNamesList,
+    patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "Unknown patient",
+    patientContact: b.patients?.contact_number ?? "",
+    patientEmail: b.patients?.email ?? "",
+    serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
     appointmentDate: b.appointment_date,
-    slotStartTime: b.slot_start_time.slice(0, 5),
+    slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
     status: b.status,
-    paymentStatus: paymentRel?.status ?? "Unpaid",
+    paymentStatus: b.payments?.status ?? "Unpaid",
     queueNumber: b.queue_number,
     totalFee: Number(b.total_fee),
     amountDue: Number(b.amount_due),

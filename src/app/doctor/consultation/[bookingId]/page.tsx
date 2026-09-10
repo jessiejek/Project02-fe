@@ -36,6 +36,7 @@ import {
   upsertMedicalCertificateByConsultation,
   queryMedicalCertificateByConsultation,
   queryRxGroups,
+  queryVitalReadings,
   writeAuditLog,
   type RxGroupRow,
 } from "@/lib/data/clinical";
@@ -291,8 +292,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   );
   async function reloadVitalReadings() {
     const supabase = createClient();
-    const { data } = await supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", bookingId);
-    setVitalReadings((data ?? []).map((r) => ({ templateId: r.template_id, value: r.value })));
+    const data = await queryVitalReadings(supabase, { bookingId });
+    setVitalReadings(data.map((r) => ({ templateId: r.template_id, value: r.value })));
   }
 
   // Section 3: Diagnosis
@@ -492,7 +493,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes] = await Promise.all([
         queryConsultationByBooking(supabase, bookingId).then((data) => ({ data })),
         queryVitalFieldTemplates(supabase),
-        supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", bookingId),
+        queryVitalReadings(supabase, { bookingId }).then((data) => ({ data })),
         querySoapTemplates(supabase, realBooking.doctorId).then((data) => ({ data })),
         queryConsultations(supabase, { patientId: realBooking.patientId }).then((rows) => ({
           data: rows
@@ -544,7 +545,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       if (prior) {
         const [priorRes, priorReadingsRes] = await Promise.all([
           queryConsultationById(supabase, prior.consultationId).then((data) => ({ data })),
-          supabase.from("patient_vital_readings").select("template_id, value").eq("booking_id", prior.bookingId),
+          queryVitalReadings(supabase, { bookingId: prior.bookingId }).then((data) => ({ data })),
         ]);
         if (priorRes.data) {
           setLastVisitSoap({
