@@ -17,7 +17,8 @@ import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { queryVitalFieldTemplates } from "@/lib/data/lookups";
+import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
+import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
 import { queryAuditLogs, queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
 import {
   queryConsultationByBooking,
@@ -40,7 +41,7 @@ import {
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
 import { queryPatientById } from "@/lib/data/patients";
-import { printMedicalCertificate } from "@/lib/print-forms";
+import { printMedicalCertificate, printLabRequest } from "@/lib/print-forms";
 import { one, serviceNames } from "@/lib/one";
 import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFieldTemplate } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -124,6 +125,7 @@ const STATUS_ICON: Record<SectionStatus, { icon: string; cls: string }> = {
 };
 
 interface LabOrderDraft {
+  labTestId: string | null; // set = from the catalog; null = handwritten
   testName: string;
   reason: string;
   specimenType: string;
@@ -139,7 +141,7 @@ interface VaccinationDraft {
   manufacturer: string;
 }
 
-const BLANK_LAB: LabOrderDraft = { testName: "", reason: "", specimenType: "", notes: "" };
+const BLANK_LAB: LabOrderDraft = { labTestId: null, testName: "", reason: "", specimenType: "", notes: "" };
 const BLANK_VAX: VaccinationDraft = { vaccineName: "", doseNumber: "", route: "", site: "", lotNumber: "", expiry: "", manufacturer: "" };
 
 const KEYBOARD_SHORTCUTS = [
@@ -150,7 +152,7 @@ const KEYBOARD_SHORTCUTS = [
 ];
 
 function toLabDraft(items: Consultation["labOrders"]): LabOrderDraft[] {
-  return (items ?? []).map((i) => ({ testName: i.testName, reason: i.reason ?? "", specimenType: i.specimenType ?? "", notes: i.notes ?? "" }));
+  return (items ?? []).map((i) => ({ labTestId: null, testName: i.testName, reason: i.reason ?? "", specimenType: i.specimenType ?? "", notes: i.notes ?? "" }));
 }
 function toVaxDraft(items: Consultation["vaccinationsAdministered"]): VaccinationDraft[] {
   return (items ?? []).map((i) => ({
@@ -324,14 +326,75 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // so this stays local-only, same as before this phase's real-data wiring.
   const [labOrders, setLabOrders] = useState<LabOrderDraft[]>([]);
   const [newLab, setNewLab] = useState<LabOrderDraft>(BLANK_LAB);
+  const [labCatalog, setLabCatalog] = useState<LabTestRow[]>([]);
+  const [savingLabs, setSavingLabs] = useState(false);
+  const [labsSavedAt, setLabsSavedAt] = useState<string | null>(null);
 
   function addLabOrder() {
     if (!newLab.testName.trim()) return;
-    setLabOrders((prev) => [...prev, newLab]);
+    setLabOrders((prev) => [...prev, { ...newLab, labTestId: null }]);
     setNewLab(BLANK_LAB);
   }
   function removeLabOrder(index: number) {
     setLabOrders((prev) => prev.filter((_, i) => i !== index));
+  }
+  function toggleCatalogTest(t: LabTestRow) {
+    setLabOrders((prev) => {
+      const at = prev.findIndex((l) => l.labTestId === t.lab_test_id);
+      if (at >= 0) return prev.filter((_, i) => i !== at);
+      return [...prev, { labTestId: t.lab_test_id, testName: t.name, reason: "", specimenType: "", notes: "" }];
+    });
+  }
+
+  // §16.8 Form 3 — persist the lab request (replace-all on consultation) then
+  // optionally print it. Requires a saved consultation.
+  async function handleSaveLabOrders(printAfter: boolean) {
+    if (!booking) return;
+    setSavingLabs(true);
+    const supabase = createClient();
+    try {
+      const consultId = consultationId ?? (await persistConsultation("Draft"));
+      if (!consultId) return;
+      await replaceLabOrdersByConsultation(
+        supabase,
+        consultId,
+        labOrders
+          .filter((l) => l.testName.trim())
+          .map((l) => ({
+            lab_test_id: l.labTestId,
+            test_name: l.testName.trim(),
+            clinical_indication: l.reason || null,
+            specimen_type: l.specimenType || null,
+            notes: l.notes || null,
+          })),
+      );
+      setLabsSavedAt(new Date().toLocaleTimeString());
+      if (!printAfter) return;
+      const [doc, pat] = await Promise.all([
+        queryDoctorById(supabase, booking.doctorId),
+        queryPatientById(supabase, booking.patientId),
+      ]);
+      printLabRequest({
+        clinic: {
+          clinic_name: clinicRow?.clinic_name ?? "Grace Medical Clinic",
+          address: clinicRow?.address ?? "",
+          contact_number: clinicRow?.contact_number ?? null,
+        },
+        doctor: {
+          full_name: booking.doctorName || (doc?.staff_accounts?.full_name ?? ""),
+          license_number: doc?.license_number ?? null,
+          ptr_number: doc?.ptr_number ?? null,
+        },
+        patient: {
+          full_name: pat ? `${pat.first_name} ${pat.last_name}`.trim() : "",
+          patient_code: pat?.patient_code,
+        },
+        tests: labOrders.filter((l) => l.testName.trim()).map((l) => l.testName.trim()),
+        catalog: labCatalog.map((t) => ({ name: t.name })),
+      });
+    } finally {
+      setSavingLabs(false);
+    }
   }
 
   // Section 6: Vaccinations — seeded from the existing record (staged
@@ -576,6 +639,23 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         setFollowUpReminder(loadedConsultation.followUpReminder ?? true);
       }
 
+      // §16.8 Form 3 — lab-test catalog + any lab orders already on this booking.
+      queryLabTestCatalog(supabase).then((rows) => { if (!cancelled) setLabCatalog(rows); }).catch(() => {});
+      queryLabOrdersByBooking(supabase, bookingId)
+        .then((rows) => {
+          if (cancelled || rows.length === 0) return;
+          setLabOrders(
+            rows.map((r) => ({
+              labTestId: r.lab_test_id,
+              testName: r.test_name,
+              reason: r.clinical_indication ?? "",
+              specimenType: r.specimen_type ?? "",
+              notes: r.notes ?? "",
+            })),
+          );
+        })
+        .catch(() => {});
+
       // §16.8 Form 2 — hydrate an already-issued certificate if there is one.
       const consultId = consultRes.data?.consultation_id;
       if (consultId) {
@@ -769,6 +849,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     } else {
       await deleteFollowUpByConsultation(supabase, savedId);
     }
+
+    // §16.8 Form 3 — replace-all lab orders for this consultation.
+    await replaceLabOrdersByConsultation(
+      supabase,
+      savedId,
+      labOrders
+        .filter((l) => l.testName.trim())
+        .map((l) => ({
+          lab_test_id: l.labTestId,
+          test_name: l.testName.trim(),
+          clinical_indication: l.reason || null,
+          specimen_type: l.specimenType || null,
+          notes: l.notes || null,
+        })),
+    );
 
     return savedId;
   }
@@ -1301,26 +1396,73 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 4 && (
                     <div className="mt-md space-y-md">
-                      <div className="space-y-sm">
-                        {labOrders.map((lab, idx) => (
-                          <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
-                            <span className="text-body-md">
-                              {lab.testName} — {lab.reason}{lab.specimenType ? ` (${lab.specimenType})` : ""}
-                            </span>
-                            <button type="button" onClick={() => removeLabOrder(idx)} className="text-on-surface-variant">
-                              <Icon name="close" className="text-[18px]" />
-                            </button>
+                      {labsSavedAt && <Toast key={labsSavedAt} variant="success" message={`Lab request saved at ${labsSavedAt}.`} />}
+
+                      {/* §16.8 Form 3 — the pre-printed panel as checkboxes */}
+                      {labCatalog.length > 0 && (
+                        <div>
+                          <p className="mb-xs text-label-sm text-on-surface-variant">Standard panel</p>
+                          <div className="grid grid-cols-2 gap-sm sm:grid-cols-3">
+                            {labCatalog.map((t) => {
+                              const checked = labOrders.some((l) => l.labTestId === t.lab_test_id);
+                              return (
+                                <label
+                                  key={t.lab_test_id}
+                                  className={cn(
+                                    "flex cursor-pointer items-center gap-sm rounded-lg border px-md py-sm text-label-md",
+                                    checked ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
+                                  )}
+                                >
+                                  <input type="checkbox" checked={checked} onChange={() => toggleCatalogTest(t)} className="h-4 w-4" />
+                                  {t.name}
+                                </label>
+                              );
+                            })}
                           </div>
-                        ))}
-                        {labOrders.length === 0 && <p className="text-label-md text-on-surface-variant">No lab orders added (optional).</p>}
-                      </div>
+                        </div>
+                      )}
+
+                      {/* handwritten additions */}
+                      {labOrders.some((l) => l.labTestId === null) && (
+                        <div className="space-y-sm">
+                          <p className="text-label-sm text-on-surface-variant">Additional tests</p>
+                          {labOrders.map((lab, idx) =>
+                            lab.labTestId === null ? (
+                              <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
+                                <span className="text-body-md">
+                                  {lab.testName}
+                                  {lab.reason ? ` — ${lab.reason}` : ""}
+                                  {lab.specimenType ? ` (${lab.specimenType})` : ""}
+                                </span>
+                                <button type="button" onClick={() => removeLabOrder(idx)} className="text-on-surface-variant">
+                                  <Icon name="close" className="text-[18px]" />
+                                </button>
+                              </div>
+                            ) : null,
+                          )}
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                        <input placeholder="Test Name" value={newLab.testName} onChange={(e) => setNewLab({ ...newLab, testName: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Reason / Clinical Indication" value={newLab.reason} onChange={(e) => setNewLab({ ...newLab, reason: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Specimen Type" value={newLab.specimenType} onChange={(e) => setNewLab({ ...newLab, specimenType: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
+                        <input placeholder="Add another test" value={newLab.testName} onChange={(e) => setNewLab({ ...newLab, testName: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
+                        <input placeholder="Reason / clinical indication" value={newLab.reason} onChange={(e) => setNewLab({ ...newLab, reason: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
+                        <input placeholder="Specimen type" value={newLab.specimenType} onChange={(e) => setNewLab({ ...newLab, specimenType: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
                         <input placeholder="Notes" value={newLab.notes} onChange={(e) => setNewLab({ ...newLab, notes: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
                       </div>
-                      <Button variant="secondary" onClick={addLabOrder}>Add Lab Order</Button>
+                      <Button variant="secondary" onClick={addLabOrder} disabled={!newLab.testName.trim()}>Add test</Button>
+
+                      {labOrders.length === 0 ? (
+                        <p className="text-label-md text-on-surface-variant">No tests selected (optional). Saved with the consultation.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-sm border-t border-outline-variant pt-md">
+                          <Button disabled={savingLabs || !booking} onClick={() => handleSaveLabOrders(true)}>
+                            {savingLabs ? "Working…" : "Save & Print Lab Request"}
+                          </Button>
+                          <Button variant="secondary" disabled={savingLabs || !booking} onClick={() => handleSaveLabOrders(false)}>
+                            Save without printing
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
 
