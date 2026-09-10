@@ -301,7 +301,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Section 3: Diagnosis
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
   const [newDiagnosisText, setNewDiagnosisText] = useState("");
-  // Doctor's reusable diagnoses (managed on /doctor/templates).
+  // Doctor's reusable diagnoses (managed in Settings).
   const [diagnosisTemplates, setDiagnosisTemplates] = useState<DiagnosisTemplateRow[]>([]);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [saveTplLabel, setSaveTplLabel] = useState("");
@@ -1421,9 +1421,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         >
                           Save typed text as a template
                         </button>
-                        <Link href="/doctor/templates" className="text-on-surface-variant hover:underline">
-                          Manage templates
-                        </Link>
+                        <Link href="/doctor/settings" className="text-on-surface-variant hover:underline">Manage templates</Link>
                       </div>
                     </div>
                   )}

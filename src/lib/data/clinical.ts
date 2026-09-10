@@ -392,6 +392,14 @@ export async function createSoapPhrase(
   return api.post<SoapPhraseRow>("/api/soap-phrases", input, { query: { doctorId } });
 }
 
+export async function updateSoapPhrase(
+  _supabase: unknown,
+  id: string,
+  input: { field: string; label: string; body: string },
+): Promise<SoapPhraseRow> {
+  return api.put<SoapPhraseRow>(`/api/soap-phrases/${id}`, input);
+}
+
 export async function deleteSoapPhrase(_supabase: unknown, id: string): Promise<void> {
   await api.delete(`/api/soap-phrases/${id}`);
 }
@@ -402,6 +410,14 @@ export async function createSoapTemplate(
   input: Omit<SoapTemplateRow, "id" | "doctor_id">,
 ): Promise<SoapTemplateRow> {
   return api.post<SoapTemplateRow>("/api/soap-templates", input, { query: { doctorId } });
+}
+
+export async function updateSoapTemplate(
+  _supabase: unknown,
+  id: string,
+  input: Omit<SoapTemplateRow, "id" | "doctor_id">,
+): Promise<SoapTemplateRow> {
+  return api.put<SoapTemplateRow>(`/api/soap-templates/${id}`, input);
 }
 
 export async function deleteSoapTemplate(_supabase: unknown, id: string): Promise<void> {
@@ -454,15 +470,19 @@ export async function createRxTemplate(
   });
 }
 
-/** Edit = replace (title + items). .NET has no template PUT; delete + recreate. */
+/** Edit = replace (title + items), atomic via PUT /api/prescription-templates/{id}. */
 export async function updateRxTemplate(
   _supabase: unknown,
   templateId: string,
   doctorId: string,
   input: { title: string; is_system_template: boolean; items: Omit<RxItem, "id">[] },
 ): Promise<RxTemplateRow> {
-  await deleteRxTemplate(null, templateId);
-  return createRxTemplate(null, doctorId, input);
+  return api.put<RxTemplateRow>(`/api/prescription-templates/${templateId}`, {
+    doctor_id: doctorId,
+    title: input.title,
+    is_system_template: input.is_system_template,
+    items: input.items,
+  });
 }
 
 export async function deleteRxTemplate(_supabase: unknown, templateId: string): Promise<void> {
@@ -475,6 +495,14 @@ export async function addFavoriteMedicine(
   input: Omit<FavoriteMedicineRow, "id" | "doctor_id">,
 ): Promise<FavoriteMedicineRow> {
   return api.post<FavoriteMedicineRow>("/api/doctor-favorite-medicines", input, { query: { doctorId } });
+}
+
+export async function updateFavoriteMedicine(
+  _supabase: unknown,
+  id: string,
+  input: Omit<FavoriteMedicineRow, "id" | "doctor_id">,
+): Promise<FavoriteMedicineRow> {
+  return api.put<FavoriteMedicineRow>(`/api/doctor-favorite-medicines/${id}`, input);
 }
 
 export async function deleteFavoriteMedicine(_supabase: unknown, id: string): Promise<void> {
