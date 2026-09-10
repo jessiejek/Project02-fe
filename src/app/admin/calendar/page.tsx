@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryBookings } from "@/lib/data/bookings";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -47,8 +48,9 @@ function formatShort(date: Date) {
   return `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}`;
 }
 
-// Stitch clinic_calendar_admin — read-only weekly grid, no click-through.
-// Rewired off mocks (truthDare 4.2): real doctors + bookings for the visible week.
+// Stitch clinic_calendar_admin — read-only weekly grid of who was seen each day.
+// §16.3: no appointment slots — the time shown is the walk-in check-in time.
+// Data via the .NET API (queryBookings from/to range).
 export default function AdminCalendarPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [doctors, setDoctors] = useState<CalendarDoctor[]>([]);
@@ -75,32 +77,30 @@ export default function AdminCalendarPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadBookings() {
       setLoaded(false);
       const supabase = createClient();
-      const { data } = await supabase
-        .from("bookings")
-        .select("booking_id, doctor_id, appointment_date, slot_start_time, patients(first_name, last_name)")
-        .gte("appointment_date", weekStartIso)
-        .lte("appointment_date", weekEndIso)
-        .not("status", "in", '("Cancelled","Expired")')
-        .order("slot_start_time", { ascending: true });
-
+      const rows = await queryBookings(supabase, { from: weekStartIso, to: weekEndIso });
+      if (cancelled) return;
       setBookings(
-        (data ?? []).map((b) => {
-          const patient = Array.isArray(b.patients) ? b.patients[0] : b.patients;
-          return {
+        rows
+          .filter((b) => b.status !== "Cancelled" && b.status !== "Expired")
+          .map((b) => ({
             id: b.booking_id,
             doctorId: b.doctor_id,
-            patientName: patient ? `${patient.first_name} ${patient.last_name}` : "Unknown patient",
+            patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "Unknown patient",
             appointmentDate: b.appointment_date,
-            slotStartTime: b.slot_start_time.slice(0, 5),
-          };
-        }),
+            slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+          }))
+          .sort((a, b) => a.slotStartTime.localeCompare(b.slotStartTime)),
       );
       setLoaded(true);
     }
     loadBookings();
+    return () => {
+      cancelled = true;
+    };
   }, [weekStartIso, weekEndIso]);
 
   return (

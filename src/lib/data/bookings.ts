@@ -176,6 +176,9 @@ type BookingFilters = {
   patientId?: string;
   doctorId?: string;
   date?: string;
+  /** inclusive appointment_date range (YYYY-MM-DD). */
+  from?: string;
+  to?: string;
   status?: string;
 };
 
@@ -190,6 +193,8 @@ export async function queryBookings(
         patientId: filters.patientId,
         doctorId: filters.doctorId,
         date: filters.date,
+        from: filters.from,
+        to: filters.to,
         status: filters.status,
       },
     });
@@ -199,6 +204,8 @@ export async function queryBookings(
   if (filters.patientId) q = q.eq("patient_id", filters.patientId);
   if (filters.doctorId) q = q.eq("doctor_id", filters.doctorId);
   if (filters.date) q = q.eq("appointment_date", filters.date);
+  if (filters.from) q = q.gte("appointment_date", filters.from);
+  if (filters.to) q = q.lte("appointment_date", filters.to);
   if (filters.status) q = q.eq("status", filters.status);
   const { data } = await q.order("appointment_date", { ascending: false }).order("slot_start_time", { ascending: false });
   return (data ?? []).map((r) => projectBooking(r as Raw));
