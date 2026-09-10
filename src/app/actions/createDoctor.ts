@@ -17,7 +17,6 @@ export interface CreateDoctorInput {
   ptrNumber: string;
   s2Number: string;
   slotDurationMinutes: number;
-  serviceIds: string[];
   schedule: DoctorScheduleDay[];
 }
 
@@ -71,17 +70,6 @@ export async function createDoctor(input: CreateDoctorInput): Promise<CreateDoct
     slot_duration_minutes: input.slotDurationMinutes,
   });
   if (doctorError) return rollback("Could not create the doctor profile.");
-
-  if (input.serviceIds.length > 0) {
-    const { error: servicesError } = await admin.from("doctor_services").insert(
-      input.serviceIds.map((serviceId) => ({
-        doctor_id: doctorId,
-        service_id: serviceId,
-        duration_minutes: input.slotDurationMinutes,
-      })),
-    );
-    if (servicesError) return rollback("Could not save assigned services.");
-  }
 
   const { error: scheduleError } = await admin.from("doctor_schedules").insert(
     input.schedule.map((d) => ({

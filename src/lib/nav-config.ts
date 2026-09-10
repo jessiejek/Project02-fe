@@ -98,7 +98,6 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
         label: "Management",
         items: [
           { label: "Doctors", href: "/admin/doctors", icon: "medical_services" },
-          { label: "Services", href: "/admin/services", icon: "clinical_notes" },
           { label: "Patients", href: "/admin/patients", icon: "group" },
           { label: "Staff", href: "/admin/staff", icon: "badge" },
           { label: "Announcements", href: "/admin/announcements", icon: "campaign" },

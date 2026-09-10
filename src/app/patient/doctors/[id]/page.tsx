@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctorById } from "@/lib/data/doctors";
-import { queryDoctorServices } from "@/lib/data/doctorServices";
 import { queryReviews } from "@/lib/data/patientFiles";
 import { queryDoctorRatings } from "@/lib/data/admin";
 import { queryDoctorSchedules, queryDayStatus } from "@/lib/data/scheduling";
@@ -21,9 +20,8 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
   const supabase = await createClient();
   const today = todayManila();
 
-  const [doctor, doctorServices, schedule, ratingRes, dayStatusRow, reviewsRes] = await Promise.all([
+  const [doctor, schedule, ratingRes, dayStatusRow, reviewsRes] = await Promise.all([
     queryDoctorById(supabase, id),
-    queryDoctorServices(supabase, { doctorId: id }),
     queryDoctorSchedules(supabase, id),
     queryDoctorRatings(supabase).then((rows) => ({ data: rows.find((r) => r.doctor_id === id) ?? null })),
     queryDayStatus(supabase, id, today),
@@ -58,32 +56,6 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
         <Card>
           <h2 className="mb-sm text-headline-sm text-on-surface">About</h2>
           <p className="text-body-md text-on-surface-variant">{doctor.bio}</p>
-        </Card>
-
-        <Card>
-          <h2 className="mb-md text-headline-sm text-on-surface">Services</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-outline-variant text-left text-label-md text-on-surface-variant">
-                  <th className="py-sm">Service</th>
-                  <th className="py-sm">Category</th>
-                  <th className="py-sm">Price</th>
-                  <th className="py-sm">Duration</th>
-                </tr>
-              </thead>
-              <tbody>
-                {doctorServices.map((s) => (
-                  <tr key={s.service_id} className="border-b border-outline-variant/40">
-                    <td className="py-sm text-body-md">{s.services?.name}</td>
-                    <td className="py-sm text-body-md text-on-surface-variant">{s.services?.category}</td>
-                    <td className="py-sm text-body-md">₱{s.services?.price}</td>
-                    <td className="py-sm text-body-md">{s.duration_minutes} min</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </Card>
 
         {/* Patient.md §4: "formatted schedule, today's day-status" — the

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,8 +9,9 @@ import { createDoctor } from "@/app/actions/createDoctor";
 import { createClient } from "@/lib/supabase/client";
 import { updateDoctor } from "@/lib/data/doctors";
 import { updateStaffAccount } from "@/lib/data/staff";
+import { upsertDoctorSchedule } from "@/lib/data/scheduling";
 import { DAYS, dayNameToIndex } from "@/lib/days";
-import type { Doctor, DoctorScheduleDay, ManagedService } from "@/data/types";
+import type { Doctor, DoctorScheduleDay } from "@/data/types";
 
 function defaultSchedule(): DoctorScheduleDay[] {
   return DAYS.map((day) => ({ day, isActive: day !== "Sun" && day !== "Sat", startTime: "08:00", endTime: "17:00" }));
@@ -39,32 +40,13 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
   const [status, setStatus] = useState<"Active" | "Inactive" | "OnLeave">(doctor?.status ?? "Active");
   const [slotDurationMinutes, setSlotDurationMinutes] = useState(String(doctor?.slotDurationMinutes ?? 30));
   const [bio, setBio] = useState(doctor?.bio ?? "");
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>(doctor?.services.map((s) => s.id) ?? []);
   const [schedule, setSchedule] = useState<DoctorScheduleDay[]>(doctor?.schedule ?? defaultSchedule());
-  // Assign to Services writes to doctor_services — load the real services catalog.
-  const [services, setServices] = useState<ManagedService[]>([]);
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient();
-      const { data } = await supabase.from("services").select("*").order("name");
-      if (data) {
-        setServices(
-          data.map((s) => ({ id: s.service_id, name: s.name, category: s.category, description: s.description ?? undefined, price: Number(s.price), isActive: s.is_active, doctorNames: [] })),
-        );
-      }
-    }
-    load();
-  }, []);
 
   const canSave =
     name.trim() !== "" &&
     specialization.trim() !== "" &&
     consultationFee.trim() !== "" &&
     (mode === "edit" || email.trim() !== "");
-
-  function toggleService(id: string) {
-    setSelectedServiceIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
 
   function toggleDay(day: string) {
     setSchedule((prev) => prev.map((d) => (d.day === day ? { ...d, isActive: !d.isActive } : d)));
@@ -102,7 +84,6 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
         ptrNumber,
         s2Number,
         slotDurationMinutes: Number(slotDurationMinutes) || 30,
-        serviceIds: selectedServiceIds,
         schedule,
       });
       setInviting(false);
@@ -137,30 +118,14 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
 
     await updateStaffAccount(supabase, doctorId, { full_name: name, status });
 
-    // Services can shrink or grow arbitrarily (unlike the fixed 7-row weekly
-    // schedule), so delete-all-reinsert is the simplest correct approach —
-    // same pattern already used for clinic_accepted_payment_methods.
-    await supabase.from("doctor_services").delete().eq("doctor_id", doctorId);
-    if (selectedServiceIds.length > 0) {
-      await supabase.from("doctor_services").insert(
-        selectedServiceIds.map((serviceId) => ({
-          doctor_id: doctorId,
-          service_id: serviceId,
-          duration_minutes: Number(slotDurationMinutes) || 30,
-        })),
-      );
-    }
-
-    await supabase.from("doctor_schedules").upsert(
-      schedule.map((d) => ({
-        doctor_id: doctorId,
+    for (const d of schedule) {
+      await upsertDoctorSchedule(supabase, doctorId, {
         day_of_week: dayNameToIndex(d.day),
         is_active: d.isActive,
         start_time: d.startTime,
         end_time: d.endTime,
-      })),
-      { onConflict: "doctor_id,day_of_week" },
-    );
+      });
+    }
 
     setInviting(false);
     router.push("/admin/doctors");
@@ -219,19 +184,7 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
       </Card>
 
       <Card>
-        <h3 className="mb-md text-headline-sm text-on-surface">Assign to Services</h3>
-        <div className="space-y-sm">
-          {services.map((s) => (
-            <label key={s.id} className="flex items-center gap-sm text-body-md">
-              <input type="checkbox" checked={selectedServiceIds.includes(s.id)} onChange={() => toggleService(s.id)} className="h-5 w-5" />
-              {s.name}
-            </label>
-          ))}
-        </div>
-      </Card>
-
-      <Card>
-        <h3 className="mb-md text-headline-sm text-on-surface">Weekly Schedule</h3>
+        <h3 className="mb-md text-headline-sm text-on-surface">Weekly Hours</h3>
         <div className="space-y-sm">
           {schedule.map((d) => (
             <div key={d.day} className="flex flex-wrap items-center gap-sm sm:gap-md">
