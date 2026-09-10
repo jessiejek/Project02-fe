@@ -52,9 +52,8 @@ export default function AdminReportsPage() {
       setLoading(true);
       const supabase = createClient();
       const inRange = (d: string | null | undefined, lo: string, hi: string) => !!d && d >= lo && d <= hi;
-      const [unpaidAll, servicesRes, followUpsAll, summaryAll] = await Promise.all([
+      const [unpaidAll, followUpsAll, summaryAll] = await Promise.all([
         queryReport<Record<string, any>>(supabase, "v_unpaid_completed_visits"),
-        supabase.from("booking_services").select("booking_id, services(name)"),
         queryReport<Record<string, any>>(supabase, "v_pending_follow_ups"),
         queryReport<Record<string, any>>(supabase, "v_daily_booking_summary"),
       ]);
@@ -70,15 +69,6 @@ export default function AdminReportsPage() {
           .sort((a, b) => String(a.appointment_date).localeCompare(String(b.appointment_date))),
       };
 
-      const servicesByBooking = new Map<string, string[]>();
-      for (const row of servicesRes.data ?? []) {
-        const service = Array.isArray(row.services) ? row.services[0] : row.services;
-        if (!service?.name) continue;
-        const list = servicesByBooking.get(row.booking_id) ?? [];
-        list.push(service.name);
-        servicesByBooking.set(row.booking_id, list);
-      }
-
       setUnpaidCompleted(
         (unpaidRes.data ?? [])
           .filter((b) => b.payment_status === "Unpaid")
@@ -86,7 +76,7 @@ export default function AdminReportsPage() {
             bookingId: b.booking_id ?? "",
             patientName: b.patient_name ?? "Unknown Patient",
             doctorName: b.doctor_name ?? "Unknown Doctor",
-            serviceNames: servicesByBooking.get(b.booking_id ?? "") ?? [],
+            serviceNames: [], // services menu is vestigial (§16.6 — flat fee schedule)
             visitDate: b.appointment_date ?? "",
             amountDue: Number(b.amount_due ?? 0),
           })),

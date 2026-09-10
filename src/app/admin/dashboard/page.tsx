@@ -9,6 +9,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryReport } from "@/lib/data/admin";
+import { queryBookings } from "@/lib/data/bookings";
 
 interface BookingRow {
   id: string;
@@ -51,26 +52,8 @@ export default function AdminDashboardPage() {
       const monthStart = `${today.slice(0, 7)}-01`;
       const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 
-      const [
-        todaySummaryRes,
-        monthBookingsRes,
-        monthRevenueRes,
-        pendingRes,
-        onHoldRes,
-        unpaidRes,
-        followUpsRes,
-        doctorsRes,
-        recentRes,
-      ] = await Promise.all([
-        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary").then((rows) => ({
-          data: rows.find((r) => r.appointment_date === today) ?? null,
-        })),
-        supabase.from("bookings").select("booking_id", { count: "exact", head: true }).gte("appointment_date", monthStart),
-        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary").then((rows) => ({
-          data: rows.filter((r) => (r.appointment_date as string) >= monthStart),
-        })),
-        supabase.from("bookings").select("booking_id", { count: "exact", head: true }).eq("status", "ProofSubmitted"),
-        supabase.from("bookings").select("booking_id", { count: "exact", head: true }).eq("status", "OnHold").gte("appointment_date", monthStart),
+      const [dailySummary, unpaidRes, followUpsRes, doctorsRes, allBookings] = await Promise.all([
+        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary"),
         queryReport<Record<string, any>>(supabase, "v_unpaid_completed_visits").then((rows) => ({ count: rows.length })),
         queryReport<Record<string, any>>(supabase, "v_pending_follow_ups").then((rows) => ({
           count: rows.filter(
@@ -78,25 +61,26 @@ export default function AdminDashboardPage() {
           ).length,
         })),
         queryDoctors(supabase),
-        supabase
-          .from("bookings")
-          .select("*, patients(first_name, last_name), doctors(staff_accounts(full_name))")
-          .order("created_at", { ascending: false })
-          .limit(20),
+        queryBookings(supabase, {}),
       ]);
 
-      setTodaysCount(todaySummaryRes.data?.total_bookings ?? 0);
-      setNoShowsToday(todaySummaryRes.data?.no_show_count ?? 0);
-      setRevenueToday(Number(todaySummaryRes.data?.revenue ?? 0));
-      setMonthlyCount(monthBookingsRes.count ?? 0);
-      setRevenueThisMonth((monthRevenueRes.data ?? []).reduce((sum, d) => sum + Number(d.revenue ?? 0), 0));
-      setPendingVerifications(pendingRes.count ?? 0);
-      setOnHoldThisMonth(onHoldRes.count ?? 0);
+      const todaySummary = dailySummary.find((r) => r.appointment_date === today) ?? null;
+      const monthSummary = dailySummary.filter((r) => (r.appointment_date as string) >= monthStart);
+      const monthBookings = allBookings.filter((b) => b.appointment_date >= monthStart);
+      const recent = [...allBookings].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")).slice(0, 20);
+
+      setTodaysCount(todaySummary?.total_bookings ?? 0);
+      setNoShowsToday(todaySummary?.no_show_count ?? 0);
+      setRevenueToday(Number(todaySummary?.revenue ?? 0));
+      setMonthlyCount(monthBookings.length);
+      setRevenueThisMonth(monthSummary.reduce((sum, d) => sum + Number(d.revenue ?? 0), 0));
+      setPendingVerifications(allBookings.filter((b) => b.status === "ProofSubmitted").length);
+      setOnHoldThisMonth(monthBookings.filter((b) => b.status === "OnHold").length);
       setUnpaidCompleted(unpaidRes.count ?? 0);
       setFollowUpsDue(followUpsRes.count ?? 0);
 
       const bookingCountByDoctor = new Map<string, number>();
-      (recentRes.data ?? []).forEach((b) => {
+      recent.forEach((b) => {
         bookingCountByDoctor.set(b.doctor_id, (bookingCountByDoctor.get(b.doctor_id) ?? 0) + 1);
       });
       setDoctorLoads(
@@ -108,19 +92,14 @@ export default function AdminDashboardPage() {
       );
 
       setRecentBookings(
-        (recentRes.data ?? []).map((b) => {
-          const patient = Array.isArray(b.patients) ? b.patients[0] : b.patients;
-          const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-          const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-          return {
-            id: b.booking_id,
-            patientName: patient ? `${patient.first_name} ${patient.last_name}` : "",
-            doctorName: staff?.full_name ?? "",
-            slotStartTime: b.slot_start_time.slice(0, 5),
-            queueNumber: b.queue_number,
-            status: b.status,
-          };
-        }),
+        recent.map((b) => ({
+          id: b.booking_id,
+          patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+          slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+          queueNumber: b.queue_number,
+          status: b.status,
+        })),
       );
 
       setLoaded(true);

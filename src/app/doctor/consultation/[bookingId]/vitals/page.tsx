@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/Icon";
 import { VitalsEditor } from "@/components/doctor/VitalsEditor";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
+import { queryBookingById } from "@/lib/data/bookings";
 
 interface BookingHeader {
   appointmentDate: string;
@@ -24,24 +25,15 @@ function VitalsDetailWorkflow({ bookingId }: { bookingId: string }) {
     const doctorId = session.staffId;
     async function load() {
       const supabase = createClient();
-      const bookingRes = await supabase
-        .from("bookings")
-        .select("booking_id, patient_id, appointment_date")
-        .eq("booking_id", bookingId)
-        .eq("doctor_id", doctorId)
-        .maybeSingle();
-      if (!bookingRes.data) {
+      const b = await queryBookingById(supabase, bookingId);
+      if (!b || b.doctor_id !== doctorId) {
         setBooking(null);
         return;
       }
-      const servicesRes = await supabase.from("booking_services").select("services(name)").eq("booking_id", bookingId);
       setBooking({
-        appointmentDate: bookingRes.data.appointment_date,
-        serviceNames: (servicesRes.data ?? []).map((s) => {
-          const svc = Array.isArray(s.services) ? s.services[0] : s.services;
-          return svc?.name ?? "";
-        }),
-        patientId: bookingRes.data.patient_id,
+        appointmentDate: b.appointment_date,
+        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+        patientId: b.patient_id,
       });
     }
     load();
