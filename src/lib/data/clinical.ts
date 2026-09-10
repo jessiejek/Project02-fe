@@ -21,6 +21,10 @@ export interface ConsultationRow {
   assessment: string | null;
   plan: string | null;
   doctor_notes: string | null;
+  // §16.6 Professional Fee decision — "Charge" | "Waive" | null.
+  pf_decision: "Charge" | "Waive" | null;
+  pf_amount: number | null;
+  pf_waive_reason: string | null;
   completed_by_user_id: string | null;
   completed_at: string | null;
   created_at: string;
@@ -95,6 +99,10 @@ export interface ConsultationUpsert {
   visit_type?: "New" | "FollowUp" | null;
   med_cert_requested?: boolean | null;
   discount_category?: "Senior" | "PWD" | null;
+  // §16.6 Professional Fee decision — "Charge" | "Waive" | null (not yet decided).
+  pf_decision?: "Charge" | "Waive" | null;
+  pf_amount?: number | null;
+  pf_waive_reason?: string | null;
 }
 
 export async function upsertConsultationByBooking(

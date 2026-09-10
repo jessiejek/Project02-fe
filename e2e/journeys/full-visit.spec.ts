@@ -8,6 +8,7 @@ import {
   getVitals,
   getLabOrders,
   getMedicalCertificate,
+  getVaccinations,
 } from "../support/api";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -178,8 +179,8 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.getByRole("button", { name: "Complete Consultation" }).click();
   await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
   // The "Consultation saved" screen only renders after handleComplete has
-  // finished ALL its writes (row → diagnoses → follow-up → lab orders), so this
-  // is the point where every child record is guaranteed on the server.
+  // finished ALL its writes (row + PF → diagnoses → follow-up → lab orders →
+  // vaccinations), so this is where every child record is guaranteed on the server.
   await expect(doctor.getByText("Consultation saved")).toBeVisible({ timeout: 20_000 });
 
   // ── server-side: every field we typed actually persisted ──────────────
@@ -235,12 +236,16 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   expect(Number(bookingAfter.total_fee), "med-cert +₱50 applied to booking").toBe(500);
   const expectedDue = Number(bookingAfter.total_fee);
 
-  // KNOWN FE-ONLY GAPS — the "Stage Vaccination" list and the PF Charge/Waive
-  // tabs have no table or endpoint behind them yet (see the "local-only" notes in
-  // src/app/doctor/consultation/[bookingId]/page.tsx). The journey still fills
-  // them so we find out the day that changes; flip this to a positive assert when
-  // a backend lands.
-  expect(JSON.stringify(consult), "vaccinations are still FE-only (not persisted)").not.toContain(VAX.name);
+  // PF decision — persisted on the consultation row.
+  expect(consult.pf_decision, "PF decision persisted").toBe("Charge");
+  expect(Number(consult.pf_amount), "PF amount persisted").toBe(500);
+
+  // Vaccinations — the dose staged this visit landed in patient_vaccinations.
+  const vax = await getVaccinations(doctorApi, patient.patient_id);
+  const vaxText = JSON.stringify(vax);
+  expect(vaxText, "vaccination name persisted").toContain(VAX.name);
+  expect(vaxText, "vaccination lot persisted").toContain(VAX.lot);
+  expect(vaxText, "vaccination route persisted").toContain(VAX.route);
 
   // ── staff: finish the queue entry + collect payment ─────────────────────
   await staff.goto("/staff/queue");

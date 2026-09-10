@@ -19,6 +19,7 @@ import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
 import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
+import { queryVaccinationsByConsultation, replaceVaccinationsByConsultation } from "@/lib/data/patientFiles";
 import { queryAuditLogs, queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
 import {
   queryConsultationByBooking,
@@ -591,10 +592,26 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       let loadedConsultation: Consultation | undefined;
       if (consultRes.data) {
         setConsultationId(consultRes.data.consultation_id);
-        const [diagRes, followRes] = await Promise.all([
+        const [diagRes, followRes, vaxRows] = await Promise.all([
           queryDiagnoses(supabase, consultRes.data.consultation_id).then((data) => ({ data })),
           queryFollowUps(supabase, { consultationId: consultRes.data.consultation_id }).then((rows) => ({ data: rows[0] ?? null })),
+          queryVaccinationsByConsultation(supabase, consultRes.data.consultation_id),
         ]);
+        const vaccinationsLoaded = vaxRows.map((v) => ({
+          vaccineName: v.vaccine_name,
+          doseNumber: v.dose_number != null ? String(v.dose_number) : "",
+          route: v.route ?? "",
+          site: v.site ?? "",
+          lotNumber: v.lot_number ?? "",
+          expiry: v.expiry_date ?? "",
+          manufacturer: v.manufacturer ?? "",
+        }));
+        const feeDecisionLoaded =
+          consultRes.data.pf_decision === "Charge"
+            ? { type: "Charge" as const, amount: consultRes.data.pf_amount ?? 0 }
+            : consultRes.data.pf_decision === "Waive"
+              ? { type: "Waive" as const, waiveReason: consultRes.data.pf_waive_reason ?? "" }
+              : undefined;
         const diagnosesLoaded: Diagnosis[] = (diagRes.data ?? []).map((d) => ({
           code: d.icd10_code ?? "—",
           description: d.custom_description ?? "",
@@ -612,6 +629,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           assessment: consultRes.data.assessment ?? "",
           plan: consultRes.data.plan ?? "",
           diagnoses: diagnosesLoaded,
+          vaccinationsAdministered: vaccinationsLoaded,
+          feeDecision: feeDecisionLoaded,
           followUpDate: followRes.data?.follow_up_date ?? undefined,
           followUpReason: followRes.data?.reason ?? undefined,
           followUpInstructions: followRes.data?.instructions ?? undefined,
@@ -662,6 +681,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         setFollowUpReason(loadedConsultation.followUpReason ?? "");
         setFollowUpInstructions(loadedConsultation.followUpInstructions ?? "");
         setFollowUpReminder(loadedConsultation.followUpReminder ?? true);
+        setVaccinations(toVaxDraft(loadedConsultation.vaccinationsAdministered));
+        const fd = loadedConsultation.feeDecision;
+        setPfDecision(fd ? (fd.type === "Charge" ? "charge" : "waive") : null);
+        if (fd?.type === "Charge") setPfAmount(String(fd.amount ?? ""));
+        if (fd?.type === "Waive") setPfWaiveReason(fd.waiveReason ?? "");
       }
 
       // §16.8 Form 3 — lab-test catalog + any lab orders already on this booking.
@@ -848,6 +872,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         visit_type: visitType,
         med_cert_requested: medCertRequested,
         discount_category: discountCategory || null,
+        // §16.6 — the doctor's PF call travels on the consultation row.
+        pf_decision: pfDecision === "charge" ? "Charge" : pfDecision === "waive" ? "Waive" : null,
+        pf_amount: pfDecision === "charge" ? Number(pfAmount) || null : null,
+        pf_waive_reason: pfDecision === "waive" ? pfWaiveReason || null : null,
       });
     } catch {
       return null;
@@ -887,6 +915,24 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           clinical_indication: l.reason || null,
           specimen_type: l.specimenType || null,
           notes: l.notes || null,
+        })),
+    );
+
+    // Doctor.md §4 — the vaccinations staged this visit are a replace-all set,
+    // keyed on the consultation (patient_vaccinations, Source = in-clinic).
+    await replaceVaccinationsByConsultation(
+      supabase,
+      savedId,
+      vaccinations
+        .filter((v) => v.vaccineName.trim())
+        .map((v) => ({
+          vaccine_name: v.vaccineName.trim(),
+          manufacturer: v.manufacturer || null,
+          dose_number: v.doseNumber ? Number(v.doseNumber) || null : null,
+          route: v.route || null,
+          site: v.site || null,
+          lot_number: v.lotNumber || null,
+          expiry_date: v.expiry || null,
         })),
     );
 

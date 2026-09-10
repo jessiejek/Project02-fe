@@ -88,9 +88,14 @@ export async function uploadPatientLabResult(
 export interface VaccinationRow {
   id: string;
   patient_id: string;
+  consultation_id: string | null;
   vaccine_name: string;
   manufacturer: string | null;
   dose_number: number | null;
+  route: string | null;
+  site: string | null;
+  lot_number: string | null;
+  expiry_date: string | null;
   administered_date: string | null;
   next_dose_date: string | null;
   status: string;
@@ -100,6 +105,43 @@ export interface VaccinationRow {
 
 export async function queryVaccinations(_supabase: unknown, patientId: string): Promise<VaccinationRow[]> {
   return api.get<VaccinationRow[]>("/api/patient-vaccinations", { query: { patientId } });
+}
+
+export async function queryVaccinationsByConsultation(
+  _supabase: unknown,
+  consultationId: string,
+): Promise<VaccinationRow[]> {
+  try {
+    return await api.get<VaccinationRow[]>(`/api/patient-vaccinations/by-consultation/${consultationId}`);
+  } catch {
+    return [];
+  }
+}
+
+/** One dose staged in the consultation Vaccinations step. */
+export interface VaccinationInput {
+  vaccine_name: string;
+  manufacturer?: string | null;
+  dose_number?: number | null;
+  route?: string | null;
+  site?: string | null;
+  lot_number?: string | null;
+  expiry_date?: string | null;
+  next_dose_date?: string | null;
+  notes?: string | null;
+}
+
+/**
+ * Replace-all the doses administered at one consultation (keyed on
+ * consultation_id, same shape as lab orders). Only touches this visit's
+ * in-clinic rows — the patient's wider history is left alone.
+ */
+export async function replaceVaccinationsByConsultation(
+  _supabase: unknown,
+  consultationId: string,
+  items: VaccinationInput[],
+): Promise<VaccinationRow[]> {
+  return api.put<VaccinationRow[]>(`/api/patient-vaccinations/by-consultation/${consultationId}`, items);
 }
 
 // ── reviews ─────────────────────────────────────────────────────────────
