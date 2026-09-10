@@ -76,13 +76,16 @@ export function Sidebar({ role, onNavigate }: SidebarProps) {
       </nav>
 
       <div className="space-y-base border-t border-outline/20 px-sm pt-md">
-        <Link
+        {/* Plain <a>, not <Link>: /logout is a destructive GET (it revokes the
+            refresh token + clears cookies). Next would prefetch a <Link> on
+            viewport/hover and silently log the user out. */}
+        <a
           href="/logout"
           className="flex items-center gap-md rounded-lg px-md py-sm text-label-md text-outline-variant transition-all hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface"
         >
           <Icon name="logout" />
           Logout
-        </Link>
+        </a>
       </div>
     </div>
   );

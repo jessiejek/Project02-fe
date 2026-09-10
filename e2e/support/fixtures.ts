@@ -21,6 +21,12 @@ export const test = base.extend<Fixtures>({
     const contexts: BrowserContext[] = [];
     await use(async (role: Role) => {
       const ctx = await browser.newContext({ storageState: authFile(role) });
+      // The app's "print" is window.open() + window.print(); in headed mode that
+      // pops the blocking OS print dialog. We assert on the popup's HTML, not the
+      // dialog, so neutralise print() everywhere.
+      await ctx.addInitScript(() => {
+        window.print = () => {};
+      });
       contexts.push(ctx);
       return ctx.newPage();
     });

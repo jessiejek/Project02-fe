@@ -17,6 +17,10 @@ export const FE_URL = process.env.E2E_FE_URL ?? "http://localhost:3000";
 export const BE_URL = process.env.E2E_BE_URL ?? "http://localhost:5000";
 export const DEV_PASSWORD = "ClinicDev123!";
 
+// Watch the run: `E2E_SLOWMO=350 npm run test:e2e:headed` slows every action so
+// you can see the browser move. 0 in CI / normal headless runs.
+const SLOWMO = Number(process.env.E2E_SLOWMO ?? 0);
+
 export default defineConfig({
   testDir: "./journeys",
   outputDir: "./test-results",
@@ -40,7 +44,7 @@ export default defineConfig({
     { name: "setup", testMatch: /global\.setup\.ts/ },
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], launchOptions: { slowMo: SLOWMO } },
       dependencies: ["setup"],
     },
   ],

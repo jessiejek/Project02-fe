@@ -1,5 +1,13 @@
 import { test, expect } from "../support/fixtures";
-import { createPatient, checkInWalkIn, getBooking, getConsultationByBooking, getRxGroups } from "../support/api";
+import {
+  createPatient,
+  checkInWalkIn,
+  getBooking,
+  getConsultationByBooking,
+  getRxGroups,
+  getVitals,
+  getLabOrders,
+} from "../support/api";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -9,15 +17,44 @@ const ARTIFACTS = join(__dirname, "..", "artifacts");
  * The flagship journey — one real walk-in visit, end to end, across three roles:
  *
  *   staff   registers a new patient  →  checks them into today's queue  →  calls them in
- *   doctor  opens the consultation   →  records CC + vitals + diagnosis + a prescription  →  completes it
+ *   doctor  fills EVERY clinical field in the consultation  →  completes it
  *   staff   marks the queue entry complete  →  collects the payment (Cash)
- *   doctor  prints the prescription   →  we capture the print window and check the PDF
+ *   doctor  prints the prescription  →  we capture the print window and check the PDF
+ *
+ * The point of filling every field is to prove each one is actually DB-backed:
+ * after "Complete Consultation" we read the row (and its children) straight from
+ * the .NET API and assert the exact values we typed came back. A field that
+ * renders but never persists will fail here.
  *
  * API calls are used only for setup and for asserting server state; every
  * clinical action goes through the UI.
  */
-test("walk-in visit: register → consult → pay → prescription PDF", async ({ as, api }) => {
-  test.setTimeout(180_000);
+
+// The exact strings we type — reused for both entry and the server-side asserts.
+const SOAP = {
+  chiefComplaint: "E2E sore throat and low-grade fever, 2 days",
+  subjective: "E2E patient reports odynophagia, mild myalgia, no cough, no dyspnea.",
+  objective: "E2E oropharynx erythematous, no exudate, tonsils not enlarged, chest clear.",
+  assessment: "E2E acute viral pharyngitis, uncomplicated.",
+  plan: "E2E supportive care, hydration, paracetamol PRN, return if worsening.",
+};
+const DX_PRIMARY = "Acute viral pharyngitis";
+const DX_SECONDARY = "Mild dehydration";
+const LAB_TEST = "E2E Throat swab culture";
+const FOLLOWUP_REASON = "E2E re-check if symptoms persist beyond 5 days";
+const FOLLOWUP_INSTRUCTIONS = "E2E return sooner for high fever, difficulty swallowing, or rash.";
+const VITALS = {
+  "blood pressure": "120/80",
+  "pulse rate": "74",
+  temperature: "37.4",
+  "respiratory rate": "18",
+  "o2 saturation": "98",
+  weight: "68",
+  height: "170",
+};
+
+test("walk-in visit: register → full consultation → pay → prescription PDF", async ({ as, api }) => {
+  test.setTimeout(240_000);
   const tag = Date.now().toString(36);
 
   const staffApi = await api("staff");
@@ -38,49 +75,122 @@ test("walk-in visit: register → consult → pay → prescription PDF", async (
   await expect(queueRow.getByText("INPROGRESS")).toBeVisible();
 
   // ── doctor: run the consultation ────────────────────────────────────────
+  // "Start Consultation" (/doctor/appointments) and "Open Consult" (queue board)
+  // both just link here — go direct so the journey doesn't hinge on list state.
   const doctor = await as("doctor");
-  await doctor.goto("/doctor/appointments");
-  const apptRow = doctor.locator("tr", { hasText: ticket.queue_number });
-  await apptRow.getByRole("button", { name: "Start Consultation" }).click();
-  await expect(doctor).toHaveURL(new RegExp(`/doctor/consultation/${ticket.booking_id}`));
+  await doctor.goto(`/doctor/consultation/${ticket.booking_id}`);
+  await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
 
-  // Chief Complaint
-  await doctor.getByPlaceholder("Chief Complaint*").fill("E2E: sore throat and low-grade fever, 2 days");
+  // The floating "Progress" panel is fixed bottom-right and overlaps controls —
+  // minimise it so it stops intercepting clicks.
+  await doctor.getByRole("button", { name: "Progress", exact: true }).click();
 
-  // Vitals — open section 2, fill BP + pulse, Save → confirm
+  // ── 1. SOAP — all five free-text fields ────────────────────────────────
+  await doctor.getByPlaceholder("Chief Complaint*").fill(SOAP.chiefComplaint);
+  await doctor.getByPlaceholder("Subjective", { exact: true }).fill(SOAP.subjective);
+  await doctor.getByPlaceholder("Objective", { exact: true }).fill(SOAP.objective);
+  await doctor.getByPlaceholder("Assessment", { exact: true }).fill(SOAP.assessment);
+  await doctor.getByPlaceholder("Plan", { exact: true }).fill(SOAP.plan);
+
+  // ── 2. Vital Signs — every default field, then Save → confirm ───────────
   await doctor.getByRole("heading", { name: /2\. Vital Signs/ }).click();
-  await doctor.getByPlaceholder("Enter blood pressure").fill("120/80");
-  await doctor.getByPlaceholder("Enter pulse rate").fill("74");
-  await doctor.getByRole("button", { name: "Save", exact: true }).first().click();
-  await doctor.getByRole("button", { name: "Confirm" }).click();
+  for (const [field, value] of Object.entries(VITALS)) {
+    const input = doctor.getByPlaceholder(`Enter ${field}`);
+    await expect(input).toBeVisible();
+    await input.fill(value);
+  }
+  await doctor.getByRole("button", { name: "Save", exact: true }).click();
+  await doctor.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
   await expect(doctor.getByText(/Vitals saved at/)).toBeVisible();
 
-  // Diagnosis — open section 3, add a free-text line
+  // ── 3. Diagnosis — a primary + a secondary line ────────────────────────
   await doctor.getByRole("heading", { name: /3\. Diagnosis/ }).click();
-  await doctor.getByPlaceholder("Diagnosis (free text)*").fill("Acute viral pharyngitis");
+  const dx = doctor.getByPlaceholder("Diagnosis (free text)*");
+  await expect(dx).toBeVisible();
+  await dx.fill(DX_PRIMARY);
   await doctor.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(doctor.getByText("Acute viral pharyngitis (Primary)")).toBeVisible();
+  await expect(doctor.getByText(`${DX_PRIMARY} (Primary)`)).toBeVisible();
+  await dx.fill(DX_SECONDARY);
+  await doctor.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(doctor.getByText(`${DX_SECONDARY} (Secondary)`)).toBeVisible();
 
-  // Prescription — open section 4, add one medicine
+  // ── 4. Prescription — one item, then Save (Add Item only stages it) ─────
   await doctor.getByRole("heading", { name: /4\. Prescription/ }).click();
-  await doctor.getByPlaceholder("Medication — pick from the list or just type it").fill("Paracetamol");
-  await doctor.getByText("Will be added as typed", { exact: false }).waitFor();
+  const med = doctor.getByPlaceholder("Medication — pick from the list or just type it");
+  await expect(med).toBeVisible();
+  await med.fill("Paracetamol");
   await doctor.getByPlaceholder("Dosage / strength").fill("500 mg");
   await doctor.getByPlaceholder("# Quantity (e.g. 30, 1 box)").fill("20 tablets");
   await doctor.getByRole("button", { name: "Add Item" }).click();
-  await expect(doctor.getByText("Paracetamol")).toBeVisible();
+  await expect(doctor.getByText("Paracetamol", { exact: false })).toBeVisible();
+  await doctor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(doctor.getByText(/Prescription saved at/)).toBeVisible();
 
-  // Complete → checklist modal → confirm
+  // ── 5. Lab Orders — one handwritten test (persists on Complete) ─────────
+  await doctor.getByRole("heading", { name: /5\. Lab Orders/ }).click();
+  await doctor.getByPlaceholder("Add another test").fill(LAB_TEST);
+  await doctor.getByPlaceholder("Reason / clinical indication").fill("rule out strep");
+  await doctor.getByRole("button", { name: "Add test" }).click();
+  await expect(doctor.getByText(LAB_TEST, { exact: false })).toBeVisible();
+
+  // ── 7. Follow-up — date + reason + instructions (persists on Complete) ──
+  await doctor.getByRole("heading", { name: /7\. Follow-up/ }).click();
+  await doctor.getByRole("button", { name: "Select date" }).click();
+  await doctor.getByRole("button", { name: "Next month" }).click();
+  await doctor.getByRole("button", { name: "15", exact: true }).first().click();
+  // the trigger now shows the chosen date instead of the "Select date" placeholder
+  await expect(doctor.getByRole("button", { name: "Select date" })).toHaveCount(0);
+  await doctor.getByPlaceholder("Reason").fill(FOLLOWUP_REASON);
+  await doctor.getByPlaceholder("Instructions").fill(FOLLOWUP_INSTRUCTIONS);
+
+  // ── Complete → checklist modal → confirm ──────────────────────────────
   await doctor.getByRole("button", { name: "Complete Consultation" }).click();
   await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
+  // The "Consultation saved" screen only renders after handleComplete has
+  // finished ALL its writes (row → diagnoses → follow-up → lab orders), so this
+  // is the point where every child record is guaranteed on the server.
+  await expect(doctor.getByText("Consultation saved")).toBeVisible({ timeout: 20_000 });
 
-  // server: consultation recorded
+  // ── server-side: every field we typed actually persisted ──────────────
   await expect
-    .poll(async () => (await getConsultationByBooking(doctorApi, ticket.booking_id))?.status)
+    .poll(async () => (await getConsultationByBooking(doctorApi, ticket.booking_id))?.status, {
+      timeout: 20_000,
+    })
     .toBe("Completed");
+
+  const consult = await getConsultationByBooking(doctorApi, ticket.booking_id);
+  expect(consult, "consultation row").toBeTruthy();
+  expect(consult.chief_complaint, "chief_complaint persisted").toBe(SOAP.chiefComplaint);
+  expect(consult.subjective, "subjective persisted").toBe(SOAP.subjective);
+  expect(consult.objective, "objective persisted").toBe(SOAP.objective);
+  expect(consult.assessment, "assessment persisted").toBe(SOAP.assessment);
+  expect(consult.plan, "plan persisted").toBe(SOAP.plan);
+
+  const dxRows: Array<{ custom_description?: string; type?: string }> =
+    consult.consultation_diagnoses ?? consult.diagnoses ?? [];
+  const dxText = JSON.stringify(dxRows);
+  expect(dxRows.length, "both diagnoses persisted").toBeGreaterThanOrEqual(2);
+  expect(dxText, "primary diagnosis persisted").toContain(DX_PRIMARY);
+  expect(dxText, "secondary diagnosis persisted").toContain(DX_SECONDARY);
+
+  // by-booking embeds the follow-up under `follow_ups` — sometimes the object, sometimes a 1-element array.
+  const fu = consult.follow_ups ?? consult.follow_up ?? consult.followUp;
+  const followUp = Array.isArray(fu) ? fu[0] : fu;
+  expect(followUp, "follow-up persisted").toBeTruthy();
+  expect(followUp.reason, "follow-up reason persisted").toBe(FOLLOWUP_REASON);
+  expect(followUp.instructions, "follow-up instructions persisted").toBe(FOLLOWUP_INSTRUCTIONS);
+  expect(followUp.follow_up_date, "follow-up date persisted").toBeTruthy();
+
+  const vitals = await getVitals(doctorApi, ticket.booking_id);
+  expect(vitals.length, "all vitals persisted").toBeGreaterThanOrEqual(Object.keys(VITALS).length);
+  expect(JSON.stringify(vitals), "BP reading persisted").toContain("120/80");
+
+  const labs = await getLabOrders(doctorApi, ticket.booking_id);
+  expect(JSON.stringify(labs), "lab order persisted").toContain(LAB_TEST);
+
   const rx = await getRxGroups(doctorApi, patient.patient_id);
   expect(rx.length, "prescription group persisted").toBeGreaterThan(0);
-  expect(JSON.stringify(rx)).toContain("Paracetamol");
+  expect(JSON.stringify(rx), "prescription item persisted").toContain("Paracetamol");
 
   // ── staff: finish the queue entry + collect payment ─────────────────────
   await staff.goto("/staff/queue");
@@ -91,20 +201,25 @@ test("walk-in visit: register → consult → pay → prescription PDF", async (
   await staff.goto("/staff/payments");
   const payRow = staff.locator("tr, li", { hasText: ticket.queue_number });
   await payRow.getByRole("button", { name: "Confirm Payment" }).click();
-  await staff.getByRole("button", { name: "Cash", exact: true }).click();
-  await staff.getByRole("button", { name: "Confirm", exact: true }).click();
+  const payDialog = staff.getByRole("dialog");
+  await payDialog.getByRole("combobox").selectOption("Cash");
+  await payDialog.getByPlaceholder("Amount Received").fill(String(ticket.provisional_fee));
+  await payDialog.getByRole("button", { name: "Confirm", exact: true }).click();
 
   await expect
-    .poll(async () => (await getBooking(staffApi, ticket.booking_id)).status)
+    .poll(async () => (await getBooking(staffApi, ticket.booking_id)).status, { timeout: 20_000 })
     .toBe("Completed");
 
   // ── doctor: print the prescription, capture the PDF ─────────────────────
-  await doctor.goto(`/doctor/patients/${patient.patient_id}`);
+  await doctor.goto(`/doctor/patients/${patient.patient_id}?tab=prescriptions`);
+  await expect(doctor.getByRole("button", { name: "Print prescription" })).toBeVisible({ timeout: 15_000 });
   const popupPromise = doctor.context().waitForEvent("page");
   await doctor.getByRole("button", { name: "Print prescription" }).click();      // opens Print Preview modal
   await doctor.getByRole("button", { name: "Print", exact: true }).click();      // fires window.print()
   const printWin = await popupPromise;
-  await printWin.waitForLoadState("domcontentloaded");
+  // printHtml() does window.open() then document.write()/close() — wait for the
+  // written DOM to actually be there before snapshotting it.
+  await printWin.getByRole("heading", { name: "Prescription" }).waitFor({ timeout: 10_000 });
 
   const html = await printWin.content();
   expect(html).toContain("Prescription");

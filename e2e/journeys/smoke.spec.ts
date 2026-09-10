@@ -40,7 +40,14 @@ for (const [role, routes] of Object.entries(ROUTES) as [Role, string[]][]) {
         });
         page.on("pageerror", (e) => consoleErrors.push(String(e)));
 
-        const resp = await page.goto(route, { waitUntil: "domcontentloaded" });
+        // Next's dev server occasionally 500s on a cold route ("Manifest file is
+        // empty") while it compiles under load — a reload fixes it, same as a real
+        // user would. Only retry that transient; a persistent 5xx still fails.
+        let resp = await page.goto(route, { waitUntil: "domcontentloaded" });
+        for (let i = 0; i < 3 && (resp?.status() ?? 500) >= 500; i++) {
+          await page.waitForTimeout(800);
+          resp = await page.reload({ waitUntil: "domcontentloaded" });
+        }
         expect(resp?.status(), `${route} HTTP status`).toBeLessThan(400);
 
         // Next.js error boundary / SSR failure page

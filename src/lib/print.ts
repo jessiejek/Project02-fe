@@ -5,7 +5,10 @@
  */
 export function printHtml(title: string, bodyHtml: string, opts?: { brand?: string | null }): boolean {
   const brand = opts && "brand" in opts ? opts.brand : "Dr. Grace Gavino Clinic";
-  const win = window.open("", "_blank", "noopener,noreferrer,width=800,height=900");
+  // NB: no `noopener`/`noreferrer` here — with either flag `window.open` returns
+  // null (per spec), and we need the handle to write the document into. The page
+  // we write never navigates anywhere external, so there's no opener to protect.
+  const win = window.open("", "_blank", "width=800,height=900");
   if (!win) return false;
 
   win.document.write(`<!DOCTYPE html>

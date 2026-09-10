@@ -29,9 +29,13 @@ npm run test:e2e          # headless, all specs
 npm run test:e2e:ui       # Playwright UI (pick/step through tests)
 npm run test:e2e:headed   # watch it in a real browser
 npm run test:e2e:report   # open the last HTML report
+
+# watch the full visit play out, slowed down, in a real browser:
+E2E_SLOWMO=450 npm run test:e2e:headed -- full-visit
 ```
 
-Point at other hosts with `E2E_FE_URL` / `E2E_BE_URL`.
+Point at other hosts with `E2E_FE_URL` / `E2E_BE_URL`. `E2E_SLOWMO=<ms>` delays
+every action so you can follow along.
 
 ## What's covered
 
@@ -40,7 +44,7 @@ Point at other hosts with `E2E_FE_URL` / `E2E_BE_URL`.
 | `global.setup.ts` | Logs each role in via the UI once; caches auth in `e2e/.auth/*.json`. |
 | `auth.spec.ts` | Logged-out → `/login`; each role lands on its own dashboard; cross-portal URLs bounce back. |
 | `smoke.spec.ts` | Every nav route, every role, loads with no SSR error page and no uncaught console error. (This is the net that catches things like the patient-portal `doctor-ratings` 403.) |
-| `full-visit.spec.ts` | **The flagship.** staff registers a patient → checks them into the queue → calls them; doctor records CC + vitals + diagnosis + a prescription → completes; staff completes the queue entry → collects Cash payment; doctor prints the prescription → the test captures the print window, asserts its contents, and saves the rendered PDF to `e2e/artifacts/`. |
+| `full-visit.spec.ts` | **The flagship.** staff registers a patient → checks them into the queue → calls them; doctor fills **every** clinical field — all 5 SOAP boxes, all 7 default vitals, a primary + secondary diagnosis, a prescription, a lab order, a follow-up — then completes; the test then reads the consultation (and its children) straight from the API and asserts **each value it typed came back**, so a field that renders but never persists fails here. Then staff completes the queue entry → collects Cash payment; doctor prints the prescription → the test captures the print window, asserts its contents, and saves the rendered PDF to `e2e/artifacts/`. |
 
 ## Notes
 

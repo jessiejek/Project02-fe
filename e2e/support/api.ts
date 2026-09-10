@@ -102,6 +102,16 @@ export async function getRxGroups(api: APIRequestContext, patientId: string) {
   return res.ok() ? res.json() : [];
 }
 
+export async function getVitals(api: APIRequestContext, bookingId: string): Promise<Record<string, unknown>[]> {
+  const res = await api.get(`/api/vitals?bookingId=${bookingId}`);
+  return res.ok() ? res.json() : [];
+}
+
+export async function getLabOrders(api: APIRequestContext, bookingId: string): Promise<Record<string, unknown>[]> {
+  const res = await api.get(`/api/lab-orders/by-booking/${bookingId}`);
+  return res.ok() ? res.json() : [];
+}
+
 /** Best-effort teardown — delete the user's guest patient (cascades bookings/consultations). */
 export async function deletePatient(api: APIRequestContext, patientId: string): Promise<void> {
   // No DELETE /api/patients yet; guest rows with no user just linger. Tag them
