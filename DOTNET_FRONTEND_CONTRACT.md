@@ -78,13 +78,18 @@ builder.Services.AddControllers()
 
 ## 1. Environment variables (exact names)
 
+> **Supabase teardown complete (2026-09-10).** The app reads only `NEXT_PUBLIC_API_URL`.
+> The `NEXT_PUBLIC_SUPABASE_*` / `SUPABASE_SERVICE_ROLE_KEY` vars are gone from app
+> source — they linger in `.env.local` only for the `scripts/parity/*` +
+> `scripts/dev/import-from-supabase.mjs` Node scripts that still read the live
+> Supabase project. History below.
+
 | Variable | Client-visible? | Used by |
 |----------|-----------------|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | `src/lib/supabase/client.ts`, `server.ts`, `admin.ts`, `middleware.ts` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | browser + server anon clients, middleware |
-| `SUPABASE_SERVICE_ROLE_KEY` | **No** (server only) | `src/lib/supabase/admin.ts`, invite/register/createDoctor actions |
-
-No other `process.env.*` in app source.
+| `NEXT_PUBLIC_API_URL` | Yes | `src/lib/api/client.ts` (`API_BASE_URL`); default `http://localhost:5000` |
+| ~~`NEXT_PUBLIC_SUPABASE_URL`~~ | — | removed; parity/import scripts only |
+| ~~`NEXT_PUBLIC_SUPABASE_ANON_KEY`~~ | — | removed |
+| ~~`SUPABASE_SERVICE_ROLE_KEY`~~ | — | removed from app; parity/import scripts only |
 
 For .NET: map these to your config, but **JSON field names in responses stay snake_case** regardless of how you name C# config keys.
 

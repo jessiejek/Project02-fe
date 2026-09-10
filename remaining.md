@@ -1,8 +1,11 @@
 # Remaining work (after Phases 1–7)
 
-Phases 1–7 in `truthDare.md` are done. This file tracks **leftover** items that were out of those phases.
+> **Superseded (2026-09-10):** this file predates the Supabase → .NET migration.
+> Supabase is fully torn out (`@supabase/*` uninstalled) — "wire to Supabase"
+> below now means the .NET API via `src/lib/data/*`. Live status:
+> `../Project02-be/INTEGRATION_ROADMAP.md`.
 
-Use the same rules as `truthDare.md`: one checkbox at a time, real Supabase only, no decorative Save/Confirm/Upload buttons.
+Phases 1–7 in `truthDare.md` are done. This file tracks **leftover** items that were out of those phases.
 
 ---
 
