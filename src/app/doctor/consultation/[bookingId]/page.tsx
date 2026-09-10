@@ -28,6 +28,9 @@ import {
   queryFollowUps,
   querySoapTemplates,
   createSoapTemplate,
+  queryDiagnosisTemplates,
+  createDiagnosisTemplate,
+  type DiagnosisTemplateRow,
   upsertConsultationByBooking,
   replaceDiagnoses,
   upsertFollowUpByConsultation,
@@ -298,14 +301,32 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Section 3: Diagnosis
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
   const [newDiagnosisText, setNewDiagnosisText] = useState("");
+  // Doctor's reusable diagnoses (managed on /doctor/templates).
+  const [diagnosisTemplates, setDiagnosisTemplates] = useState<DiagnosisTemplateRow[]>([]);
+  const [saveTplOpen, setSaveTplOpen] = useState(false);
+  const [saveTplLabel, setSaveTplLabel] = useState("");
 
-  function addDiagnosis() {
-    if (!newDiagnosisText.trim()) return;
+  function addDiagnosisLine(text: string) {
+    const t = text.trim();
+    if (!t) return;
     setDiagnoses((prev) => [
       ...prev,
-      { code: "—", description: newDiagnosisText.trim(), type: prev.length === 0 ? "Primary" : "Secondary" },
+      { code: "—", description: t, type: prev.length === 0 ? "Primary" : "Secondary" },
     ]);
+  }
+  function addDiagnosis() {
+    if (!newDiagnosisText.trim()) return;
+    addDiagnosisLine(newDiagnosisText);
     setNewDiagnosisText("");
+  }
+  async function saveDiagnosisTemplate() {
+    const label = saveTplLabel.trim();
+    const body = newDiagnosisText.trim();
+    if (!label || !body) return;
+    const created = await createDiagnosisTemplate(null as never, { label, body });
+    setDiagnosisTemplates((prev) => [...prev, created].sort((a, b) => a.label.localeCompare(b.label)));
+    setSaveTplOpen(false);
+    setSaveTplLabel("");
   }
   function removeDiagnosis(index: number) {
     setDiagnoses((prev) => prev.filter((_, i) => i !== index));
@@ -489,7 +510,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         medCertRequested: bookingRow.med_cert_requested ?? false,
       };
 
-      const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes] = await Promise.all([
+      const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes, dxTemplates] = await Promise.all([
         queryConsultationByBooking(supabase, bookingId).then((data) => ({ data })),
         queryVitalFieldTemplates(supabase),
         queryVitalReadings(supabase, { bookingId }).then((data) => ({ data })),
@@ -506,8 +527,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             })),
         })),
         queryRxGroups(supabase, { bookingId }).then((rows) => ({ data: rows[0] ?? null })),
+        queryDiagnosisTemplates().catch(() => [] as DiagnosisTemplateRow[]),
       ]);
       if (cancelled) return;
+
+      setDiagnosisTemplates(dxTemplates);
 
       if (rxRes.data) {
         setPrescriptionGroup(mapRxGroup(rxRes.data));
@@ -1361,14 +1385,45 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         ))}
                         {diagnoses.length === 0 && <p className="text-label-md text-on-surface-variant">No diagnoses added yet — at least 1 required.</p>}
                       </div>
+
+                      {diagnosisTemplates.length > 0 && (
+                        <select
+                          value=""
+                          onChange={(e) => {
+                            const t = diagnosisTemplates.find((x) => x.id === e.target.value);
+                            if (t) addDiagnosisLine(t.body);
+                          }}
+                          aria-label="Insert a saved diagnosis"
+                          className="w-full rounded-lg border border-outline-variant bg-transparent px-md py-sm text-body-md text-on-surface-variant"
+                        >
+                          <option value="">+ Insert saved diagnosis…</option>
+                          {diagnosisTemplates.map((t) => (
+                            <option key={t.id} value={t.id}>{t.label} — {t.body}</option>
+                          ))}
+                        </select>
+                      )}
+
                       <div className="flex gap-sm">
                         <input
-                          placeholder="Diagnosis / ICD-10 description*"
+                          placeholder="Diagnosis (free text)*"
                           value={newDiagnosisText}
                           onChange={(e) => setNewDiagnosisText(e.target.value)}
                           className="flex-1 rounded-lg border border-outline-variant px-md py-sm"
                         />
                         <Button variant="secondary" onClick={addDiagnosis}>Add</Button>
+                      </div>
+                      <div className="flex items-center justify-between text-label-sm">
+                        <button
+                          type="button"
+                          onClick={() => { setSaveTplLabel(""); setSaveTplOpen(true); }}
+                          disabled={!newDiagnosisText.trim()}
+                          className="text-primary hover:underline disabled:text-on-surface-variant/50 disabled:no-underline"
+                        >
+                          Save typed text as a template
+                        </button>
+                        <Link href="/doctor/templates" className="text-on-surface-variant hover:underline">
+                          Manage templates
+                        </Link>
                       </div>
                     </div>
                   )}
@@ -1690,6 +1745,30 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           placeholder='Title (e.g. "Annual Physical — Normal")'
           className="w-full rounded-lg border border-outline-variant px-md py-sm"
         />
+      </Modal>
+
+      <Modal
+        isOpen={saveTplOpen}
+        onClose={() => setSaveTplOpen(false)}
+        title="Save Diagnosis Template"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setSaveTplOpen(false)}>Cancel</Button>
+            <Button onClick={saveDiagnosisTemplate} disabled={!saveTplLabel.trim() || !newDiagnosisText.trim()}>Save</Button>
+          </>
+        }
+      >
+        <div className="space-y-sm">
+          <p className="text-body-sm text-on-surface-variant">
+            Diagnosis text: <span className="text-on-surface">{newDiagnosisText.trim() || "—"}</span>
+          </p>
+          <input
+            value={saveTplLabel}
+            onChange={(e) => setSaveTplLabel(e.target.value)}
+            placeholder="Short label (e.g. URTI)"
+            className="w-full rounded-lg border border-outline-variant px-md py-sm"
+          />
+        </div>
       </Modal>
 
       <Modal

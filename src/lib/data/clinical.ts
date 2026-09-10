@@ -408,6 +408,39 @@ export async function deleteSoapTemplate(_supabase: unknown, id: string): Promis
   await api.delete(`/api/soap-templates/${id}`);
 }
 
+// ── doctor_diagnosis_templates ────────────────────────────────────────────
+// Reusable free-text diagnoses (§16.8). Always scoped to the logged-in doctor
+// by the API (JWT sub → staff_accounts); no doctorId needed from the FE.
+export interface DiagnosisTemplateRow {
+  id: string;
+  doctor_id: string;
+  label: string;
+  body: string;
+}
+
+export async function queryDiagnosisTemplates(_supabase?: unknown): Promise<DiagnosisTemplateRow[]> {
+  return api.get<DiagnosisTemplateRow[]>("/api/doctor-diagnosis-templates");
+}
+
+export async function createDiagnosisTemplate(
+  _supabase: unknown,
+  input: { label: string; body: string },
+): Promise<DiagnosisTemplateRow> {
+  return api.post<DiagnosisTemplateRow>("/api/doctor-diagnosis-templates", input);
+}
+
+export async function updateDiagnosisTemplate(
+  _supabase: unknown,
+  id: string,
+  input: { label: string; body: string },
+): Promise<DiagnosisTemplateRow> {
+  return api.put<DiagnosisTemplateRow>(`/api/doctor-diagnosis-templates/${id}`, input);
+}
+
+export async function deleteDiagnosisTemplate(_supabase: unknown, id: string): Promise<void> {
+  await api.delete(`/api/doctor-diagnosis-templates/${id}`);
+}
+
 export async function createRxTemplate(
   _supabase: unknown,
   doctorId: string,
