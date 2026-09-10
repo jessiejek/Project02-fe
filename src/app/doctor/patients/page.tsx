@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { one, serviceNames } from "@/lib/one";
+import { queryDoctorBookings } from "@/lib/data/bookings";
 
 interface DoctorPatientRow {
   id: string;
@@ -31,29 +31,24 @@ export default function DoctorPatientsPage() {
 
     async function load() {
       const supabase = createClient();
-      const { data: bookings } = await supabase
-        .from("bookings")
-        .select("booking_id, patient_id, appointment_date, patients(first_name, last_name, patient_code), booking_services(services(name))")
-        .eq("doctor_id", doctorId)
-        .order("appointment_date", { ascending: false })
-        .order("created_at", { ascending: false });
+      const bookings = await queryDoctorBookings(supabase, doctorId);
 
       const byPatient = new Map<string, DoctorPatientRow>();
-      for (const booking of bookings ?? []) {
+      for (const booking of bookings) {
         if (!booking.patient_id || byPatient.has(booking.patient_id)) continue;
-        const patient = one(booking.patients);
+        const patient = booking.patients;
         if (!patient) continue;
         byPatient.set(booking.patient_id, {
           id: booking.patient_id,
           fullName: `${patient.first_name} ${patient.last_name}`,
-          patientCode: patient.patient_code,
+          patientCode: patient.patient_code ?? "",
           latestVisitDate: booking.appointment_date,
-          latestVisitServices: serviceNames(booking.booking_services),
+          latestVisitServices: booking.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
           latestBookingId: booking.booking_id,
         });
       }
 
-      setRows(Array.from(byPatient.values()));
+      setRows([...byPatient.values()]);
     }
     load();
   }, [session?.staffId]);

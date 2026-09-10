@@ -440,6 +440,14 @@ export async function upsertRxGroupByBooking(
   return data as RxGroupRow;
 }
 
+export async function deleteRxGroup(supabase: SupabaseClient, groupId: string): Promise<void> {
+  if (dn("prescription_groups")) {
+    await api.delete(`/api/prescription-groups/${groupId}`);
+    return;
+  }
+  await supabase.from("prescription_groups").delete().eq("group_id", groupId);
+}
+
 export interface RxTemplateRow {
   template_id: string;
   doctor_id: string;

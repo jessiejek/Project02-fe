@@ -14,9 +14,11 @@ import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { createClient } from "@/lib/supabase/client";
-import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
+import { queryConsultations, queryRxGroups, queryVitalReadings, deleteRxGroup } from "@/lib/data/clinical";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
-import { one, serviceNames } from "@/lib/one";
+import { queryPatientById } from "@/lib/data/patients";
+import { queryBookings } from "@/lib/data/bookings";
+import { queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
 import { printHtml, escapeHtml } from "@/lib/print";
 import type { PrescriptionGroup, VitalFieldTemplate, BookingStatus } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -114,36 +116,26 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
 
     async function load() {
       const supabase = createClient();
-      const [patientRes, consultsRes, rxRes, bookingsRes, templates, vitalsRes, labsRes, docsRes, vaxRes] = await Promise.all([
-        supabase.from("patients").select("patient_id, first_name, last_name, patient_code, sex, date_of_birth, contact_number").eq("patient_id", id).maybeSingle(),
+      const [patientRow, consultsRes, rxRes, bookingRows, templates, vitalRows, labRows, docRows, vaxRows] = await Promise.all([
+        queryPatientById(supabase, id),
         queryConsultations(supabase, { patientId: id, doctorId }),
         queryRxGroups(supabase, { patientId: id, doctorId }),
-        supabase
-          .from("bookings")
-          .select("booking_id, appointment_date, status, queue_number, booking_services(services(name))")
-          .eq("patient_id", id)
-          .eq("doctor_id", doctorId)
-          .order("appointment_date", { ascending: false }),
+        queryBookings(supabase, { patientId: id, doctorId }),
         queryVitalFieldTemplates(supabase),
-        supabase.from("patient_vital_readings").select("id, booking_id, template_id, value").eq("patient_id", id),
-        supabase.from("patient_lab_results").select("id, result_title").eq("patient_id", id).order("uploaded_at", { ascending: false }),
-        supabase.from("patient_documents").select("id, title, file_name").eq("patient_id", id).order("uploaded_at", { ascending: false }),
-        supabase
-          .from("patient_vaccinations")
-          .select("id, vaccine_name, dose_number, administered_date, status")
-          .eq("patient_id", id)
-          .order("administered_date", { ascending: false, nullsFirst: false }),
+        queryVitalReadings(supabase, { patientId: id }),
+        queryPatientLabResults(supabase, { patientId: id }),
+        queryPatientDocuments(supabase, { patientId: id }),
+        queryVaccinations(supabase, id),
       ]);
 
-      if (patientRes.data) {
-        const p = patientRes.data;
+      if (patientRow) {
         setPatient({
-          id: p.patient_id,
-          fullName: `${p.first_name} ${p.last_name}`,
-          patientCode: p.patient_code,
-          sex: p.sex,
-          dateOfBirth: p.date_of_birth,
-          contactNumber: p.contact_number ?? "",
+          id: patientRow.patient_id,
+          fullName: `${patientRow.first_name} ${patientRow.last_name}`,
+          patientCode: patientRow.patient_code,
+          sex: patientRow.sex,
+          dateOfBirth: patientRow.date_of_birth,
+          contactNumber: patientRow.contact_number ?? "",
         });
       } else {
         setPatient(null);
@@ -181,12 +173,12 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
       );
 
       setPatientBookings(
-        (bookingsRes.data ?? []).map((b) => ({
+        bookingRows.map((b) => ({
           id: b.booking_id,
           appointmentDate: b.appointment_date,
           status: b.status as BookingStatus,
           queueNumber: b.queue_number,
-          serviceNames: serviceNames(b.booking_services).filter(Boolean),
+          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         })),
       );
 
@@ -202,30 +194,30 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
       );
 
       setPatientVitalReadings(
-        (vitalsRes.data ?? []).map((r) => ({
-          id: r.id,
-          bookingId: r.booking_id,
+        vitalRows.map((r) => ({
+          id: r.id ?? "",
+          bookingId: r.booking_id ?? "",
           templateId: r.template_id,
           value: r.value,
         })),
       );
 
       setPatientLabResults(
-        (labsRes.data ?? []).map((l) => ({
-          id: l.id,
+        labRows.map((l) => ({
+          id: l.id ?? "",
           resultTitle: l.result_title || "Lab result",
         })),
       );
 
       setPatientDocuments(
-        (docsRes.data ?? []).map((d) => ({
-          id: d.id,
+        docRows.map((d) => ({
+          id: d.id ?? "",
           title: d.title || d.file_name,
         })),
       );
 
       setPatientVaccinations(
-        (vaxRes.data ?? []).map((v) => ({
+        vaxRows.map((v) => ({
           id: v.id,
           vaccineName: v.vaccine_name,
           doseNumber: v.dose_number,
@@ -652,7 +644,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               variant="danger"
               onClick={async () => {
                 const supabase = createClient();
-                await supabase.from("prescription_groups").delete().eq("group_id", deleteRxGroupId!);
+                await deleteRxGroup(supabase, deleteRxGroupId!);
                 setPrescriptionGroups((prev) => prev.filter((g) => g.id !== deleteRxGroupId));
                 setDeleteRxGroupId(null);
               }}
