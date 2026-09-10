@@ -30,9 +30,10 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
         type="button"
         aria-label="Close modal"
         onClick={onClose}
-        className="absolute inset-0 bg-on-surface/40 backdrop-blur-sm"
+        className="animate-scrim-in absolute inset-0 bg-on-surface/40 backdrop-blur-sm"
       />
-      <div className="relative z-10 flex max-h-[90vh] w-full max-w-[32rem] flex-col rounded-xl bg-surface-container-lowest shadow-lg">
+      {/* §12 apple-design: the surface materialises (scale + fade), not an instant pop. */}
+      <div className="animate-surface-in relative z-10 flex max-h-[90vh] w-full max-w-[32rem] flex-col rounded-xl bg-surface-container-lowest shadow-lg">
         <div className="flex items-center justify-between border-b border-outline-variant px-lg py-md">
           <h2 className="text-headline-sm text-on-surface">{title}</h2>
           <button

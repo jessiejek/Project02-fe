@@ -29,8 +29,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled}
         className={cn(
-          "inline-flex items-center justify-center gap-sm rounded-lg px-lg py-md text-label-md font-medium transition-colors",
-          "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-none",
+          // §1 (apple-design): feedback on the press itself, instant and snappy.
+          "inline-flex items-center justify-center gap-sm rounded-lg px-lg py-md text-label-md font-medium",
+          "transition-[transform,background-color,color,box-shadow] duration-150 ease-[var(--ease-out-quart)]",
+          "active:scale-[0.97] motion-reduce:active:scale-100",
+          "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-none disabled:active:scale-100",
           VARIANT_CLASSES[variant],
           className,
         )}

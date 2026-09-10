@@ -38,8 +38,9 @@ export function Toast({ variant, message, actionLabel, onAction, actionHref, dis
 
   return (
     <div
+      role="status"
       className={cn(
-        "flex items-center justify-between gap-md rounded-lg border px-md py-sm shadow-sm",
+        "animate-toast-in flex items-center justify-between gap-md rounded-lg border px-md py-sm shadow-sm",
         VARIANT_CLASSES[variant],
       )}
     >

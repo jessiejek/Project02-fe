@@ -155,8 +155,84 @@ body {
 }
 
 .bento-card {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.24s var(--ease-out-quart), box-shadow 0.24s var(--ease-out-quart);
 }
 .bento-card:hover {
   transform: translateY(-2px);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Apple-design foundations (emilkowalski/skills · apple-design).
+   Applies site-wide via shared primitives; no per-page changes.
+   §1 response · §12 materials · §14 reduced motion · §16 craft.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Snappy ease-out — the house default for state changes and presses (§1). */
+  --ease-out-quart: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Gentle settle for surfaces materialising in (§12). */
+  --ease-settle: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Crisp, consistent keyboard focus everywhere (§16 craft). Pointer clicks
+   don't trigger :focus-visible, so mouse users never see it. */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* §12 "materialize, don't just fade" — surfaces arrive with a little scale. */
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-surface-in {
+  animation: surface-in 0.22s var(--ease-settle);
+}
+.animate-scrim-in {
+  animation: scrim-in 0.18s linear;
+}
+.animate-toast-in {
+  animation: toast-in 0.2s var(--ease-out-quart);
+}
+
+/* §14 — reduced motion means a gentler equivalent, not broken feedback:
+   keep opacity/colour changes, drop travel/scale/parallax. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .bento-card:hover {
+    transform: none;
+  }
 }
