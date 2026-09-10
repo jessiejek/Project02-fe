@@ -404,6 +404,18 @@ export async function queryRxGroups(
   return (data ?? []).map((r) => flattenRxGroup(r as Record<string, unknown>));
 }
 
+export async function queryRxGroupById(supabase: SupabaseClient, groupId: string): Promise<RxGroupRow | null> {
+  if (dn("prescription_groups")) {
+    try {
+      return flattenRxGroup(await api.get<Record<string, unknown>>(`/api/prescription-groups/${groupId}`));
+    } catch {
+      return null;
+    }
+  }
+  const { data } = await supabase.from("prescription_groups").select(RX_EMBED).eq("group_id", groupId).maybeSingle();
+  return data ? flattenRxGroup(data as Record<string, unknown>) : null;
+}
+
 export async function upsertRxGroupByBooking(
   supabase: SupabaseClient,
   bookingId: string,

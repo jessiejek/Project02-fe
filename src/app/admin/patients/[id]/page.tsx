@@ -11,6 +11,8 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { Toast } from "@/components/ui/Toast";
 import { createClient } from "@/lib/supabase/client";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
+import { queryPatientById, updatePatient } from "@/lib/data/patients";
+import { queryBookings } from "@/lib/data/bookings";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -66,44 +68,35 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [patientRes, bookingsRes, consultRes] = await Promise.all([
-        supabase.from("patients").select("*").eq("patient_id", id).maybeSingle(),
-        supabase
-          .from("bookings")
-          .select("booking_id, appointment_date, status, doctors(staff_accounts(full_name))")
-          .eq("patient_id", id)
-          .order("appointment_date", { ascending: false }),
+      const [patientRow, bookingRows, consultRes] = await Promise.all([
+        queryPatientById(supabase, id),
+        queryBookings(supabase, { patientId: id }),
         queryConsultations(supabase, { patientId: id }),
       ]);
 
-      if (!patientRes.data) {
+      if (!patientRow) {
         setPatient(null);
         return;
       }
 
-      const p = patientRes.data;
       setPatient({
-        id: p.patient_id,
-        patientCode: p.patient_code,
-        firstName: p.first_name,
-        lastName: p.last_name,
-        sex: p.sex,
-        dateOfBirth: p.date_of_birth,
-        contactNumber: p.contact_number ?? "",
-        email: p.email,
+        id: patientRow.patient_id,
+        patientCode: patientRow.patient_code,
+        firstName: patientRow.first_name,
+        lastName: patientRow.last_name,
+        sex: patientRow.sex,
+        dateOfBirth: patientRow.date_of_birth,
+        contactNumber: patientRow.contact_number ?? "",
+        email: patientRow.email,
       });
 
       setBookings(
-        (bookingsRes.data ?? []).map((b) => {
-          const doctor = Array.isArray(b.doctors) ? b.doctors[0] : b.doctors;
-          const staff = doctor ? (Array.isArray(doctor.staff_accounts) ? doctor.staff_accounts[0] : doctor.staff_accounts) : undefined;
-          return {
-            id: b.booking_id,
-            doctorName: staff?.full_name ?? "Unknown doctor",
-            appointmentDate: b.appointment_date,
-            status: b.status,
-          };
-        }),
+        bookingRows.map((b) => ({
+          id: b.booking_id,
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "Unknown doctor",
+          appointmentDate: b.appointment_date,
+          status: b.status,
+        })),
       );
 
       setConsultations(
@@ -147,23 +140,21 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
     setSaving(true);
     setSaveError("");
     const supabase = createClient();
-    const { error } = await supabase
-      .from("patients")
-      .update({
+    try {
+      await updatePatient(supabase, patient!.id, {
         first_name: editForm.firstName.trim(),
         last_name: editForm.lastName.trim(),
         date_of_birth: editForm.dateOfBirth,
         sex: editForm.sex,
         contact_number: editForm.contactNumber.trim() || null,
         email: editForm.email.trim(),
-      })
-      .eq("patient_id", patient!.id);
-
-    setSaving(false);
-    if (error) {
+      });
+    } catch {
+      setSaving(false);
       setSaveError("Could not save patient. Please try again.");
       return;
     }
+    setSaving(false);
 
     setPatient({
       ...patient!,

@@ -3,6 +3,7 @@ import { todayManila } from "@/lib/clock";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorRatings } from "@/lib/data/admin";
+import { queryDayStatuses } from "@/lib/data/scheduling";
 import { DoctorsBrowseClient } from "./DoctorsBrowseClient";
 
 // Stitch screen_4_browse_doctors. Retiring mockDoctors per
@@ -10,14 +11,14 @@ import { DoctorsBrowseClient } from "./DoctorsBrowseClient";
 export default async function BrowseDoctorsPage() {
   const supabase = await createClient();
   const today = todayManila();
-  const [allDoctors, ratingsRes, dayStatusRes] = await Promise.all([
+  const [allDoctors, ratingsRes, dayStatuses] = await Promise.all([
     queryDoctors(supabase),
     queryDoctorRatings(supabase).then((data) => ({ data })),
-    supabase.from("doctor_day_statuses").select("*").eq("status_date", today),
+    queryDayStatuses(supabase, today),
   ]);
   const doctors = allDoctors.filter((d) => d.staff_accounts?.status !== "Inactive");
   const ratingByDoctor = new Map((ratingsRes.data ?? []).map((r) => [r.doctor_id, r]));
-  const dayStatusByDoctor = new Map((dayStatusRes.data ?? []).map((s) => [s.doctor_id, s.status]));
+  const dayStatusByDoctor = new Map(dayStatuses.map((s) => [s.doctor_id, s.status]));
 
   const cards = doctors.map((doc) => {
     const rating = ratingByDoctor.get(doc.doctor_id);

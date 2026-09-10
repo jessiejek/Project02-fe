@@ -11,6 +11,7 @@ import { queryDoctorById } from "@/lib/data/doctors";
 import { queryDoctorServices } from "@/lib/data/doctorServices";
 import { queryReviews } from "@/lib/data/patientFiles";
 import { queryDoctorRatings } from "@/lib/data/admin";
+import { queryDoctorSchedules, queryDayStatus } from "@/lib/data/scheduling";
 import { indexToDayName } from "@/lib/days";
 
 // Stitch screen_5_doctor_profile. Retiring mockDoctors per
@@ -20,18 +21,18 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
   const supabase = await createClient();
   const today = todayManila();
 
-  const [doctor, doctorServices, scheduleRes, ratingRes, dayStatusRes, reviewsRes] = await Promise.all([
+  const [doctor, doctorServices, schedule, ratingRes, dayStatusRow, reviewsRes] = await Promise.all([
     queryDoctorById(supabase, id),
     queryDoctorServices(supabase, { doctorId: id }),
-    supabase.from("doctor_schedules").select("*").eq("doctor_id", id).order("day_of_week"),
+    queryDoctorSchedules(supabase, id),
     queryDoctorRatings(supabase).then((rows) => ({ data: rows.find((r) => r.doctor_id === id) ?? null })),
-    supabase.from("doctor_day_statuses").select("status").eq("doctor_id", id).eq("status_date", today).maybeSingle(),
+    queryDayStatus(supabase, id, today),
     queryReviews(supabase, { doctorId: id }).then((data) => ({ data })),
   ]);
   const staff = doctor?.staff_accounts ?? null;
   if (!doctor || staff?.status === "Inactive") notFound();
   const doctorName = staff?.full_name ?? "";
-  const dayStatus = dayStatusRes.data?.status ?? "Available";
+  const dayStatus = dayStatusRow?.status ?? "Available";
 
   return (
     <AppShell role="patient">
@@ -90,7 +91,7 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
         <Card>
           <h2 className="mb-md text-headline-sm text-on-surface">Weekly Schedule</h2>
           <div className="flex flex-wrap gap-sm">
-            {(scheduleRes.data ?? []).map((s) => (
+            {schedule.map((s) => (
               <div key={s.day_of_week} className="flex flex-col items-center gap-xs">
                 <span
                   className={
