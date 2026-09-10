@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { createClient } from "@/lib/supabase/client";
 import { queryDoctors } from "@/lib/data/doctors";
+import { queryDoctorSchedules } from "@/lib/data/scheduling";
+import { updateStaffAccount } from "@/lib/data/staff";
 import { indexToDayName } from "@/lib/days";
 
 interface DoctorRow {
@@ -30,20 +32,16 @@ export default function AdminDoctorsPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const [allDoctors, schedulesRes] = await Promise.all([
-        queryDoctors(supabase),
-        supabase.from("doctor_schedules").select("*").eq("is_active", true),
-      ]);
+      const allDoctors = await queryDoctors(supabase);
+      const schedules = await Promise.all(allDoctors.map((d) => queryDoctorSchedules(supabase, d.doctor_id)));
       setDoctors(
-        allDoctors.map((d) => ({
+        allDoctors.map((d, i) => ({
           id: d.doctor_id,
           name: d.staff_accounts?.full_name ?? "",
           specialization: d.specialization,
           consultationFee: Number(d.consultation_fee),
           status: d.staff_accounts?.status ?? "Invited",
-          activeDays: (schedulesRes.data ?? [])
-            .filter((s) => s.doctor_id === d.doctor_id)
-            .map((s) => indexToDayName(s.day_of_week)),
+          activeDays: schedules[i].filter((s) => s.is_active).map((s) => indexToDayName(s.day_of_week)),
         })),
       );
     }
@@ -53,7 +51,7 @@ export default function AdminDoctorsPage() {
   async function confirmDeactivate() {
     if (!deactivating) return;
     const supabase = createClient();
-    await supabase.from("staff_accounts").update({ status: "Inactive" }).eq("staff_id", deactivating);
+    await updateStaffAccount(supabase, deactivating, { status: "Inactive" });
     setDoctors((prev) => prev.map((d) => (d.id === deactivating ? { ...d, status: "Inactive" } : d)));
     setDeactivating(null);
   }
