@@ -1,9 +1,14 @@
 # Parity harness
 
 Per phase of the Supabase → .NET migration (`../../Project02-be/INTEGRATION_ROADMAP.md`),
-for a given query hit **both** backends and deep-diff the JSON. A resource is not
-"flipped" in `src/lib/data/mode.ts` until its diff is empty, or every delta is
-explained in the phase PR.
+for a given query hit **both** backends and deep-diff the JSON.
+
+> **Status: migration complete, 15/15 green (2026-09-10).** The app no longer
+> depends on Supabase, so `@supabase/supabase-js` is not installed. To run this
+> harness again, first: `npm i -D @supabase/supabase-js` (then remove it when
+> done). It's kept for regression spot-checks against the still-live Supabase
+> project; delete `scripts/parity/` + `scripts/dev/import-from-supabase.mjs`
+> once that project is torn down.
 
 ## Usage
 
