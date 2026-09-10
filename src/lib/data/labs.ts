@@ -4,7 +4,6 @@
  * A consultation's lab request is a replace-all set keyed on consultation_id
  * (same shape as consultation_diagnoses). .NET-only — no Supabase equivalent.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
 
 export interface LabOrderRow {
@@ -30,7 +29,7 @@ export interface LabOrderInput {
 }
 
 export async function queryLabOrdersByBooking(
-  _supabase: SupabaseClient,
+  _supabase: unknown,
   bookingId: string,
 ): Promise<LabOrderRow[]> {
   try {
@@ -41,7 +40,7 @@ export async function queryLabOrdersByBooking(
 }
 
 export async function queryLabOrdersByConsultation(
-  _supabase: SupabaseClient,
+  _supabase: unknown,
   consultationId: string,
 ): Promise<LabOrderRow[]> {
   try {
@@ -52,7 +51,7 @@ export async function queryLabOrdersByConsultation(
 }
 
 export async function replaceLabOrdersByConsultation(
-  _supabase: SupabaseClient,
+  _supabase: unknown,
   consultationId: string,
   orders: LabOrderInput[],
 ): Promise<LabOrderRow[]> {

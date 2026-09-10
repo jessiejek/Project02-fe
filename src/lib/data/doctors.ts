@@ -1,18 +1,14 @@
 /**
- * Doctor directory reads (INTEGRATION_ROADMAP.md Phase 2).
+ * Doctor directory reads. Backed entirely by the .NET API (`/api/doctors*`);
+ * returns the canonical contract row shape (§4/§6) so page code reads
+ * `d.staff_accounts?.full_name` etc. unchanged.
  *
- * Returns the canonical contract row shape (§4/§6) regardless of backend, so
- * page code keeps reading `d.staff_accounts?.full_name` etc. unchanged.
- * `resolveMode("doctors")` picks Supabase (today) or the .NET API.
- *
- * Sites still calling `supabase.from("doctors")` directly keep working via the
- * parallel Supabase data — migrate them to these helpers over time.
+ * The leading `_supabase` parameter is a vestige of the Supabase→.NET migration
+ * (call sites pass `null as never`) — kept only to avoid churning every caller.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
 import { one } from "@/lib/one";
-import { resolveMode } from "./mode";
-import { type PagedResult, type PageOpts, clientPage, clampPage } from "./paging";
+import { type PagedResult, type PageOpts, clampPage } from "./paging";
 
 export interface DoctorStaffEmbed {
   full_name: string | null;
@@ -36,10 +32,6 @@ export interface DoctorRow {
   updated_at?: string;
   staff_accounts: DoctorStaffEmbed | null;
 }
-
-// Union of the staff fields any doctor screen reads. Both backends are
-// projected to exactly this so parity diffs are meaningful.
-const STAFF_SELECT = "full_name, status, email, avatar_url";
 
 type RawStaff = Partial<DoctorStaffEmbed> | Partial<DoctorStaffEmbed>[] | null | undefined;
 
@@ -68,35 +60,21 @@ function projectDoctor(raw: Record<string, unknown>): DoctorRow {
   };
 }
 
-export async function queryDoctors(supabase: SupabaseClient): Promise<DoctorRow[]> {
-  if (resolveMode("doctors") === "dotnet") {
-    const rows = await api.get<Record<string, unknown>[]>("/api/doctors", { anonymous: true });
-    return rows.map(projectDoctor);
-  }
-  const { data } = await supabase.from("doctors").select(`*, staff_accounts(${STAFF_SELECT})`);
-  return (data ?? []).map((r) => projectDoctor(r as Record<string, unknown>));
+export async function queryDoctors(_supabase?: unknown): Promise<DoctorRow[]> {
+  const rows = await api.get<Record<string, unknown>[]>("/api/doctors", { anonymous: true });
+  return rows.map(projectDoctor);
 }
 
 /** §16.2 — server-side paged + searched doctor list (admin management screen). */
 export async function queryDoctorsPaged(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   opts: PageOpts = {},
 ): Promise<PagedResult<DoctorRow>> {
   const { page, pageSize } = clampPage(opts);
-  if (resolveMode("doctors") === "dotnet") {
-    const res = await api.get<PagedResult<Record<string, unknown>>>("/api/doctors/search", {
-      query: { q: opts.q || undefined, sort: opts.sort || undefined, page, pageSize },
-    });
-    return { ...res, items: res.items.map(projectDoctor) };
-  }
-  const all = await queryDoctors(supabase);
-  const q = (opts.q ?? "").toLowerCase();
-  const filtered = q
-    ? all.filter((d) =>
-        `${d.staff_accounts?.full_name ?? ""} ${d.specialization} ${d.license_number ?? ""}`.toLowerCase().includes(q),
-      )
-    : all;
-  return clientPage(filtered, opts);
+  const res = await api.get<PagedResult<Record<string, unknown>>>("/api/doctors/search", {
+    query: { q: opts.q || undefined, sort: opts.sort || undefined, page, pageSize },
+  });
+  return { ...res, items: res.items.map(projectDoctor) };
 }
 
 /** Doctor scalar fields the FE edits (snake_case, all optional / partial patch). */
@@ -113,40 +91,27 @@ export type DoctorPatch = Partial<{
 }>;
 
 /**
- * Partial update. .NET's PUT /api/doctors/{id} replaces the whole row, so in
- * dotnet mode we fetch-merge-put to avoid clobbering unsent fields; Supabase
- * `.update()` is already partial.
+ * Partial update. .NET's PUT /api/doctors/{id} replaces the whole row, so we
+ * fetch-merge-put to avoid clobbering unsent fields.
  */
 export async function updateDoctor(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   doctorId: string,
   patch: DoctorPatch,
 ): Promise<void> {
-  if (resolveMode("doctors") === "dotnet") {
-    const current = await api.get<Record<string, unknown>>(`/api/doctors/${doctorId}`);
-    delete current.staff_accounts;
-    await api.put(`/api/doctors/${doctorId}`, { ...current, ...patch });
-    return;
-  }
-  await supabase.from("doctors").update(patch).eq("doctor_id", doctorId);
+  const current = await api.get<Record<string, unknown>>(`/api/doctors/${doctorId}`);
+  delete current.staff_accounts;
+  await api.put(`/api/doctors/${doctorId}`, { ...current, ...patch });
 }
 
 export async function queryDoctorById(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   doctorId: string,
 ): Promise<DoctorRow | null> {
-  if (resolveMode("doctors") === "dotnet") {
-    try {
-      const row = await api.get<Record<string, unknown>>(`/api/doctors/${doctorId}`, { anonymous: true });
-      return projectDoctor(row);
-    } catch {
-      return null;
-    }
+  try {
+    const row = await api.get<Record<string, unknown>>(`/api/doctors/${doctorId}`, { anonymous: true });
+    return projectDoctor(row);
+  } catch {
+    return null;
   }
-  const { data } = await supabase
-    .from("doctors")
-    .select(`*, staff_accounts(${STAFF_SELECT})`)
-    .eq("doctor_id", doctorId)
-    .maybeSingle();
-  return data ? projectDoctor(data as Record<string, unknown>) : null;
 }

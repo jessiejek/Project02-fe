@@ -1,10 +1,11 @@
 /**
- * Clinical lookup tables (INTEGRATION_ROADMAP.md Phase 3): medicines,
- * vital_field_templates, icd10_codes. Read-only, canonical §4 shapes.
+ * Clinical lookup tables: medicines, vital_field_templates, icd10_codes,
+ * lab_test_catalog. Read-only, canonical §4 shapes, served by the .NET API.
+ *
+ * The leading `_supabase` parameter is a migration vestige (callers pass
+ * `null as never`) — kept only to avoid churning every call site.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
-import { resolveMode } from "./mode";
 
 export interface MedicineRow {
   medicine_id: string;
@@ -35,44 +36,22 @@ export interface LabTestRow {
   created_at?: string;
 }
 
-export async function queryMedicines(supabase: SupabaseClient): Promise<MedicineRow[]> {
-  if (resolveMode("medicines") === "dotnet") {
-    return api.get<MedicineRow[]>("/api/medicines", { anonymous: true });
-  }
-  const { data } = await supabase.from("medicines").select("*").order("generic_name");
-  return (data ?? []) as MedicineRow[];
+export async function queryMedicines(_supabase?: unknown): Promise<MedicineRow[]> {
+  return api.get<MedicineRow[]>("/api/medicines", { anonymous: true });
 }
 
-export async function queryVitalFieldTemplates(
-  supabase: SupabaseClient,
-): Promise<VitalFieldTemplateRow[]> {
-  if (resolveMode("vital_field_templates") === "dotnet") {
-    return api.get<VitalFieldTemplateRow[]>("/api/vital-field-templates", { anonymous: true });
-  }
-  const { data } = await supabase.from("vital_field_templates").select("*").order("description");
-  return (data ?? []) as VitalFieldTemplateRow[];
+export async function queryVitalFieldTemplates(_supabase?: unknown): Promise<VitalFieldTemplateRow[]> {
+  return api.get<VitalFieldTemplateRow[]>("/api/vital-field-templates", { anonymous: true });
 }
 
-/**
- * §16.8 Form 3 — the clinic's fixed lab-request panel. .NET-only (no Supabase
- * table); resolves via the `medical_certificates`/labs migration data.
- */
-export async function queryLabTestCatalog(_supabase: SupabaseClient): Promise<LabTestRow[]> {
+/** §16.8 Form 3 — the clinic's fixed lab-request panel. */
+export async function queryLabTestCatalog(_supabase?: unknown): Promise<LabTestRow[]> {
   return api.get<LabTestRow[]>("/api/lab-test-catalog", { anonymous: true });
 }
 
-export async function queryIcd10Codes(
-  supabase: SupabaseClient,
-  q?: string,
-): Promise<Icd10CodeRow[]> {
-  if (resolveMode("icd10_codes") === "dotnet") {
-    return api.get<Icd10CodeRow[]>("/api/icd10-codes", {
-      anonymous: true,
-      query: q ? { q } : undefined,
-    });
-  }
-  let query = supabase.from("icd10_codes").select("*").order("code").limit(50);
-  if (q) query = query.or(`code.ilike.%${q}%,description.ilike.%${q}%`);
-  const { data } = await query;
-  return (data ?? []) as Icd10CodeRow[];
+export async function queryIcd10Codes(_supabase: unknown, q?: string): Promise<Icd10CodeRow[]> {
+  return api.get<Icd10CodeRow[]>("/api/icd10-codes", {
+    anonymous: true,
+    query: q ? { q } : undefined,
+  });
 }

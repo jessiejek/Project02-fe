@@ -7,10 +7,10 @@
  *
  * The .NET paged endpoints ({ items, totalCount }) are unwrapped here.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { todayManila } from "@/lib/clock";
 import { api } from "@/lib/api/client";
-import { resolveMode } from "./mode";
+
+// The leading `_supabase` parameter is a migration vestige (callers pass
+// `null as never`); everything is served by the .NET /api/bookings* endpoints.
 
 type Raw = Record<string, unknown>;
 
@@ -80,14 +80,6 @@ export interface BookingRow {
   booking_services: BookingServiceEmbed[];
   payments: BookingPaymentEmbed | null;
 }
-
-// Full §6 embed select used against Supabase; the .NET WithEmbeds() already
-// returns the equivalent nested shape.
-const SELECT = `*,
-  patients(first_name, last_name, patient_code, contact_number, email, sex, date_of_birth),
-  doctors(specialization, consultation_fee, slot_duration_minutes, staff_accounts(full_name)),
-  booking_services(service_id, price_at_booking, services(name, price, category)),
-  payments(status, waived_reason, or_number, amount, payment_method)`;
 
 function projectDoctor(raw: unknown): BookingDoctorEmbed | null {
   const d = one(raw);
@@ -185,121 +177,68 @@ type BookingFilters = {
 
 /** Generic filtered list. */
 export async function queryBookings(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   filters: BookingFilters = {},
 ): Promise<BookingRow[]> {
-  if (resolveMode("bookings") === "dotnet") {
-    const rows = await api.get<Raw[]>("/api/bookings", {
-      query: {
-        patientId: filters.patientId,
-        doctorId: filters.doctorId,
-        date: filters.date,
-        from: filters.from,
-        to: filters.to,
-        status: filters.status,
-      },
-    });
-    return rows.map(projectBooking);
-  }
-  let q = supabase.from("bookings").select(SELECT);
-  if (filters.patientId) q = q.eq("patient_id", filters.patientId);
-  if (filters.doctorId) q = q.eq("doctor_id", filters.doctorId);
-  if (filters.date) q = q.eq("appointment_date", filters.date);
-  if (filters.from) q = q.gte("appointment_date", filters.from);
-  if (filters.to) q = q.lte("appointment_date", filters.to);
-  if (filters.status) q = q.eq("status", filters.status);
-  const { data } = await q.order("appointment_date", { ascending: false }).order("slot_start_time", { ascending: false });
-  return (data ?? []).map((r) => projectBooking(r as Raw));
+  const rows = await api.get<Raw[]>("/api/bookings", {
+    query: {
+      patientId: filters.patientId,
+      doctorId: filters.doctorId,
+      date: filters.date,
+      from: filters.from,
+      to: filters.to,
+      status: filters.status,
+    },
+  });
+  return rows.map(projectBooking);
 }
 
 /** The logged-in patient's bookings. */
-export async function queryMyBookings(supabase: SupabaseClient, patientId: string): Promise<BookingRow[]> {
-  if (resolveMode("bookings") === "dotnet") {
-    const res = await api.get<{ items?: Raw[] }>("/api/bookings/me", { query: { pageSize: 500 } });
-    return unwrap(res).map(projectBooking);
-  }
-  return queryBookings(supabase, { patientId });
+export async function queryMyBookings(_supabase: unknown, _patientId: string): Promise<BookingRow[]> {
+  const res = await api.get<{ items?: Raw[] }>("/api/bookings/me", { query: { pageSize: 500 } });
+  return unwrap(res).map(projectBooking);
 }
 
 /** Staff/admin list: all, today, or unpaid-for-payment. */
 export async function queryStaffBookings(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   scope: "all" | "today" | "for-payment" = "all",
   opts: { q?: string } = {},
 ): Promise<BookingRow[]> {
-  if (resolveMode("bookings") === "dotnet") {
-    const res = await api.get<{ items?: Raw[] }>(`/api/bookings/staff/${scope}`, {
-      query: { pageSize: 500, q: opts.q || undefined },
-    });
-    return unwrap(res).map(projectBooking);
-  }
-  let q = supabase.from("bookings").select(SELECT);
-  if (scope === "today") q = q.eq("appointment_date", todayManila());
-  const { data } = await q.order("appointment_date", { ascending: false });
-  let rows = (data ?? []).map((r) => projectBooking(r as Raw));
-  if (scope === "for-payment") rows = rows.filter((b) => b.payments?.status === "Unpaid");
-  if (opts.q) {
-    const s = opts.q.toLowerCase();
-    rows = rows.filter((b) =>
-      `${b.patients?.first_name ?? ""} ${b.patients?.last_name ?? ""} ${b.patients?.patient_code ?? ""} ${b.queue_number ?? ""}`
-        .toLowerCase()
-        .includes(s),
-    );
-  }
-  return rows;
+  const res = await api.get<{ items?: Raw[] }>(`/api/bookings/staff/${scope}`, {
+    query: { pageSize: 500, q: opts.q || undefined },
+  });
+  return unwrap(res).map(projectBooking);
 }
 
 /** The logged-in doctor's bookings (all, or just today). */
 export async function queryDoctorBookings(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   doctorId: string,
   opts: { today?: boolean } = {},
 ): Promise<BookingRow[]> {
-  if (resolveMode("bookings") === "dotnet") {
-    const path = opts.today ? "/api/bookings/doctor/today" : "/api/bookings";
-    const rows = await api.get<Raw[]>(path, { query: opts.today ? undefined : { doctorId } });
-    return rows.map(projectBooking);
-  }
-  const rows = await queryBookings(supabase, { doctorId });
-  if (opts.today) {
-    const today = todayManila();
-    return rows.filter((b) => b.appointment_date === today);
-  }
-  return rows;
+  const path = opts.today ? "/api/bookings/doctor/today" : "/api/bookings";
+  const rows = await api.get<Raw[]>(path, { query: opts.today ? undefined : { doctorId } });
+  return rows.map(projectBooking);
 }
 
 /**
  * Booking status transition (Phase 4c). .NET: PUT /api/bookings/{id}/status
- * `{ status, reason }`. `proofType`/`proofValue` (patient online-payment proof)
- * has no .NET endpoint yet — that path stays on Supabase (flagged, Phase 8).
+ * `{ status, reason }`.
  */
 export async function updateBookingStatus(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   bookingId: string,
   status: string,
-  opts: { reason?: string; proofType?: string; proofValue?: string } = {},
+  opts: { reason?: string } = {},
 ): Promise<void> {
-  if (resolveMode("bookings") === "dotnet" && !opts.proofType) {
-    await api.put(`/api/bookings/${bookingId}/status`, { status, reason: opts.reason ?? null });
-    return;
-  }
-  const patch: Record<string, unknown> = { status };
-  if (opts.reason) patch.cancellation_reason = opts.reason;
-  if (opts.proofType) {
-    patch.proof_type = opts.proofType;
-    patch.proof_value = opts.proofValue;
-  }
-  await supabase.from("bookings").update(patch).eq("booking_id", bookingId);
+  await api.put(`/api/bookings/${bookingId}/status`, { status, reason: opts.reason ?? null });
 }
 
-export async function queryBookingById(supabase: SupabaseClient, bookingId: string): Promise<BookingRow | null> {
-  if (resolveMode("bookings") === "dotnet") {
-    try {
-      return projectBooking(await api.get<Raw>(`/api/bookings/${bookingId}`));
-    } catch {
-      return null;
-    }
+export async function queryBookingById(_supabase: unknown, bookingId: string): Promise<BookingRow | null> {
+  try {
+    return projectBooking(await api.get<Raw>(`/api/bookings/${bookingId}`));
+  } catch {
+    return null;
   }
-  const { data } = await supabase.from("bookings").select(SELECT).eq("booking_id", bookingId).maybeSingle();
-  return data ? projectBooking(data as Raw) : null;
 }

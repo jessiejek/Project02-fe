@@ -2,11 +2,10 @@
  * Patient files, vaccinations, reviews (INTEGRATION_ROADMAP.md Phase 6).
  * File uploads go to Project02-be local disk (multipart) instead of Supabase Storage.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { api, API_BASE_URL } from "@/lib/api/client";
-import { resolveMode } from "./mode";
 
-const dn = (r: Parameters<typeof resolveMode>[0]) => resolveMode(r) === "dotnet";
+// The leading `_supabase` parameter on the query fns is a migration vestige
+// (callers pass `null as never`); everything is served by the .NET API now.
 
 // ── patient_documents / patient_lab_results ──────────────────────────────
 interface BookingDoctorEmbed {
@@ -42,35 +41,21 @@ export function fileUrl(stored: string): string {
 }
 
 export async function queryPatientDocuments(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   f: { patientId?: string; bookingId?: string },
 ): Promise<PatientDocumentRow[]> {
-  if (dn("patient_documents")) {
-    return api.get<PatientDocumentRow[]>("/api/patient-documents", {
-      query: { patientId: f.patientId, bookingId: f.bookingId },
-    });
-  }
-  let q = supabase.from("patient_documents").select("*, bookings(doctors(staff_accounts(full_name)))");
-  if (f.patientId) q = q.eq("patient_id", f.patientId);
-  if (f.bookingId) q = q.eq("booking_id", f.bookingId);
-  const { data } = await q.order("uploaded_at", { ascending: false });
-  return (data ?? []) as PatientDocumentRow[];
+  return api.get<PatientDocumentRow[]>("/api/patient-documents", {
+    query: { patientId: f.patientId, bookingId: f.bookingId },
+  });
 }
 
 export async function queryPatientLabResults(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   f: { patientId?: string; bookingId?: string },
 ): Promise<PatientLabResultRow[]> {
-  if (dn("patient_lab_results")) {
-    return api.get<PatientLabResultRow[]>("/api/patient-lab-results", {
-      query: { patientId: f.patientId, bookingId: f.bookingId },
-    });
-  }
-  let q = supabase.from("patient_lab_results").select("*, bookings(doctors(staff_accounts(full_name)))");
-  if (f.patientId) q = q.eq("patient_id", f.patientId);
-  if (f.bookingId) q = q.eq("booking_id", f.bookingId);
-  const { data } = await q.order("uploaded_at", { ascending: false });
-  return (data ?? []) as PatientLabResultRow[];
+  return api.get<PatientLabResultRow[]>("/api/patient-lab-results", {
+    query: { patientId: f.patientId, bookingId: f.bookingId },
+  });
 }
 
 export async function uploadPatientDocument(
@@ -113,16 +98,8 @@ export interface VaccinationRow {
   notes: string | null;
 }
 
-export async function queryVaccinations(supabase: SupabaseClient, patientId: string): Promise<VaccinationRow[]> {
-  if (dn("patient_vaccinations")) {
-    return api.get<VaccinationRow[]>("/api/patient-vaccinations", { query: { patientId } });
-  }
-  const { data } = await supabase
-    .from("patient_vaccinations")
-    .select("*")
-    .eq("patient_id", patientId)
-    .order("administered_date", { ascending: false, nullsFirst: false });
-  return (data ?? []) as VaccinationRow[];
+export async function queryVaccinations(_supabase: unknown, patientId: string): Promise<VaccinationRow[]> {
+  return api.get<VaccinationRow[]>("/api/patient-vaccinations", { query: { patientId } });
 }
 
 // ── reviews ─────────────────────────────────────────────────────────────
@@ -137,27 +114,15 @@ export interface ReviewRow {
 }
 
 export async function queryReviews(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   f: { doctorId?: string; bookingId?: string },
 ): Promise<ReviewRow[]> {
-  if (dn("reviews")) {
-    return api.get<ReviewRow[]>("/api/reviews", { query: { doctorId: f.doctorId, bookingId: f.bookingId } });
-  }
-  let q = supabase.from("reviews").select("*");
-  if (f.doctorId) q = q.eq("doctor_id", f.doctorId);
-  if (f.bookingId) q = q.eq("booking_id", f.bookingId);
-  const { data } = await q.order("created_at", { ascending: false });
-  return (data ?? []) as ReviewRow[];
+  return api.get<ReviewRow[]>("/api/reviews", { query: { doctorId: f.doctorId, bookingId: f.bookingId } });
 }
 
 export async function createReview(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   input: { booking_id: string; doctor_id: string; patient_id: string; rating: number; comment: string | null },
 ): Promise<void> {
-  if (dn("reviews")) {
-    await api.post("/api/reviews", input);
-    return;
-  }
-  const { error } = await supabase.from("reviews").insert(input);
-  if (error) throw error;
+  await api.post("/api/reviews", input);
 }

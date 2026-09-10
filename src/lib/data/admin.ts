@@ -1,12 +1,10 @@
 /**
  * Admin settings / announcements / audit / reports (INTEGRATION_ROADMAP.md Phase 7).
+ * Served by the .NET API. The leading `_supabase` parameter is a migration
+ * vestige (callers pass `null as never`).
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
-import { resolveMode } from "./mode";
-import { type PagedResult, type PageOpts, clientPage, clampPage } from "./paging";
-
-const dn = (r: Parameters<typeof resolveMode>[0]) => resolveMode(r) === "dotnet";
+import { type PagedResult, type PageOpts, clampPage } from "./paging";
 
 // ── clinic_settings ─────────────────────────────────────────────────────
 export interface ClinicSettingsRow {
@@ -34,28 +32,20 @@ export interface ClinicSettingsRow {
   updated_at: string;
 }
 
-export async function queryClinicSettings(supabase: SupabaseClient): Promise<ClinicSettingsRow | null> {
-  if (dn("clinic_settings")) {
-    try {
-      return await api.get<ClinicSettingsRow>("/api/settings", { anonymous: true });
-    } catch {
-      return null;
-    }
+export async function queryClinicSettings(_supabase?: unknown): Promise<ClinicSettingsRow | null> {
+  try {
+    return await api.get<ClinicSettingsRow>("/api/settings", { anonymous: true });
+  } catch {
+    return null;
   }
-  const { data } = await supabase.from("clinic_settings").select("*").eq("id", 1).maybeSingle();
-  return (data as ClinicSettingsRow) ?? null;
 }
 
 export async function updateClinicSettings(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   patch: Partial<ClinicSettingsRow>,
 ): Promise<void> {
-  if (dn("clinic_settings")) {
-    const current = await api.get<ClinicSettingsRow>("/api/settings", { anonymous: true });
-    await api.put("/api/settings", { ...current, ...patch });
-    return;
-  }
-  await supabase.from("clinic_settings").update(patch).eq("id", 1);
+  const current = await api.get<ClinicSettingsRow>("/api/settings", { anonymous: true });
+  await api.put("/api/settings", { ...current, ...patch });
 }
 
 // ── clinic_operating_hours ─────────────────────────────────────────────
@@ -66,41 +56,22 @@ export interface OperatingHourRow {
   close_time: string | null;
 }
 
-export async function queryOperatingHours(supabase: SupabaseClient): Promise<OperatingHourRow[]> {
-  if (dn("clinic_operating_hours")) {
-    return api.get<OperatingHourRow[]>("/api/admin/operating-hours", { anonymous: true });
-  }
-  const { data } = await supabase.from("clinic_operating_hours").select("*").order("day_of_week");
-  return (data ?? []) as OperatingHourRow[];
+export async function queryOperatingHours(_supabase?: unknown): Promise<OperatingHourRow[]> {
+  return api.get<OperatingHourRow[]>("/api/admin/operating-hours", { anonymous: true });
 }
 
-export async function setOperatingHours(supabase: SupabaseClient, hours: OperatingHourRow[]): Promise<void> {
-  if (dn("clinic_operating_hours")) {
-    await api.put("/api/admin/operating-hours", hours);
-    return;
-  }
-  await supabase.from("clinic_operating_hours").upsert(hours, { onConflict: "day_of_week" });
+export async function setOperatingHours(_supabase: unknown, hours: OperatingHourRow[]): Promise<void> {
+  await api.put("/api/admin/operating-hours", hours);
 }
 
 // ── clinic_accepted_payment_methods ───────────────────────────────────
-export async function queryPaymentMethods(supabase: SupabaseClient): Promise<string[]> {
-  if (dn("clinic_accepted_payment_methods")) {
-    const rows = await api.get<{ payment_method: string }[]>("/api/admin/payment-methods", { anonymous: true });
-    return rows.map((r) => r.payment_method);
-  }
-  const { data } = await supabase.from("clinic_accepted_payment_methods").select("payment_method");
-  return (data ?? []).map((r) => r.payment_method as string);
+export async function queryPaymentMethods(_supabase?: unknown): Promise<string[]> {
+  const rows = await api.get<{ payment_method: string }[]>("/api/admin/payment-methods", { anonymous: true });
+  return rows.map((r) => r.payment_method);
 }
 
-export async function setPaymentMethods(supabase: SupabaseClient, methods: string[]): Promise<void> {
-  if (dn("clinic_accepted_payment_methods")) {
-    await api.put("/api/admin/payment-methods", methods);
-    return;
-  }
-  await supabase.from("clinic_accepted_payment_methods").delete().not("payment_method", "is", null);
-  if (methods.length) {
-    await supabase.from("clinic_accepted_payment_methods").insert(methods.map((m) => ({ payment_method: m })));
-  }
+export async function setPaymentMethods(_supabase: unknown, methods: string[]): Promise<void> {
+  await api.put("/api/admin/payment-methods", methods);
 }
 
 // ── announcements ─────────────────────────────────────────────────────
@@ -115,49 +86,33 @@ export interface AnnouncementRow {
 }
 
 export async function queryAnnouncements(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   opts: { activeOnly?: boolean } = {},
 ): Promise<AnnouncementRow[]> {
-  if (dn("announcements")) {
-    return api.get<AnnouncementRow[]>("/api/announcements", {
-      anonymous: true,
-      query: { activeOnly: opts.activeOnly ?? false },
-    });
-  }
-  let q = supabase.from("announcements").select("*");
-  if (opts.activeOnly) q = q.eq("is_active", true);
-  const { data } = await q.order("created_at", { ascending: false });
-  return (data ?? []) as AnnouncementRow[];
+  return api.get<AnnouncementRow[]>("/api/announcements", {
+    anonymous: true,
+    query: { activeOnly: opts.activeOnly ?? false },
+  });
 }
 
 export async function createAnnouncement(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   input: { title: string; body: string; is_active: boolean },
 ): Promise<AnnouncementRow> {
-  if (dn("announcements")) return api.post<AnnouncementRow>("/api/announcements", input);
-  const { data } = await supabase.from("announcements").insert(input).select("*").single();
-  return data as AnnouncementRow;
+  return api.post<AnnouncementRow>("/api/announcements", input);
 }
 
 export async function updateAnnouncement(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   id: string,
   patch: Partial<Pick<AnnouncementRow, "title" | "body" | "is_active">>,
 ): Promise<void> {
-  if (dn("announcements")) {
-    const cur = (await queryAnnouncements(supabase)).find((a) => a.id === id);
-    await api.put(`/api/announcements/${id}`, { ...cur, ...patch });
-    return;
-  }
-  await supabase.from("announcements").update(patch).eq("id", id);
+  const cur = (await queryAnnouncements(null)).find((a) => a.id === id);
+  await api.put(`/api/announcements/${id}`, { ...cur, ...patch });
 }
 
-export async function deleteAnnouncement(supabase: SupabaseClient, id: string): Promise<void> {
-  if (dn("announcements")) {
-    await api.delete(`/api/announcements/${id}`);
-    return;
-  }
-  await supabase.from("announcements").delete().eq("id", id);
+export async function deleteAnnouncement(_supabase: unknown, id: string): Promise<void> {
+  await api.delete(`/api/announcements/${id}`);
 }
 
 // ── audit_logs (read) ─────────────────────────────────────────────────
@@ -172,37 +127,23 @@ export interface AuditLogRow {
 }
 
 export async function queryAuditLogs(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   opts: { entityType?: string; entityId?: string; take?: number } = {},
 ): Promise<AuditLogRow[]> {
-  if (dn("audit_logs")) {
-    return api.get<AuditLogRow[]>("/api/audit-logs", {
-      query: { entityType: opts.entityType, entityId: opts.entityId, take: opts.take ?? 100 },
-    });
-  }
-  let q = supabase.from("audit_logs").select("*");
-  if (opts.entityType) q = q.eq("entity_type", opts.entityType);
-  if (opts.entityId) q = q.eq("entity_id", opts.entityId);
-  const { data } = await q.order("performed_at", { ascending: false }).limit(opts.take ?? 100);
-  return (data ?? []) as AuditLogRow[];
+  return api.get<AuditLogRow[]>("/api/audit-logs", {
+    query: { entityType: opts.entityType, entityId: opts.entityId, take: opts.take ?? 100 },
+  });
 }
 
 /** §16.2 — server-side paged + searched audit trail (admin screen). */
 export async function queryAuditLogsPaged(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   opts: PageOpts & { entityType?: string } = {},
 ): Promise<PagedResult<AuditLogRow>> {
   const { page, pageSize } = clampPage(opts);
-  if (dn("audit_logs")) {
-    return api.get<PagedResult<AuditLogRow>>("/api/audit-logs/search", {
-      query: { q: opts.q || undefined, entityType: opts.entityType, page, pageSize },
-    });
-  }
-  let q = supabase.from("audit_logs").select("*");
-  if (opts.entityType) q = q.eq("entity_type", opts.entityType);
-  if (opts.q) q = q.or(`action.ilike.%${opts.q}%,details.ilike.%${opts.q}%`);
-  const { data } = await q.order("performed_at", { ascending: false }).limit(500);
-  return clientPage((data ?? []) as AuditLogRow[], opts);
+  return api.get<PagedResult<AuditLogRow>>("/api/audit-logs/search", {
+    query: { q: opts.q || undefined, entityType: opts.entityType, page, pageSize },
+  });
 }
 
 export interface DoctorRatingRow {
@@ -211,8 +152,8 @@ export interface DoctorRatingRow {
   review_count: number;
 }
 
-export async function queryDoctorRatings(supabase: SupabaseClient): Promise<DoctorRatingRow[]> {
-  const rows = await queryReport<Record<string, unknown>>(supabase, "v_doctor_ratings");
+export async function queryDoctorRatings(_supabase?: unknown): Promise<DoctorRatingRow[]> {
+  const rows = await queryReport<Record<string, unknown>>(null, "v_doctor_ratings");
   return rows.map((r) => ({
     doctor_id: String(r.doctor_id ?? ""),
     average_rating: Number(r.average_rating ?? 0),
@@ -220,7 +161,7 @@ export async function queryDoctorRatings(supabase: SupabaseClient): Promise<Doct
   }));
 }
 
-// ── v_doctor_earnings (§16.9) — .NET-only view, no Supabase equivalent ──
+// ── v_doctor_earnings (§16.9) ─────────────────────────────────────────
 export interface DoctorEarningsRow {
   doctor_id: string;
   period: string; // 'YYYY-MM'
@@ -235,7 +176,7 @@ export interface DoctorEarningsRow {
  * scopes by JWT); an Admin may pass `doctorId` to scope, or omit it for all.
  */
 export async function queryDoctorEarnings(
-  _supabase: SupabaseClient,
+  _supabase: unknown,
   doctorId?: string,
 ): Promise<DoctorEarningsRow[]> {
   const rows = await api.get<Record<string, unknown>[]>("/api/reports/doctor-earnings", {
@@ -253,7 +194,7 @@ export async function queryDoctorEarnings(
 
 // ── reports (4 views) ────────────────────────────────────────────────
 export async function queryReport<T = Record<string, unknown>>(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   view:
     | "v_doctor_ratings"
     | "v_daily_booking_summary"
@@ -266,9 +207,5 @@ export async function queryReport<T = Record<string, unknown>>(
     v_unpaid_completed_visits: "unpaid-completed-visits",
     v_pending_follow_ups: "pending-follow-ups",
   } as const;
-  if (dn("reports")) {
-    return api.get<T[]>(`/api/reports/${pathByView[view]}`);
-  }
-  const { data } = await supabase.from(view).select("*");
-  return (data ?? []) as T[];
+  return api.get<T[]>(`/api/reports/${pathByView[view]}`);
 }

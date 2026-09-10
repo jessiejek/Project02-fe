@@ -1,9 +1,6 @@
 /**
- * Typed fetch client for the .NET API (Project02-be).
- *
- * Phase 0: this exists but nothing calls it yet — every resource still routes
- * to Supabase via `src/lib/data/mode.ts`. Phase 1 wires the bearer token;
- * Phases 2+ point resources here one at a time.
+ * Typed fetch client for the .NET API (Project02-be). Every `src/lib/data/*`
+ * module routes through here; there is no other backend.
  *
  * Wire format: data resources are snake_case (DOTNET_FRONTEND_CONTRACT.md §4/§6);
  * the /api/auth/* layer is camelCase. Callers get the JSON verbatim — no casing
@@ -33,14 +30,13 @@ export function setTokenProvider(provider: TokenProvider) {
   tokenProvider = provider;
 }
 
-// In the browser under AUTH_MODE=dotnet, fetch the access token from the
-// same-origin /api/session/token route (it lives in an httpOnly cookie).
-// Cached for a minute; a 401 from a real API call clears it via clearCachedToken().
+// The access token lives in an httpOnly cookie (clinic_at). On the server we
+// read it directly; in the browser we fetch it from the same-origin
+// /api/session/token route. Cached for a minute; a 401 from a real API call
+// clears it via clearCachedToken().
 let cachedToken: { value: string; at: number } | undefined;
 
 async function defaultBrowserTokenProvider(): Promise<string | undefined> {
-  if (process.env.NEXT_PUBLIC_AUTH_MODE !== "dotnet") return undefined;
-
   // Server (RSC / route handlers): read the httpOnly cookie directly.
   if (typeof window === "undefined") {
     try {

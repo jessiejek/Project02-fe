@@ -1,11 +1,11 @@
 /**
- * Patient reads (INTEGRATION_ROADMAP.md Phase 2).
- * Returns the canonical contract row shape (§4) from either backend.
+ * Patient reads. Canonical contract row shape (§4), served by the .NET API.
+ *
+ * The leading `_supabase` parameter is a migration vestige (callers pass
+ * `null as never`).
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
-import { resolveMode } from "./mode";
-import { type PagedResult, type PageOpts, clientPage, clampPage } from "./paging";
+import { type PagedResult, type PageOpts, clampPage } from "./paging";
 
 export interface PatientRow {
   patient_id: string;
@@ -37,69 +37,46 @@ export interface PatientRow {
   updated_at: string;
 }
 
-const dotnet = () => resolveMode("patients") === "dotnet";
-
 export type { PagedResult, PageOpts } from "./paging";
 /** @deprecated use PageOpts from ./paging */
 export type PatientsPageOpts = PageOpts;
 
-/**
- * §16.2 — server-side paged + searched patient list. Falls back to a
- * client-side slice of the Supabase list when running in supabase mode.
- */
+/** §16.2 — server-side paged + searched patient list. */
 export async function queryPatientsPaged(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   opts: PageOpts = {},
 ): Promise<PagedResult<PatientRow>> {
   const { page, pageSize } = clampPage(opts);
-  if (dotnet()) {
-    return api.get<PagedResult<PatientRow>>("/api/patients/search", {
-      query: { q: opts.q || undefined, page, pageSize, sort: opts.sort || undefined },
-    });
-  }
-  return clientPage(await queryPatients(supabase, { search: opts.q }), opts);
+  return api.get<PagedResult<PatientRow>>("/api/patients/search", {
+    query: { q: opts.q || undefined, page, pageSize, sort: opts.sort || undefined },
+  });
 }
 
 export async function queryPatients(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   opts: { search?: string } = {},
 ): Promise<PatientRow[]> {
-  if (dotnet()) {
-    return api.get<PatientRow[]>("/api/patients", {
-      query: opts.search ? { search: opts.search } : undefined,
-    });
-  }
-  let q = supabase.from("patients").select("*");
-  if (opts.search) {
-    const s = opts.search.trim();
-    q = q.or(
-      `first_name.ilike.%${s}%,last_name.ilike.%${s}%,patient_code.ilike.%${s}%,email.ilike.%${s}%`,
-    );
-  }
-  const { data } = await q.order("last_name");
-  return (data ?? []) as PatientRow[];
+  return api.get<PatientRow[]>("/api/patients", {
+    query: opts.search ? { search: opts.search } : undefined,
+  });
 }
 
 export async function queryPatientById(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   patientId: string,
 ): Promise<PatientRow | null> {
-  if (dotnet()) {
-    try {
-      return await api.get<PatientRow>(`/api/patients/${patientId}`);
-    } catch {
-      return null;
-    }
+  try {
+    return await api.get<PatientRow>(`/api/patients/${patientId}`);
+  } catch {
+    return null;
   }
-  const { data } = await supabase.from("patients").select("*").eq("patient_id", patientId).maybeSingle();
-  return (data as PatientRow) ?? null;
 }
 
 export type PatientPatch = Partial<Omit<PatientRow, "patient_id" | "created_at" | "updated_at">>;
 
 /** Guest / staff quick-register (no linked auth account). Returns the created row. */
 export async function createPatient(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   fields: {
     first_name: string;
     last_name: string;
@@ -122,56 +99,36 @@ export async function createPatient(
     is_guest: true,
     user_id: null,
   };
-  if (dotnet()) {
-    return api.post<PatientRow>("/api/patients", row);
-  }
-  const { data, error } = await supabase.from("patients").insert(row).select("*").single();
-  if (error || !data) throw error ?? new Error("Could not create patient.");
-  return data as PatientRow;
+  return api.post<PatientRow>("/api/patients", row);
 }
 
-/** Partial update — fetch-merge-put in dotnet mode (PUT replaces the row). */
+/** Partial update — fetch-merge-put (PUT replaces the row). */
 export async function updatePatient(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   patientId: string,
   patch: PatientPatch,
 ): Promise<void> {
-  if (dotnet()) {
-    const current = await api.get<Record<string, unknown>>(`/api/patients/${patientId}`);
-    await api.put(`/api/patients/${patientId}`, { ...current, ...patch });
-    return;
-  }
-  await supabase.from("patients").update(patch).eq("patient_id", patientId);
+  const current = await api.get<Record<string, unknown>>(`/api/patients/${patientId}`);
+  await api.put(`/api/patients/${patientId}`, { ...current, ...patch });
 }
 
 /** Consent acceptance. .NET: PUT /api/patients/{id}/consent with the version int. */
 export async function updatePatientConsent(
-  supabase: SupabaseClient,
+  _supabase: unknown,
   patientId: string,
   consentVersion: number,
 ): Promise<void> {
-  if (dotnet()) {
-    await api.put(`/api/patients/${patientId}/consent`, consentVersion);
-    return;
-  }
-  await supabase
-    .from("patients")
-    .update({ consent_version: consentVersion, consented_at: new Date().toISOString() })
-    .eq("patient_id", patientId);
+  await api.put(`/api/patients/${patientId}/consent`, consentVersion);
 }
 
 /** The logged-in patient's own row. */
 export async function queryMyPatient(
-  supabase: SupabaseClient,
-  userId: string,
+  _supabase: unknown,
+  _userId: string,
 ): Promise<PatientRow | null> {
-  if (dotnet()) {
-    try {
-      return await api.get<PatientRow>("/api/patients/me");
-    } catch {
-      return null;
-    }
+  try {
+    return await api.get<PatientRow>("/api/patients/me");
+  } catch {
+    return null;
   }
-  const { data } = await supabase.from("patients").select("*").eq("user_id", userId).maybeSingle();
-  return (data as PatientRow) ?? null;
 }

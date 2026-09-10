@@ -7,7 +7,6 @@
  *
  * .NET-only — there is no Supabase equivalent for these routes.
  */
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { api } from "@/lib/api/client";
 
 export interface QueueTicket {
@@ -56,18 +55,18 @@ export interface CheckInWalkIn {
   notes?: string | null;
 }
 
-export async function checkInWalkIn(_supabase: SupabaseClient, body: CheckInWalkIn): Promise<QueueTicket> {
+export async function checkInWalkIn(_supabase: unknown, body: CheckInWalkIn): Promise<QueueTicket> {
   return api.post<QueueTicket>("/api/queue", body);
 }
 
-export async function queryQueue(_supabase: SupabaseClient, date?: string): Promise<QueueBoard> {
+export async function queryQueue(_supabase: unknown, date?: string): Promise<QueueBoard> {
   return api.get<QueueBoard>("/api/queue", { query: date ? { date } : undefined });
 }
 
 type QueueAction = "call" | "hold" | "complete" | "no-show";
 
 export async function updateQueueEntry(
-  _supabase: SupabaseClient,
+  _supabase: unknown,
   bookingId: string,
   action: QueueAction,
 ): Promise<void> {
