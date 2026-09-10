@@ -4,8 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/lib/supabase/client";
-import { AUTH_MODE } from "@/lib/auth/mode";
 
 const ROLE_TO_SEGMENT: Record<string, string> = {
   Patient: "patient",
@@ -27,8 +25,7 @@ export default function LoginPage() {
     setError("");
     setSubmitting(true);
 
-    const segment =
-      AUTH_MODE === "dotnet" ? await loginDotnet(email, password) : await loginSupabase(email, password);
+    const segment = await loginDotnet(email, password);
 
     if (typeof segment !== "string") {
       setError(segment.error);
@@ -48,16 +45,6 @@ export default function LoginPage() {
     const body = (await res.json().catch(() => ({}))) as { role?: string; error?: string };
     if (!res.ok || !body.role) return { error: body.error ?? "Incorrect email or password." };
     const segment = ROLE_TO_SEGMENT[body.role];
-    return segment ?? { error: "This account has no role assigned. Contact an administrator." };
-  }
-
-  async function loginSupabase(email: string, password: string): Promise<string | { error: string }> {
-    const supabase = createClient();
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-    if (signInError || !data.user) return { error: "Incorrect email or password." };
-
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
-    const segment = profile ? ROLE_TO_SEGMENT[profile.role] : undefined;
     return segment ?? { error: "This account has no role assigned. Contact an administrator." };
   }
 

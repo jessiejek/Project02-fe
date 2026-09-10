@@ -18,6 +18,20 @@ export async function changePassword(currentPassword: string, newPassword: strin
   }
 }
 
+/** Request a password-reset link. Never throws / never reveals account existence. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE_URL}/api/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+      cache: "no-store",
+    });
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** Re-send the email-verification link. Never throws / never reveals account existence. */
 export async function resendVerification(email: string): Promise<void> {
   try {

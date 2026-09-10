@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
-import { createClient } from "@/lib/supabase/client";
+import { requestPasswordReset } from "@/lib/auth/account";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -16,16 +16,8 @@ export default function ForgotPasswordPage() {
     setError("");
     setSuccess("");
     setSubmitting(true);
-    const supabase = createClient();
-    const redirectTo = typeof window !== "undefined" ? `${window.location.origin}/login` : undefined;
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo,
-    });
+    await requestPasswordReset(email.trim());
     setSubmitting(false);
-    if (resetError) {
-      setError(resetError.message);
-      return;
-    }
     setSuccess("If an account exists for that email, a reset link has been sent.");
   }
 
