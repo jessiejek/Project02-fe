@@ -7,6 +7,7 @@ import {
   getRxGroups,
   getVitals,
   getLabOrders,
+  getMedicalCertificate,
 } from "../support/api";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -43,6 +44,10 @@ const DX_SECONDARY = "Mild dehydration";
 const LAB_TEST = "E2E Throat swab culture";
 const FOLLOWUP_REASON = "E2E re-check if symptoms persist beyond 5 days";
 const FOLLOWUP_INSTRUCTIONS = "E2E return sooner for high fever, difficulty swallowing, or rash.";
+const VAX = { name: "E2E Influenza vaccine", dose: "1", route: "IM", site: "Left deltoid", lot: "E2E-LOT-77", maker: "E2E Biologics" };
+const MC_DIAGNOSIS = "E2E acute viral pharyngitis — unfit for work";
+const MC_RECOMMENDATIONS = "E2E rest for 2 days, oral hydration, follow up if not improving";
+const MC_ADDRESS = "E2E 12 Mabini St, Lapu-Lapu City";
 const VITALS = {
   "blood pressure": "120/80",
   "pulse rate": "74",
@@ -53,7 +58,7 @@ const VITALS = {
   height: "170",
 };
 
-test("walk-in visit: register → full consultation → pay → prescription PDF", async ({ as, api }) => {
+test("walk-in visit: register → full consultation (+ med cert) → pay → prescription PDF", async ({ as, api }) => {
   test.setTimeout(240_000);
   const tag = Date.now().toString(36);
 
@@ -133,6 +138,17 @@ test("walk-in visit: register → full consultation → pay → prescription PDF
   await doctor.getByRole("button", { name: "Add test" }).click();
   await expect(doctor.getByText(LAB_TEST, { exact: false })).toBeVisible();
 
+  // ── 6. Vaccinations — stage one dose ───────────────────────────────────
+  await doctor.getByRole("heading", { name: /6\. Vaccinations/ }).click();
+  await doctor.getByPlaceholder("Vaccine Name").fill(VAX.name);
+  await doctor.getByPlaceholder("Dose #").fill(VAX.dose);
+  await doctor.getByPlaceholder("Route").fill(VAX.route);
+  await doctor.getByPlaceholder("Site").fill(VAX.site);
+  await doctor.getByPlaceholder("Lot #").fill(VAX.lot);
+  await doctor.getByPlaceholder("Manufacturer").fill(VAX.maker);
+  await doctor.getByRole("button", { name: "Stage Vaccination" }).click();
+  await expect(doctor.getByText(`${VAX.name} — Dose #${VAX.dose}`, { exact: false })).toBeVisible();
+
   // ── 7. Follow-up — date + reason + instructions (persists on Complete) ──
   await doctor.getByRole("heading", { name: /7\. Follow-up/ }).click();
   await doctor.getByRole("button", { name: "Select date" }).click();
@@ -142,6 +158,21 @@ test("walk-in visit: register → full consultation → pay → prescription PDF
   await expect(doctor.getByRole("button", { name: "Select date" })).toHaveCount(0);
   await doctor.getByPlaceholder("Reason").fill(FOLLOWUP_REASON);
   await doctor.getByPlaceholder("Instructions").fill(FOLLOWUP_INSTRUCTIONS);
+
+  // ── 8. Medical Certificate — fill + save (own endpoint, persists now) ──
+  await doctor.getByRole("heading", { name: /8\. Medical Certificate/ }).click();
+  await doctor.getByPlaceholder(/residing at/).fill(MC_ADDRESS);
+  await doctor.getByPlaceholder(/Diagnosis \/ Impressions/).fill(MC_DIAGNOSIS);
+  await doctor.getByPlaceholder(/Recommendations/).fill(MC_RECOMMENDATIONS);
+  await doctor.getByRole("button", { name: "Save without printing" }).click();
+  await expect(doctor.getByText(/Certificate saved at/)).toBeVisible({ timeout: 15_000 });
+
+  // ── 9. Professional Fee Decision — flag med-cert fee + record a charge ──
+  await doctor.getByRole("heading", { name: /9\. Professional Fee Decision/ }).click();
+  // the +₱50 med-cert line item — this checkbox DOES persist (backend recomputes the fee)
+  await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
+  await doctor.getByRole("button", { name: "Charge PF" }).click();
+  await doctor.getByPlaceholder("Amount*").fill("500");
 
   // ── Complete → checklist modal → confirm ──────────────────────────────
   await doctor.getByRole("button", { name: "Complete Consultation" }).click();
@@ -192,6 +223,25 @@ test("walk-in visit: register → full consultation → pay → prescription PDF
   expect(rx.length, "prescription group persisted").toBeGreaterThan(0);
   expect(JSON.stringify(rx), "prescription item persisted").toContain("Paracetamol");
 
+  // Medical Certificate — its own endpoint; the "Save without printing" click persisted it.
+  const cert = await getMedicalCertificate(doctorApi, ticket.booking_id);
+  expect(cert, "medical certificate persisted").toBeTruthy();
+  expect(JSON.stringify(cert), "med-cert diagnosis persisted").toContain(MC_DIAGNOSIS);
+  expect(JSON.stringify(cert), "med-cert recommendations persisted").toContain(MC_RECOMMENDATIONS);
+
+  // Professional Fee section: the med-cert checkbox feeds the fee engine — ticking
+  // it (+₱50) must have bumped the booking total from ₱450 to ₱500 on Complete.
+  const bookingAfter = await getBooking(doctorApi, ticket.booking_id);
+  expect(Number(bookingAfter.total_fee), "med-cert +₱50 applied to booking").toBe(500);
+  const expectedDue = Number(bookingAfter.total_fee);
+
+  // KNOWN FE-ONLY GAPS — the "Stage Vaccination" list and the PF Charge/Waive
+  // tabs have no table or endpoint behind them yet (see the "local-only" notes in
+  // src/app/doctor/consultation/[bookingId]/page.tsx). The journey still fills
+  // them so we find out the day that changes; flip this to a positive assert when
+  // a backend lands.
+  expect(JSON.stringify(consult), "vaccinations are still FE-only (not persisted)").not.toContain(VAX.name);
+
   // ── staff: finish the queue entry + collect payment ─────────────────────
   await staff.goto("/staff/queue");
   const row2 = staff.locator("tr", { hasText: ticket.queue_number });
@@ -203,7 +253,7 @@ test("walk-in visit: register → full consultation → pay → prescription PDF
   await payRow.getByRole("button", { name: "Confirm Payment" }).click();
   const payDialog = staff.getByRole("dialog");
   await payDialog.getByRole("combobox").selectOption("Cash");
-  await payDialog.getByPlaceholder("Amount Received").fill(String(ticket.provisional_fee));
+  await payDialog.getByPlaceholder("Amount Received").fill(String(expectedDue));
   await payDialog.getByRole("button", { name: "Confirm", exact: true }).click();
 
   await expect

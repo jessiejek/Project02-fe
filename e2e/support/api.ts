@@ -112,6 +112,14 @@ export async function getLabOrders(api: APIRequestContext, bookingId: string): P
   return res.ok() ? res.json() : [];
 }
 
+export async function getMedicalCertificate(
+  api: APIRequestContext,
+  bookingId: string,
+): Promise<Record<string, unknown> | null> {
+  const res = await api.get(`/api/medical-certificates/by-booking/${bookingId}`);
+  return res.ok() ? res.json() : null;
+}
+
 /** Best-effort teardown — delete the user's guest patient (cascades bookings/consultations). */
 export async function deletePatient(api: APIRequestContext, patientId: string): Promise<void> {
   // No DELETE /api/patients yet; guest rows with no user just linger. Tag them
