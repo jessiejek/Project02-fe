@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
+import { todayManila } from "@/lib/clock";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
@@ -57,7 +58,7 @@ function StaffBookingsContent() {
   const [statusFilter, setStatusFilter] = useState("all");
   // Staff.md §2: "Date (default today)" — now the real current date, not the
   // fixed mock date this defaulted to before.
-  const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dateFilter, setDateFilter] = useState(() => todayManila());
 
   useEffect(() => {
     async function load() {

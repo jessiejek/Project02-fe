@@ -8,6 +8,7 @@
  * The .NET paged endpoints ({ items, totalCount }) are unwrapped here.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { todayManila } from "@/lib/clock";
 import { api } from "@/lib/api/client";
 import { resolveMode } from "./mode";
 
@@ -233,7 +234,7 @@ export async function queryStaffBookings(
     return unwrap(res).map(projectBooking);
   }
   let q = supabase.from("bookings").select(SELECT);
-  if (scope === "today") q = q.eq("appointment_date", new Date().toISOString().slice(0, 10));
+  if (scope === "today") q = q.eq("appointment_date", todayManila());
   const { data } = await q.order("appointment_date", { ascending: false });
   let rows = (data ?? []).map((r) => projectBooking(r as Raw));
   if (scope === "for-payment") rows = rows.filter((b) => b.payments?.status === "Unpaid");
@@ -261,7 +262,7 @@ export async function queryDoctorBookings(
   }
   const rows = await queryBookings(supabase, { doctorId });
   if (opts.today) {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayManila();
     return rows.filter((b) => b.appointment_date === today);
   }
   return rows;

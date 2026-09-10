@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/shell/AppShell";
+import { todayManila } from "@/lib/clock";
 import { createClient } from "@/lib/supabase/server";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorRatings } from "@/lib/data/admin";
@@ -8,7 +9,7 @@ import { DoctorsBrowseClient } from "./DoctorsBrowseClient";
 // Implementation-Phases/05-doctors-staff.md — real doctors only from here on.
 export default async function BrowseDoctorsPage() {
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayManila();
   const [allDoctors, ratingsRes, dayStatusRes] = await Promise.all([
     queryDoctors(supabase),
     queryDoctorRatings(supabase).then((data) => ({ data })),

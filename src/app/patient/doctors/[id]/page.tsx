@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { todayManila } from "@/lib/clock";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -17,7 +18,7 @@ import { indexToDayName } from "@/lib/days";
 export default async function DoctorProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayManila();
 
   const [doctor, doctorServices, scheduleRes, ratingRes, dayStatusRes, reviewsRes] = await Promise.all([
     queryDoctorById(supabase, id),

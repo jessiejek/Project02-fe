@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { todayManila } from "@/lib/clock";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -40,7 +41,7 @@ interface DailySummaryRow {
 // for the selected date range.
 export default function AdminReportsPage() {
   const [dateFrom, setDateFrom] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().slice(0, 10));
-  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+  const [dateTo, setDateTo] = useState(todayManila());
   const [loading, setLoading] = useState(true);
   const [unpaidCompleted, setUnpaidCompleted] = useState<UnpaidVisitRow[]>([]);
   const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUpRow[]>([]);

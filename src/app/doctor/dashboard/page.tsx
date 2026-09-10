@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { todayManila } from "@/lib/clock";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -40,7 +41,7 @@ export default function DoctorDashboardPage() {
     if (!meDoctorId) return;
     async function load() {
       const supabase = createClient();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayManila();
       const [staffRes, statusRow, bookingsRes] = await Promise.all([
         supabase.from("staff_accounts").select("full_name").eq("staff_id", meDoctorId).single(),
         queryDayStatus(supabase, meDoctorId, today),
@@ -81,7 +82,7 @@ export default function DoctorDashboardPage() {
 
   async function setStatus(status: DayStatus) {
     const supabase = createClient();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayManila();
     await saveDayStatus(supabase, meDoctorId, today, status);
     setDayStatus(status);
   }

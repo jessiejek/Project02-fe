@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, use, useEffect, useState } from "react";
+import { todayManila } from "@/lib/clock";
 import Link from "next/link";
 import { useSearchParams, notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
@@ -889,7 +890,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     try {
       const consultId = consultationId ?? (await persistConsultation("Draft"));
       if (!consultId) return;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayManila();
       const cert = {
         patient_id: booking.patientId,
         doctor_id: booking.doctorId,

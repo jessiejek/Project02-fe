@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { todayManila } from "@/lib/clock";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -29,7 +30,7 @@ export default function DoctorStatusPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayManila();
       const [allDoctors, statuses] = await Promise.all([
         queryDoctors(supabase),
         queryDayStatuses(supabase, today),
@@ -57,7 +58,7 @@ export default function DoctorStatusPage() {
 
   async function setStatus(id: string, status: DayStatus) {
     const supabase = createClient();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayManila();
     await setDayStatus(supabase, id, today, status);
     setDoctors((prev) => prev.map((d) => (d.id === id ? { ...d, dayStatus: status } : d)));
   }
@@ -68,7 +69,7 @@ export default function DoctorStatusPage() {
 
   async function applyBulk(status: DayStatus) {
     const supabase = createClient();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayManila();
     await Promise.all(selected.map((doctorId) => setDayStatus(supabase, doctorId, today, status)));
     setDoctors((prev) => prev.map((d) => (selected.includes(d.id) ? { ...d, dayStatus: status } : d)));
     setSelected([]);

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { todayManila } from "@/lib/clock";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
@@ -32,7 +33,7 @@ export default function StaffDashboardPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayManila();
       const { data } = await supabase
         .from("bookings")
         .select("*, patients(first_name, last_name), doctors(staff_accounts(full_name)), payments(status)")

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { todayManila } from "@/lib/clock";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
@@ -46,7 +47,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayManila();
       const monthStart = `${today.slice(0, 7)}-01`;
       const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
 
