@@ -20,7 +20,7 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
   const [doctor, schedule, ratingRes, dayStatusRow, reviewsRes] = await Promise.all([
     queryDoctorById(supabase, id),
     queryDoctorSchedules(supabase, id),
-    queryDoctorRatings(supabase).then((rows) => ({ data: rows.find((r) => r.doctor_id === id) ?? null })),
+    queryDoctorRatings(supabase).then((rows) => ({ data: rows.find((r) => r.doctor_id === id) ?? null })).catch(() => ({ data: null })),
     queryDayStatus(supabase, id, today),
     queryReviews(supabase, { doctorId: id }).then((data) => ({ data })),
   ]);

@@ -12,7 +12,7 @@ export default async function BrowseDoctorsPage() {
   const today = todayManila();
   const [allDoctors, ratingsRes, dayStatuses] = await Promise.all([
     queryDoctors(supabase),
-    queryDoctorRatings(supabase).then((data) => ({ data })),
+    queryDoctorRatings(supabase).then((data) => ({ data })).catch(() => ({ data: [] as Awaited<ReturnType<typeof queryDoctorRatings>> })),
     queryDayStatuses(supabase, today),
   ]);
   const doctors = allDoctors.filter((d) => d.staff_accounts?.status !== "Inactive");

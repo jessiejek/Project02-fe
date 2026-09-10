@@ -66,7 +66,9 @@ export async function queryDoctorSchedules(
   _supabase: unknown,
   doctorId: string,
 ): Promise<DoctorScheduleRow[]> {
-  return api.get<DoctorScheduleRow[]>(`/api/doctors/${doctorId}/schedules`, { anonymous: true });
+  const rows = await api.get<DoctorScheduleRow[]>(`/api/doctors/${doctorId}/schedules`, { anonymous: true });
+  // The API returns rows in insertion order; every consumer wants them Sun→Sat.
+  return [...rows].sort((a, b) => a.day_of_week - b.day_of_week);
 }
 
 export async function upsertDoctorSchedule(

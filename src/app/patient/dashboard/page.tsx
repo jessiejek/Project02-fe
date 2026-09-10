@@ -68,7 +68,7 @@ export default function PatientDashboardPage() {
         queryRxGroups(supabase, { patientId }),
         queryConsultations(supabase, { patientId }),
         queryDoctors(supabase),
-        queryDoctorRatings(supabase).then((data) => ({ data })),
+        queryDoctorRatings(supabase).then((data) => ({ data })).catch(() => ({ data: [] as Awaited<ReturnType<typeof queryDoctorRatings>> })),
       ]);
 
       if (patientRow) {
