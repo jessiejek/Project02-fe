@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Playwright E2E — has its own tsconfig; not app code.
+    "e2e/**",
   ]),
 ]);
 
