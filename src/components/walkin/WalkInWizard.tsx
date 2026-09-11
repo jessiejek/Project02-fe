@@ -13,6 +13,16 @@ import { checkInWalkIn, type QueueTicket } from "@/lib/data/queue";
 import { cn } from "@/lib/cn";
 import type { Role } from "@/lib/nav-config";
 import { printHtml, escapeHtml } from "@/lib/print";
+import { todayManila } from "@/lib/clock";
+
+// PH senior-citizen threshold — 60 years old and above (RA 9994).
+function isSeniorCitizen(dateOfBirth: string): boolean {
+  const [ty, tm, td] = todayManila().split("-").map(Number);
+  const [by, bm, bd] = dateOfBirth.split("-").map(Number);
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age--;
+  return age >= 60;
+}
 
 // §16.3 — no appointment slots. Walk-in FCFS queue: pick the patient, confirm
 // the visit type / discount, check in → queue ticket.
@@ -31,6 +41,7 @@ interface PatientRow {
   id: string;
   patientCode: string;
   fullName: string;
+  dateOfBirth: string;
   contactNumber: string;
   email: string;
   accountStatus: "LinkedAccount" | "NoAccount" | "AccountUnknown";
@@ -70,6 +81,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
           id: p.patient_id,
           patientCode: p.patient_code,
           fullName: `${p.first_name} ${p.last_name}`,
+          dateOfBirth: p.date_of_birth,
           contactNumber: p.contact_number ?? "",
           email: p.email,
           accountStatus: accountStatus(p.user_id, p.is_guest),
@@ -81,6 +93,17 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
   }, []);
 
   const patient = patients.find((p) => p.id === patientId);
+
+  // Auto-tag Senior from the patient's own date of birth (RA 9994, 60+) the
+  // moment they're picked/registered — staff can still change it (e.g. PWD
+  // instead, or the patient doesn't want to claim the discount).
+  useEffect(() => {
+    if (patient?.dateOfBirth) {
+      setDiscountCategory(isSeniorCitizen(patient.dateOfBirth) ? "Senior" : "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patientId]);
+
   const filteredPatients = patients.filter((p) =>
     `${p.fullName} ${p.patientCode} ${p.contactNumber} ${p.email}`.toLowerCase().includes(patientSearch.toLowerCase()),
   );
@@ -116,6 +139,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
       id: data.patient_id,
       patientCode: data.patient_code,
       fullName: `${data.first_name} ${data.last_name}`,
+      dateOfBirth: data.date_of_birth,
       contactNumber: data.contact_number ?? "",
       email: data.email,
       accountStatus: accountStatus(data.user_id, data.is_guest),
@@ -360,6 +384,9 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                   <option value="Senior">Senior citizen</option>
                   <option value="PWD">PWD</option>
                 </select>
+                {discountCategory === "Senior" && patient?.dateOfBirth && isSeniorCitizen(patient.dateOfBirth) && (
+                  <span className="text-label-sm text-on-surface-variant">(auto-detected from date of birth)</span>
+                )}
               </div>
 
               <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
