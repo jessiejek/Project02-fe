@@ -33,6 +33,11 @@ import {
   deleteRxTemplate,
   type RxTemplateRow,
   type RxItem,
+  queryMedicalCertificateTemplates,
+  createMedicalCertificateTemplate,
+  updateMedicalCertificateTemplate,
+  deleteMedicalCertificateTemplate,
+  type MedicalCertificateTemplateRow,
 } from "@/lib/data/clinical";
 
 const NIL = "00000000-0000-0000-0000-000000000000";
@@ -69,6 +74,7 @@ interface NoteDraft {
 interface FavDraft { rxId: string; generic_name: string; dosage: string; quantity: string; instruction: string }
 interface RxLine { rxId: string; genericName: string; dosage: string; quantity: string; instruction: string }
 interface RxDraft { title: string; items: RxLine[] }
+interface McDraft { title: string; diagnosis_text: string; recommendations: string; purpose_exception: string }
 
 export default function DoctorSettingsPage() {
   const { session, loading: sessionLoading } = useSession();
@@ -83,6 +89,7 @@ export default function DoctorSettingsPage() {
   const [notes, setNotes] = useState<SoapTemplateRow[]>([]);
   const [favorites, setFavorites] = useState<FavoriteMedicineRow[]>([]);
   const [rxSets, setRxSets] = useState<RxTemplateRow[]>([]);
+  const [mcTemplates, setMcTemplates] = useState<MedicalCertificateTemplateRow[]>([]);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -93,13 +100,14 @@ export default function DoctorSettingsPage() {
         return;
       }
       try {
-        const [dx, ph, nt, fav, rx, meds] = await Promise.all([
+        const [dx, ph, nt, fav, rx, meds, mc] = await Promise.all([
           queryDiagnosisTemplates(),
           querySoapPhrases(null as never, doctorId),
           querySoapTemplates(null as never, doctorId),
           queryFavoriteMedicines(null as never, doctorId),
           queryRxTemplates(null as never, doctorId),
           queryMedicines(null as never),
+          queryMedicalCertificateTemplates(null as never, doctorId),
         ]);
         setDiagnoses(dx);
         setPhrases(ph);
@@ -107,6 +115,7 @@ export default function DoctorSettingsPage() {
         setFavorites(fav);
         setRxSets(rx.filter((t) => !t.is_system_template));
         setMedicines(meds.map((m) => ({ id: m.medicine_id, generic_name: m.generic_name })));
+        setMcTemplates(mc.filter((t) => !t.is_system_template));
       } catch {
         setLoadError("Could not load your templates. Refresh to try again.");
       } finally {
@@ -455,6 +464,64 @@ export default function DoctorSettingsPage() {
               onDelete={async (id) => {
                 await deleteRxTemplate(null as never, id);
                 setRxSets((p) => p.filter((x) => x.template_id !== id));
+              }}
+            />
+
+            {/* 6. Medical certificate templates */}
+            <TemplateManager<MedicalCertificateTemplateRow, McDraft>
+              title="Medical certificate templates"
+              description={'Canned reasons for a medical certificate. Choose one from "Use Template…" in the Medical Certificate step — dates and the patient\'s address always stay per-issuance, never templated.'}
+              itemNoun="certificate template"
+              items={[...mcTemplates].sort(bySortedLabel)}
+              getId={(t) => t.id}
+              renderSummary={(t) => (
+                <span><strong>{t.title}</strong>{t.diagnosis_text ? ` — ${t.diagnosis_text}` : ""}</span>
+              )}
+              emptyDraft={{ title: "", diagnosis_text: "", recommendations: "", purpose_exception: "" }}
+              toDraft={(t) => ({
+                title: t.title,
+                diagnosis_text: t.diagnosis_text ?? "",
+                recommendations: t.recommendations ?? "",
+                purpose_exception: t.purpose_exception ?? "",
+              })}
+              isValid={(d) => !!d.title.trim()}
+              renderForm={(d, set) => (
+                <div className="space-y-md">
+                  <Field label="Template name">
+                    <input className={inputCls} value={d.title} onChange={(e) => set({ ...d, title: e.target.value })} placeholder='e.g. "Fit to Work"' />
+                  </Field>
+                  <Field label="Diagnosis / Impressions">
+                    <textarea className={inputCls} rows={2} value={d.diagnosis_text} onChange={(e) => set({ ...d, diagnosis_text: e.target.value })} />
+                  </Field>
+                  <Field label="Recommendations">
+                    <textarea className={inputCls} rows={2} value={d.recommendations} onChange={(e) => set({ ...d, recommendations: e.target.value })} />
+                  </Field>
+                  <Field label="Purpose exception (the “except ___” blank)">
+                    <input className={inputCls} value={d.purpose_exception} onChange={(e) => set({ ...d, purpose_exception: e.target.value })} />
+                  </Field>
+                </div>
+              )}
+              onCreate={async (d) => {
+                const c = await createMedicalCertificateTemplate(null as never, doctorId, {
+                  title: d.title.trim(), is_system_template: false,
+                  diagnosis_text: d.diagnosis_text.trim() || null,
+                  recommendations: d.recommendations.trim() || null,
+                  purpose_exception: d.purpose_exception.trim() || null,
+                });
+                setMcTemplates((p) => [...p, c]);
+              }}
+              onUpdate={async (id, d) => {
+                const u = await updateMedicalCertificateTemplate(null as never, id, {
+                  title: d.title.trim(), is_system_template: false,
+                  diagnosis_text: d.diagnosis_text.trim() || null,
+                  recommendations: d.recommendations.trim() || null,
+                  purpose_exception: d.purpose_exception.trim() || null,
+                });
+                setMcTemplates((p) => p.map((x) => (x.id === id ? u : x)));
+              }}
+              onDelete={async (id) => {
+                await deleteMedicalCertificateTemplate(null as never, id);
+                setMcTemplates((p) => p.filter((x) => x.id !== id));
               }}
             />
           </div>

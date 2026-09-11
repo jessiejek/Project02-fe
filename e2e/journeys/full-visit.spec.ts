@@ -255,7 +255,13 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await expect(row2.getByText("COMPLETED")).toBeVisible();
 
   await staff.goto("/staff/payments");
-  const payRow = staff.locator("tr, li", { hasText: ticket.queue_number });
+  // Unlike the same-day queue board, this list isn't date-scoped — a long-lived
+  // dev DB accumulates unpaid rows across many days, and queue numbers reset
+  // daily, so two different days' "Q-012" can both show up in here at once
+  // (the row shows doctor + appointment date + queue #, not the patient name).
+  // Pin down today's date too so the two never collide.
+  const todayManila = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const payRow = staff.locator("tr, li", { hasText: ticket.queue_number }).filter({ hasText: todayManila });
   await payRow.getByRole("button", { name: "Confirm Payment" }).click();
   const payDialog = staff.getByRole("dialog");
   await payDialog.getByRole("combobox").selectOption("Cash");
