@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useEffect, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import { todayManila } from "@/lib/clock";
 import Link from "next/link";
 import { useSearchParams, notFound } from "next/navigation";
@@ -84,6 +84,8 @@ function mapRxGroup(g: RxGroupRow): PrescriptionGroup {
 interface ConsultationBooking {
   id: string;
   patientId: string;
+  patientName: string;
+  patientCode: string;
   doctorId: string;
   doctorName: string;
   appointmentDate: string;
@@ -476,6 +478,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [followUpReason, setFollowUpReason] = useState("");
   const [followUpInstructions, setFollowUpInstructions] = useState("");
   const [followUpReminder, setFollowUpReminder] = useState(true);
+  // Tracks whether a follow-up row existed on load, so persistConsultation can
+  // skip the DELETE call entirely when there was never one to delete — the
+  // API 404s either way, but a consultation with no follow-up hits this on
+  // every single save, and a "failed" request in devtools for a no-op is
+  // just noise a doctor shouldn't have to see.
+  const followUpExisted = useRef(false);
 
   // Section 8: Professional Fee Decision — seeded from the existing record.
   // Optional for completion (see REQUIRED_SECTIONS above); the tabs' own
@@ -502,6 +510,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
   const [mcAddress, setMcAddress] = useState("");
   const [mcExaminedAt, setMcExaminedAt] = useState("");
+  // Default "has been examined in ___" to the doctor's own clinic (a solo
+  // practice — the printed cert reads more naturally naming the doctor than
+  // a generic clinic_name), while staying an editable field either way.
+  const doctorClinicLabel = booking ? `${booking.doctorName.replace(/^Dr\.?\s+/i, "").trim()}, MD Clinic` : "";
   const [mcExamFrom, setMcExamFrom] = useState("");
   const [mcExamTo, setMcExamTo] = useState("");
   const [mcDiagnosis, setMcDiagnosis] = useState("");
@@ -543,6 +555,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const realBooking: ConsultationBooking = {
         id: bookingRow.booking_id,
         patientId: bookingRow.patient_id,
+        patientName: [bookingRow.patients?.first_name, bookingRow.patients?.last_name].filter(Boolean).join(" "),
+        patientCode: bookingRow.patients?.patient_code ?? "",
         doctorId: bookingRow.doctor_id,
         doctorName: bookingRow.doctors?.staff_accounts?.full_name ?? "",
         appointmentDate: bookingRow.appointment_date,
@@ -726,6 +740,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         setFollowUpReason(loadedConsultation.followUpReason ?? "");
         setFollowUpInstructions(loadedConsultation.followUpInstructions ?? "");
         setFollowUpReminder(loadedConsultation.followUpReminder ?? true);
+        followUpExisted.current = Boolean(loadedConsultation.followUpDate);
         setVaccinations(toVaxDraft(loadedConsultation.vaccinationsAdministered));
         const fd = loadedConsultation.feeDecision;
         setPfDecision(fd ? (fd.type === "Charge" ? "charge" : "waive") : null);
@@ -930,8 +945,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         reminder_enabled: followUpReminder,
         status: "Pending",
       });
-    } else {
+      followUpExisted.current = true;
+    } else if (followUpExisted.current) {
+      // Only call DELETE when a follow-up actually existed at some point —
+      // otherwise this is a guaranteed 404 on every single save.
       await deleteFollowUpByConsultation(supabase, savedId);
+      followUpExisted.current = false;
     }
 
     // §16.8 Form 3 — replace-all lab orders for this consultation.
@@ -1009,7 +1028,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         doctor_id: booking.doctorId,
         issue_date: today,
         patient_address_snapshot: mcAddress || null,
-        examined_at: mcExaminedAt || clinicRow.clinic_name,
+        examined_at: mcExaminedAt || doctorClinicLabel || clinicRow.clinic_name,
         examination_date_from: mcExamFrom || today,
         examination_date_to: mcExamTo || mcExamFrom || today,
         diagnosis_text: mcDiagnosis || assessment || null,
@@ -1181,6 +1200,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             </div>
           </div>
           <Card className="space-y-sm text-body-md text-on-surface-variant">
+            <p className="text-body-md text-on-surface">
+              <strong>Patient:</strong> {booking.patientName || "—"}
+              {booking.patientCode ? ` (${booking.patientCode})` : ""}
+            </p>
             <p><strong>Chief Complaint:</strong> {chiefComplaint}</p>
             <p><strong>Diagnoses:</strong> {diagnoses.map((d) => d.description).join(", ")}</p>
             <p>
@@ -1199,9 +1222,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       <AppShell role="doctor">
         <div className="mx-auto max-w-[40rem] space-y-lg">
           <div className="flex flex-wrap items-center justify-between gap-md">
-            <p className="text-label-md text-on-surface-variant">
-              Completed {booking.appointmentDate} by {booking.doctorName}
-            </p>
+            <div>
+              <h1 className="text-headline-sm text-on-surface">
+                {booking.patientName || "Patient"}
+                {booking.patientCode ? ` (${booking.patientCode})` : ""}
+              </h1>
+              <p className="text-label-md text-on-surface-variant">
+                Completed {booking.appointmentDate} by {booking.doctorName}
+              </p>
+            </div>
             <div className="flex flex-wrap gap-sm">
               <Button variant="secondary" onClick={() => setAmendHistoryOpen(true)}>
                 History
@@ -1326,7 +1355,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
         <div className="flex flex-wrap items-center justify-between gap-md">
           <div>
-            <h1 className="text-headline-md text-on-surface">Consultation — {booking.serviceNames.join(", ")}</h1>
+            <h1 className="text-headline-md text-on-surface">
+              {booking.patientName || "Patient"}
+              {booking.patientCode ? ` (${booking.patientCode})` : ""}
+              <span className="text-on-surface-variant font-normal"> — {booking.serviceNames.join(", ")}</span>
+            </h1>
             {/* Noticeable, and reversible — staff's New/Follow-up tag from
                 check-in drives the fee, so the doctor needs to see it without
                 digging into §9, and can flip it right here if it's wrong. */}
@@ -1786,7 +1819,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <input
                           value={mcExaminedAt}
                           onChange={(e) => setMcExaminedAt(e.target.value)}
-                          placeholder={`Examined in… (default: ${clinicRow?.clinic_name ?? "clinic"})`}
+                          placeholder={`Examined in… (default: ${doctorClinicLabel || clinicRow?.clinic_name || "clinic"})`}
                           className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
                         />
                         <label className="text-label-sm text-on-surface-variant">

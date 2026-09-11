@@ -53,6 +53,7 @@ const FORM_CSS = `
   .lh-name { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; }
   .lh-sub { font-size: 11px; color: #3d4947; margin-top: 2px; }
   .doc-title { text-align: center; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin: 8px 0 18px; }
+  .mc-date { text-align: right; margin: 0 0 14px; }
   .row { margin: 6px 0; }
   .row .lbl { color: #3d4947; }
   .rx-symbol { font-size: 32px; font-weight: 700; margin: 8px 0 4px; }
@@ -165,19 +166,21 @@ export function printMedicalCertificate(opts: {
 }): boolean {
   const { clinic, doctor, patient, cert } = opts;
   const addr = cert.patient_address_snapshot ?? patient.address ?? "";
+  const salutation = patient.sex === "Male" ? "Mr." : patient.sex === "Female" ? "Ms." : "Mr./Ms.";
   const inner = `<div class="doc-title">Medical Certificate</div>
-    <div class="row">${e(fmtDate(cert.issue_date ?? new Date().toISOString()))}</div>
-    <p class="row">This is to certify that <strong>${e(patient.full_name)}</strong>,
-      residing at <span class="fill">${e(addr)}</span>,
-      has been examined in <span class="fill">${e(cert.examined_at ?? clinic.clinic_name)}</span>
-      on <span class="fill">${e(fmtDate(cert.examination_date_from))}</span>
+    <div class="mc-date">Date: <span class="fill">${e(fmtDate(cert.issue_date ?? new Date().toISOString()))}</span></div>
+    <p class="row">To whom it may concern,</p>
+    <p class="row">This is to certify that ${salutation} <strong>${e(patient.full_name)}</strong></p>
+    <p class="row">residing at <span class="fill">${e(addr)}</span></p>
+    <p class="row">has been examined in <span class="fill">${e(cert.examined_at ?? clinic.clinic_name)}</span></p>
+    <p class="row">on <span class="fill">${e(fmtDate(cert.examination_date_from))}</span>
       until <span class="fill">${e(fmtDate(cert.examination_date_to))}</span>.</p>
-    <div class="row"><span class="lbl">Diagnosis / Impressions:</span><br/>${e(cert.diagnosis_text)}</div>
+    <div class="row"><span class="lbl">Diagnosis/ Impressions:</span><br/>${e(cert.diagnosis_text)}</div>
     <div class="row"><span class="lbl">Recommendations:</span><br/>${e(cert.recommendations)}</div>
-    <p class="boiler">This certificate is issued upon request for whatever purpose it may serve${
-      cert.purpose_exception ? ` except ${e(cert.purpose_exception)}` : " except ______"
+    <p class="boiler">This certificate is issued upon the request for whatever purpose it may serve except${
+      cert.purpose_exception ? ` ${e(cert.purpose_exception)}` : " ______"
     } and may not be used for medico-legal purposes.</p>
-    ${cert.come_back_on ? `<div class="row"><span class="lbl">Please come back on:</span> ${e(fmtDate(cert.come_back_on))}</div>` : ""}`;
+    <div class="row"><span class="lbl">Please come back on:</span> ${cert.come_back_on ? e(fmtDate(cert.come_back_on)) : '<span class="fill">&nbsp;</span>'}</div>`;
   return wrap("Medical Certificate", clinic, doctor, inner);
 }
 
