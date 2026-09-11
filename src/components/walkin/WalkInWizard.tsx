@@ -17,13 +17,17 @@ import type { Role } from "@/lib/nav-config";
 import { printHtml, escapeHtml } from "@/lib/print";
 import { todayManila } from "@/lib/clock";
 
-// PH senior-citizen threshold — 60 years old and above (RA 9994).
-function isSeniorCitizen(dateOfBirth: string): boolean {
+function computeAge(dateOfBirth: string): number {
   const [ty, tm, td] = todayManila().split("-").map(Number);
   const [by, bm, bd] = dateOfBirth.split("-").map(Number);
   let age = ty - by;
   if (tm < bm || (tm === bm && td < bd)) age--;
-  return age >= 60;
+  return age;
+}
+
+// PH senior-citizen threshold — 60 years old and above (RA 9994).
+function isSeniorCitizen(dateOfBirth: string): boolean {
+  return computeAge(dateOfBirth) >= 60;
 }
 
 // §16.3 — no appointment slots. Walk-in FCFS queue: pick the patient, confirm
@@ -43,6 +47,7 @@ interface PatientRow {
   id: string;
   patientCode: string;
   fullName: string;
+  sex: "Male" | "Female";
   dateOfBirth: string;
   contactNumber: string;
   email: string;
@@ -83,6 +88,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
           id: p.patient_id,
           patientCode: p.patient_code,
           fullName: `${p.first_name} ${p.last_name}`,
+          sex: p.sex,
           dateOfBirth: p.date_of_birth,
           contactNumber: p.contact_number ?? "",
           email: p.email,
@@ -148,6 +154,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
       id: data.patient_id,
       patientCode: data.patient_code,
       fullName: `${data.first_name} ${data.last_name}`,
+      sex: data.sex,
       dateOfBirth: data.date_of_birth,
       contactNumber: data.contact_number ?? "",
       email: data.email,
@@ -277,6 +284,11 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                   <div>
                     <p className="text-body-md text-on-surface">{p.fullName}</p>
                     <p className="text-label-sm text-on-surface-variant">{p.patientCode} · {p.contactNumber}</p>
+                    {/* Staff.md ask: name alone doesn't identify a patient — two
+                        "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do. */}
+                    <p className="text-label-sm text-on-surface-variant">
+                      {p.sex} · {computeAge(p.dateOfBirth)} yrs · {p.dateOfBirth}
+                    </p>
                   </div>
                   <StatusPill status={p.accountStatus} />
                 </button>
