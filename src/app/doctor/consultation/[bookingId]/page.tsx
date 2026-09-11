@@ -211,6 +211,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [rxVersion, setRxVersion] = useState(0);
   const [rxSavedAt, setRxSavedAt] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
   // Save Draft / Complete / Save Changes all funnel through persistConsultation,
   // which makes several sequential API calls — if any of them throws, the
   // whole thing used to fail silently (the button just... did nothing).
@@ -898,11 +899,22 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Prescription, Lab Orders and Medical Certificate already have one) — saves
   // everything currently on the page as a Draft (or, in amend mode, as the
   // Amended record) without moving the consultation to Completed.
+  // The confirmation toast lives *here*, not just at the top of the page —
+  // a doctor working in section 6 of 9 would never scroll back up to see it.
   const sectionSaveFooter = (
-    <div className="flex items-center justify-end gap-sm border-t border-outline-variant pt-md">
-      <Button disabled={mode === "amend" && !canComplete} onClick={saveCurrentProgress}>
-        Save
-      </Button>
+    <div className="space-y-sm border-t border-outline-variant pt-md">
+      {draftSavedAt && mode === "complete" && (
+        <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
+      )}
+      <div className="flex items-center justify-end gap-sm">
+        <Button
+          disabled={mode === "amend" && !canComplete}
+          loading={mode === "complete" && savingDraft}
+          onClick={saveCurrentProgress}
+        >
+          Save
+        </Button>
+      </div>
     </div>
   );
 
@@ -1031,12 +1043,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   async function handleSaveDraft() {
     setSaveError("");
+    setSavingDraft(true);
     try {
       const savedId = await persistConsultation("Draft");
       if (!savedId) throw new Error("Could not save the draft. Check your connection and try again.");
       setDraftSavedAt(new Date().toLocaleTimeString());
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save the draft. Try again.");
+    } finally {
+      setSavingDraft(false);
     }
   }
 
@@ -1503,7 +1518,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             </Button>
             {mode === "complete" ? (
               <>
-                <Button variant="secondary" onClick={handleSaveDraft}>Save Draft</Button>
+                <Button variant="secondary" loading={savingDraft} onClick={handleSaveDraft}>Save Draft</Button>
                 <Button disabled={!canComplete} onClick={() => setChecklistOpen(true)}>
                   Complete Consultation
                 </Button>
