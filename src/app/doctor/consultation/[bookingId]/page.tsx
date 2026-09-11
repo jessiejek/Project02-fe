@@ -209,7 +209,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // accordion itself can use the full page width. Minimized, it collapses to
   // a pill showing whichever section is currently open — e.g. "1/5 SOAP &
   // Chief Complaint" — instead of a generic label.
-  const [progressMinimized, setProgressMinimized] = useState(false);
+  // Starts minimized: expanded, it's wider than the gutter next to the
+  // sidebar and would spill over the form the moment the page loads.
+  const [progressMinimized, setProgressMinimized] = useState(true);
 
   // Doctor.md view-mode "History" button opens an audit-log drawer of
   // amendments — reads from the real audit_logs table (entity_type
@@ -1929,14 +1931,26 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         )}
       </Modal>
 
-      <div className="fixed bottom-lg right-lg z-40 w-[17rem] max-w-[calc(100vw-2*var(--spacing-lg))]">
+      {/* Moved to the left per doctor feedback: docked in the gutter between
+          the sidebar and the content card, not floating over the form. On
+          desktop (persistent 260px sidebar) it's offset clear of the sidebar
+          column so it never covers the Logout link at the sidebar's bottom;
+          on mobile (off-canvas sidebar) a plain left-lg is safe. Minimized =
+          shrink-to-content pill (fits the narrow gutter); only the expanded
+          section list needs the full width, and that's a deliberate click. */}
+      <div
+        className={cn(
+          "fixed bottom-lg left-lg z-40 max-w-[calc(100vw-2*var(--spacing-lg))] md:left-[calc(var(--spacing-sidebar)+var(--spacing-lg))]",
+          progressMinimized ? "w-auto" : "w-[17rem]",
+        )}
+      >
         <Card className="shadow-lg">
           <button
             type="button"
             onClick={() => setProgressMinimized((v) => !v)}
             className="flex w-full items-center justify-between gap-sm text-left"
           >
-            <span className="flex items-center gap-sm text-label-md font-bold text-on-surface-variant">
+            <span className="flex items-center gap-sm whitespace-nowrap text-label-md font-bold text-on-surface-variant">
               <Icon name="monitoring" className="text-[16px]" />
               {progressMinimized ? currentSectionLabel() : "Progress"}
             </span>

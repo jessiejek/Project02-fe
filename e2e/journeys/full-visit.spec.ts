@@ -87,9 +87,8 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.goto(`/doctor/consultation/${ticket.booking_id}`);
   await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
 
-  // The floating "Progress" panel is fixed bottom-right and overlaps controls —
-  // minimise it so it stops intercepting clicks.
-  await doctor.getByRole("button", { name: "Progress", exact: true }).click();
+  // The floating "Progress" panel now starts minimized (a small pill docked
+  // next to the sidebar) — nothing to dismiss before filling the form.
 
   // ── 1. SOAP — all five free-text fields ────────────────────────────────
   await doctor.getByPlaceholder("Chief Complaint*").fill(SOAP.chiefComplaint);
