@@ -95,6 +95,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
   const [othersModalOpen, setOthersModalOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   function setValue(templateId: string, value: string) {
     setValues((prev) => ({ ...prev, [templateId]: value }));
@@ -115,19 +116,24 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
   }
 
   async function confirmSave() {
-    setConfirmOpen(false);
-    // One row per template with a non-empty value; blank fields delete the
-    // row (Implementation-Phases/07-consultations-vitals.md §7c).
-    const supabase = null as never;
-    const relevantTemplateIds = [...defaultTemplates.map((t) => t.id), ...visibleOtherIds];
-    await upsertVitalsByBooking(
-      supabase,
-      bookingId,
-      patientId,
-      relevantTemplateIds.map((templateId) => ({ template_id: templateId, value: (values[templateId] ?? "").trim() })),
-    );
-    setSavedAt(new Date().toLocaleTimeString());
-    onSaved?.();
+    setSaving(true);
+    try {
+      // One row per template with a non-empty value; blank fields delete the
+      // row (Implementation-Phases/07-consultations-vitals.md §7c).
+      const supabase = null as never;
+      const relevantTemplateIds = [...defaultTemplates.map((t) => t.id), ...visibleOtherIds];
+      await upsertVitalsByBooking(
+        supabase,
+        bookingId,
+        patientId,
+        relevantTemplateIds.map((templateId) => ({ template_id: templateId, value: (values[templateId] ?? "").trim() })),
+      );
+      setSavedAt(new Date().toLocaleTimeString());
+      onSaved?.();
+      setConfirmOpen(false);
+    } finally {
+      setSaving(false);
+    }
   }
 
   const addableOthers = otherTemplates.filter((t) => !visibleOtherIds.includes(t.id));
@@ -141,7 +147,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
           <Icon name="add_circle" className="text-[16px]" />
           Others
         </Button>
-        <Button onClick={() => setConfirmOpen(true)}>Save</Button>
+        <Button loading={saving} onClick={() => setConfirmOpen(true)}>Save</Button>
       </div>
 
       <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
@@ -189,10 +195,10 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
         title="Save Changes?"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>
+            <Button variant="secondary" disabled={saving} onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={confirmSave}>Confirm</Button>
+            <Button loading={saving} onClick={confirmSave}>Confirm</Button>
           </>
         }
       >

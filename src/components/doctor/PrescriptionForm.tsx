@@ -546,6 +546,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   const [isAddToTemplate, setIsAddToTemplate] = useState(false);
   const [templateTitle, setTemplateTitle] = useState("");
   const [rxTab, setRxTab] = useState("new");
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ key: number; variant: ToastVariant; message: string } | null>(null);
   const [favorites, setFavorites] = useState<{ id: string; item: PrescriptionLineItem }[]>([]);
   const [templates, setTemplates] = useState<PrescriptionTemplate[]>([]);
@@ -654,33 +655,12 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       return;
     }
 
-    const supabase = null as never;
-    await upsertRxGroupByBooking(supabase, effectiveBookingId, {
-      patient_id: patientId,
-      doctor_id: doctorId,
-      items: items.map((i) => ({
-        medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
-        generic_name: i.genericName,
-        dosage: i.dosage,
-        quantity: i.quantity,
-        instruction: i.instruction || null,
-        is_controlled_substance: i.isControlledSubstance ?? false,
-        // §16.8 Form 1 structured columns.
-        meal_relation: i.mealRelation ?? null,
-        timing: i.timing ?? null,
-        duration_kind: i.durationKind ?? null,
-        duration_value: i.durationValue ?? null,
-        indication: i.indication ?? null,
-      })),
-    });
-
-    // 8d: "Add to Template" writes prescription_templates + its items
-    // alongside the group/line-items write — a separate, additional insert,
-    // not a substitute for the Templates tab's own Add/Edit modal.
-    if (isAddToTemplate) {
-      await createRxTemplate(supabase, doctorId, {
-        title: templateTitle.trim(),
-        is_system_template: false,
+    setSaving(true);
+    try {
+      const supabase = null as never;
+      await upsertRxGroupByBooking(supabase, effectiveBookingId, {
+        patient_id: patientId,
+        doctor_id: doctorId,
         items: items.map((i) => ({
           medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
           generic_name: i.genericName,
@@ -688,14 +668,42 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           quantity: i.quantity,
           instruction: i.instruction || null,
           is_controlled_substance: i.isControlledSubstance ?? false,
+          // §16.8 Form 1 structured columns.
+          meal_relation: i.mealRelation ?? null,
+          timing: i.timing ?? null,
+          duration_kind: i.durationKind ?? null,
+          duration_value: i.durationValue ?? null,
+          indication: i.indication ?? null,
         })),
       });
-    }
 
-    if (embedded) {
-      onSaved?.();
-    } else {
-      router.push(`/doctor/patients/${patientId}?bookingId=${effectiveBookingId}&tab=prescriptions`);
+      // 8d: "Add to Template" writes prescription_templates + its items
+      // alongside the group/line-items write — a separate, additional insert,
+      // not a substitute for the Templates tab's own Add/Edit modal.
+      if (isAddToTemplate) {
+        await createRxTemplate(supabase, doctorId, {
+          title: templateTitle.trim(),
+          is_system_template: false,
+          items: items.map((i) => ({
+            medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
+            generic_name: i.genericName,
+            dosage: i.dosage,
+            quantity: i.quantity,
+            instruction: i.instruction || null,
+            is_controlled_substance: i.isControlledSubstance ?? false,
+          })),
+        });
+      }
+
+      if (embedded) {
+        onSaved?.();
+      } else {
+        router.push(`/doctor/patients/${patientId}?bookingId=${effectiveBookingId}&tab=prescriptions`);
+      }
+    } catch {
+      showToast("error", "Could not save the prescription. Try again.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -705,7 +713,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
 
       <div className="flex items-center justify-between">
         {!embedded && <h1 className="text-headline-md text-on-surface">Prescriptions</h1>}
-        <Button onClick={handleSave} className={cn(embedded && "ml-auto")}>
+        <Button loading={saving} onClick={handleSave} className={cn(embedded && "ml-auto")}>
           <Icon name="check" className="text-[16px]" />
           Save
         </Button>

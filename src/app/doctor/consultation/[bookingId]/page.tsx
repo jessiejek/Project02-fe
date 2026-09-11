@@ -212,6 +212,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [rxSavedAt, setRxSavedAt] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [savingChanges, setSavingChanges] = useState(false);
   // Save Draft / Complete / Save Changes all funnel through persistConsultation,
   // which makes several sequential API calls — if any of them throws, the
   // whole thing used to fail silently (the button just... did nothing).
@@ -909,7 +910,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       <div className="flex items-center justify-end gap-sm">
         <Button
           disabled={mode === "amend" && !canComplete}
-          loading={mode === "complete" && savingDraft}
+          loading={mode === "complete" ? savingDraft : savingChanges}
           onClick={saveCurrentProgress}
         >
           Save
@@ -1180,6 +1181,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   async function handleSaveChanges() {
     if (!canComplete || !booking) return;
     setSaveError("");
+    setSavingChanges(true);
     try {
       const savedId = await persistConsultation("Amended");
       if (!savedId) throw new Error("Could not save your changes. Check your connection and try again.");
@@ -1200,6 +1202,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setMode("view");
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save your changes. Try again.");
+    } finally {
+      setSavingChanges(false);
     }
   }
 
@@ -1528,7 +1532,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 <Button variant="secondary" onClick={requestCancelAmend}>
                   Cancel
                 </Button>
-                <Button disabled={!canComplete} onClick={handleSaveChanges}>Save Changes</Button>
+                <Button disabled={!canComplete} loading={savingChanges} onClick={handleSaveChanges}>Save Changes</Button>
               </>
             )}
           </div>
@@ -1793,10 +1797,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <p className="text-label-md text-on-surface-variant">No tests selected (optional). Saved with the consultation.</p>
                       ) : (
                         <div className="flex flex-wrap gap-sm border-t border-outline-variant pt-md">
-                          <Button disabled={savingLabs || !booking} onClick={() => handleSaveLabOrders(true)}>
-                            {savingLabs ? "Working…" : "Save & Print Lab Request"}
+                          <Button loading={savingLabs} disabled={!booking} onClick={() => handleSaveLabOrders(true)}>
+                            Save & Print Lab Request
                           </Button>
-                          <Button variant="secondary" disabled={savingLabs || !booking} onClick={() => handleSaveLabOrders(false)}>
+                          <Button variant="secondary" loading={savingLabs} disabled={!booking} onClick={() => handleSaveLabOrders(false)}>
                             Save without printing
                           </Button>
                         </div>
@@ -1935,10 +1939,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         </label>
                       </div>
                       <div className="flex flex-wrap gap-sm">
-                        <Button disabled={issuingCert || !clinicRow} onClick={() => handleIssueMedCert(true)}>
-                          {issuingCert ? "Working…" : certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
+                        <Button loading={issuingCert} disabled={!clinicRow} onClick={() => handleIssueMedCert(true)}>
+                          {certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
                         </Button>
-                        <Button variant="secondary" disabled={issuingCert || !clinicRow} onClick={() => handleIssueMedCert(false)}>
+                        <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => handleIssueMedCert(false)}>
                           Save without printing
                         </Button>
                       </div>
