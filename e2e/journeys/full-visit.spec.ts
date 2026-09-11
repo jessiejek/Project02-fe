@@ -87,8 +87,8 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.goto(`/doctor/consultation/${ticket.booking_id}`);
   await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
 
-  // The floating "Progress" panel now starts minimized (a small pill docked
-  // next to the sidebar) — nothing to dismiss before filling the form.
+  // Progress is a header dropdown now (closed by default), not a floating
+  // panel — nothing to dismiss before filling the form.
 
   // ── 1. SOAP — all five free-text fields ────────────────────────────────
   await doctor.getByPlaceholder("Chief Complaint*").fill(SOAP.chiefComplaint);

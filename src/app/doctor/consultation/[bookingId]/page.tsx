@@ -209,9 +209,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // accordion itself can use the full page width. Minimized, it collapses to
   // a pill showing whichever section is currently open — e.g. "1/5 SOAP &
   // Chief Complaint" — instead of a generic label.
-  // Starts minimized: expanded, it's wider than the gutter next to the
-  // sidebar and would spill over the form the moment the page loads.
-  const [progressMinimized, setProgressMinimized] = useState(true);
+  // Progress used to be a floating panel — it always cost screen space, either
+  // a wide list overlapping the form or a pill sitting in a gutter too narrow
+  // for it. Now it's a header button that opens a normal anchored dropdown:
+  // zero footprint closed, and open is a deliberate, dismissible action.
+  const [progressOpen, setProgressOpen] = useState(false);
 
   // Doctor.md view-mode "History" button opens an audit-log drawer of
   // amendments — reads from the real audit_logs table (entity_type
@@ -803,20 +805,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     return <Icon name={STATUS_ICON[status].icon} className={cn(className, STATUS_ICON[status].cls)} />;
   }
 
-  // What the minimized floating Progress pill shows — the section currently
-  // open (i.e. whichever one you're working in), as "1/5 SOAP & Chief
-  // Complaint" for fraction-tracked sections, or just its name otherwise.
-  function currentSectionLabel(): string {
-    if (openSection < 0) return "Progress";
-    const fields = FRACTION_FIELDS[openSection];
-    const name = SECTIONS[openSection];
-    if (fields) {
-      const filled = fields.filter((f) => (f ?? "").trim() !== "").length;
-      return `${filled}/${fields.length} ${name}`;
-    }
-    return name;
-  }
-
   // Doctor.md's "Required fields to complete a consultation" section is
   // explicit: Chief Complaint, >=1 diagnosis, BP, HR — "everything else
   // (...PF decision) is optional/recommended." This previously also gated on
@@ -1281,6 +1269,53 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         <div className="flex flex-wrap items-center justify-between gap-md">
           <h1 className="text-headline-md text-on-surface">Consultation — {booking.serviceNames.join(", ")}</h1>
           <div className="flex flex-wrap gap-sm">
+            <div className="relative">
+              <Button
+                variant="secondary"
+                onClick={() => setProgressOpen((v) => !v)}
+                aria-expanded={progressOpen}
+                aria-haspopup="true"
+              >
+                <Icon name="monitoring" className="text-[18px]" />
+                {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
+                <Icon name={progressOpen ? "expand_less" : "expand_more"} className="text-[16px]" />
+              </Button>
+              {progressOpen && (
+                <>
+                  {/* Click-outside catcher — a plain overlay, not a scrim (this is a menu, not a modal). */}
+                  <button
+                    type="button"
+                    aria-label="Close progress menu"
+                    tabIndex={-1}
+                    onClick={() => setProgressOpen(false)}
+                    className="fixed inset-0 z-40 cursor-default"
+                  />
+                  <Card className="absolute right-0 z-50 mt-xs w-[17rem] shadow-lg">
+                    <p className="mb-sm text-label-md font-bold text-on-surface-variant">Progress</p>
+                    <ul className="space-y-sm text-label-md text-on-surface-variant">
+                      {SECTIONS.map((s, i) => (
+                        <li key={s}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenSection(i);
+                              setProgressOpen(false);
+                            }}
+                            className={cn(
+                              "flex w-full items-center gap-sm rounded-lg px-xs py-1 text-left transition-colors hover:bg-surface-container-low",
+                              openSection === i && "bg-primary/10 font-medium text-on-surface",
+                            )}
+                          >
+                            {renderSectionIndicator(i, "text-[16px]")}
+                            {s}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                </>
+              )}
+            </div>
             <Button variant="secondary" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts help">
               <Icon name="help" className="text-[18px]" />
             </Button>
@@ -1931,52 +1966,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         )}
       </Modal>
 
-      {/* Moved to the left per doctor feedback: docked in the gutter between
-          the sidebar and the content card, not floating over the form. On
-          desktop (persistent 260px sidebar) it's offset clear of the sidebar
-          column so it never covers the Logout link at the sidebar's bottom;
-          on mobile (off-canvas sidebar) a plain left-lg is safe. Minimized =
-          shrink-to-content pill (fits the narrow gutter); only the expanded
-          section list needs the full width, and that's a deliberate click. */}
-      <div
-        className={cn(
-          "fixed bottom-lg left-lg z-40 max-w-[calc(100vw-2*var(--spacing-lg))] md:left-[calc(var(--spacing-sidebar)+var(--spacing-lg))]",
-          progressMinimized ? "w-auto" : "w-[17rem]",
-        )}
-      >
-        <Card className="shadow-lg">
-          <button
-            type="button"
-            onClick={() => setProgressMinimized((v) => !v)}
-            className="flex w-full items-center justify-between gap-sm text-left"
-          >
-            <span className="flex items-center gap-sm whitespace-nowrap text-label-md font-bold text-on-surface-variant">
-              <Icon name="monitoring" className="text-[16px]" />
-              {progressMinimized ? currentSectionLabel() : "Progress"}
-            </span>
-            <Icon name={progressMinimized ? "expand_less" : "expand_more"} className="text-on-surface-variant" />
-          </button>
-          {!progressMinimized && (
-            <ul className="mt-md space-y-sm text-label-md text-on-surface-variant">
-              {SECTIONS.map((s, i) => (
-                <li key={s}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSection(i)}
-                    className={cn(
-                      "flex w-full items-center gap-sm rounded-lg px-xs py-1 text-left transition-colors hover:bg-surface-container-low",
-                      openSection === i && "bg-primary/10 font-medium text-on-surface",
-                    )}
-                  >
-                    {renderSectionIndicator(i, "text-[16px]")}
-                    {s}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
     </AppShell>
   );
 }
