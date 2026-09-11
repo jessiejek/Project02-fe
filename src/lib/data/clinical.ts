@@ -432,6 +432,47 @@ export async function deleteSoapTemplate(_supabase: unknown, id: string): Promis
   await api.delete(`/api/soap-templates/${id}`);
 }
 
+// ── medical certificate templates ──────────────────────────────────────────
+// Canned "reason for the cert" text (e.g. "Fit to Work", "Sick Leave 3 days")
+// — only the fields that actually get reused across issuances; dates and the
+// patient's address stay per-issuance on the certificate itself.
+export interface MedicalCertificateTemplateRow {
+  id: string;
+  doctor_id: string;
+  title: string;
+  is_system_template: boolean;
+  diagnosis_text: string | null;
+  recommendations: string | null;
+  purpose_exception: string | null;
+}
+
+export async function queryMedicalCertificateTemplates(
+  _supabase: unknown,
+  doctorId?: string,
+): Promise<MedicalCertificateTemplateRow[]> {
+  return api.get<MedicalCertificateTemplateRow[]>("/api/medical-certificate-templates", { query: { doctorId } });
+}
+
+export async function createMedicalCertificateTemplate(
+  _supabase: unknown,
+  doctorId: string,
+  input: Omit<MedicalCertificateTemplateRow, "id" | "doctor_id">,
+): Promise<MedicalCertificateTemplateRow> {
+  return api.post<MedicalCertificateTemplateRow>("/api/medical-certificate-templates", input, { query: { doctorId } });
+}
+
+export async function updateMedicalCertificateTemplate(
+  _supabase: unknown,
+  id: string,
+  input: Omit<MedicalCertificateTemplateRow, "id" | "doctor_id">,
+): Promise<MedicalCertificateTemplateRow> {
+  return api.put<MedicalCertificateTemplateRow>(`/api/medical-certificate-templates/${id}`, input);
+}
+
+export async function deleteMedicalCertificateTemplate(_supabase: unknown, id: string): Promise<void> {
+  await api.delete(`/api/medical-certificate-templates/${id}`);
+}
+
 // ── doctor_diagnosis_templates ────────────────────────────────────────────
 // Reusable free-text diagnoses (§16.8). Always scoped to the logged-in doctor
 // by the API (JWT sub → staff_accounts); no doctorId needed from the FE.

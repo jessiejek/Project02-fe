@@ -43,6 +43,9 @@ import {
   queryVitalReadings,
   writeAuditLog,
   type RxGroupRow,
+  queryMedicalCertificateTemplates,
+  createMedicalCertificateTemplate,
+  type MedicalCertificateTemplateRow,
 } from "@/lib/data/clinical";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
@@ -288,6 +291,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setSaveTemplateOpen(false);
   }
 
+  function applyMcTemplate(template: MedicalCertificateTemplateRow) {
+    setMcDiagnosis(template.diagnosis_text ?? "");
+    setMcRecommendations(template.recommendations ?? "");
+    setMcPurposeException(template.purpose_exception ?? "");
+  }
+
+  async function saveMcAsTemplate() {
+    if (!saveMcTplTitle.trim() || !booking) return;
+    const supabase = null as never;
+    const data = await createMedicalCertificateTemplate(supabase, booking.doctorId, {
+      title: saveMcTplTitle.trim(),
+      is_system_template: false,
+      diagnosis_text: mcDiagnosis || null,
+      recommendations: mcRecommendations || null,
+      purpose_exception: mcPurposeException || null,
+    });
+    setMcTemplates((prev) => [...prev, data].sort((a, b) => a.title.localeCompare(b.title)));
+    setSaveMcTplTitle("");
+    setSaveMcTplOpen(false);
+  }
+
   // Section 2: Vital Signs — rebuilt per clinic-vitals-fe.md. Vitals are no
   // longer local form state; they live in PatientVitalReading rows (keyed by
   // this bookingId) edited on the standalone Vitals Details page. This
@@ -481,6 +505,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [certExists, setCertExists] = useState(false);
   const [issuingCert, setIssuingCert] = useState(false);
   const [certSavedAt, setCertSavedAt] = useState<string | null>(null);
+  // Doctor's reusable "reason for the cert" text (managed in Settings).
+  const [mcTemplates, setMcTemplates] = useState<MedicalCertificateTemplateRow[]>([]);
+  const [saveMcTplOpen, setSaveMcTplOpen] = useState(false);
+  const [saveMcTplTitle, setSaveMcTplTitle] = useState("");
 
   // §16.6 preview of the flat-line fee the backend will compute on save.
   const previewFee = (() => {
@@ -519,7 +547,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         medCertRequested: bookingRow.med_cert_requested ?? false,
       };
 
-      const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes, dxTemplates] = await Promise.all([
+      const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes, dxTemplates, mcTemplatesRes] = await Promise.all([
         queryConsultationByBooking(supabase, bookingId).then((data) => ({ data })),
         queryVitalFieldTemplates(supabase),
         queryVitalReadings(supabase, { bookingId }).then((data) => ({ data })),
@@ -537,10 +565,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         })),
         queryRxGroups(supabase, { bookingId }).then((rows) => ({ data: rows[0] ?? null })),
         queryDiagnosisTemplates().catch(() => [] as DiagnosisTemplateRow[]),
+        queryMedicalCertificateTemplates(supabase, realBooking.doctorId).catch(() => [] as MedicalCertificateTemplateRow[]),
       ]);
       if (cancelled) return;
 
       setDiagnosisTemplates(dxTemplates);
+      setMcTemplates(mcTemplatesRes);
 
       if (rxRes.data) {
         setPrescriptionGroup(mapRxGroup(rxRes.data));
@@ -1690,6 +1720,38 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         §16.8 Form 2. Blank fields fall back to the SOAP Assessment / Plan and the
                         follow-up date. Issuing marks &ldquo;medical certificate&rdquo; on the fee (+₱{feeSchedule?.medCert ?? 50}).
                       </p>
+                      <div className="flex flex-wrap items-center justify-end gap-md">
+                        {mcTemplates.length > 0 && (
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              const t = mcTemplates.find((x) => x.id === e.target.value);
+                              if (t) applyMcTemplate(t);
+                            }}
+                            aria-label="Use certificate template"
+                            className="rounded-lg border border-outline-variant px-sm py-xs text-label-sm"
+                          >
+                            <option value="">Use Template…</option>
+                            {mcTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.title}
+                                {t.is_system_template ? " (system)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSaveMcTplOpen(true)}
+                          disabled={!mcDiagnosis.trim() && !mcRecommendations.trim() && !mcPurposeException.trim()}
+                          className="text-label-sm text-primary hover:underline disabled:text-on-surface-variant/50 disabled:no-underline"
+                        >
+                          Save as Template
+                        </button>
+                        <Link href="/doctor/settings" className="text-label-sm text-on-surface-variant hover:underline">
+                          Manage templates
+                        </Link>
+                      </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
                         <input
                           value={mcAddress}
@@ -1864,6 +1926,35 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           placeholder='Title (e.g. "Annual Physical — Normal")'
           className="w-full rounded-lg border border-outline-variant px-md py-sm"
         />
+      </Modal>
+
+      <Modal
+        isOpen={saveMcTplOpen}
+        onClose={() => setSaveMcTplOpen(false)}
+        title="Save Certificate Template"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setSaveMcTplOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveMcAsTemplate} disabled={!saveMcTplTitle.trim()}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-sm">
+          <input
+            value={saveMcTplTitle}
+            onChange={(e) => setSaveMcTplTitle(e.target.value)}
+            placeholder='Title (e.g. "Fit to Work", "Sick Leave 3 days")'
+            className="w-full rounded-lg border border-outline-variant px-md py-sm"
+          />
+          <p className="text-label-sm text-on-surface-variant">
+            Saves the Diagnosis/Impressions, Recommendations, and Purpose exception fields currently
+            filled in — not the dates or the patient&apos;s address.
+          </p>
+        </div>
       </Modal>
 
       <Modal
