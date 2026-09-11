@@ -40,7 +40,8 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
             <h1 className="text-headline-lg text-on-surface">{doctorName}</h1>
             <p className="text-body-lg text-on-surface-variant">{doctor.specialization}</p>
             <div className="mt-sm flex flex-wrap items-center justify-center gap-md sm:justify-start">
-              <span className="text-label-md font-bold text-primary">₱{doctor.consultation_fee}</span>
+              {/* No per-doctor fee — the clinic runs one flat fee schedule
+                  (see admin settings), computed at walk-in check-in. */}
               <span className="flex items-center gap-xs text-label-md">
                 <Icon name="star" className="text-sm text-tertiary" />
                 {ratingRes.data?.average_rating ?? 0} ({ratingRes.data?.review_count ?? 0} reviews)

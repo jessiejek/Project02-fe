@@ -4,29 +4,43 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { SkeletonTable } from "@/components/ui/Skeleton";
-import { queryPatients } from "@/lib/data/patients";
+import { Button } from "@/components/ui/Button";
+import { queryPatientsPaged } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
+
+const PAGE_SIZE = 25;
 
 function accountStatus(userId: string | null, isGuest: boolean): PatientSummary["accountStatus"] {
   if (userId) return "LinkedAccount";
   return isGuest ? "NoAccount" : "AccountUnknown";
 }
 
-// Stitch patients_list (staff).
+// Stitch patients_list (staff). Was pulling the whole roster with no
+// pagination at all — fine at a handful of patients, not at hundreds.
+// queryPatientsPaged already existed (admin's Patients screen already used
+// it) but was never wired in here.
 export default function StaffPatientsPage() {
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [patients, setPatients] = useState<PatientSummary[]>([]);
+  const [page, setPage] = useState(1);
+  const [rows, setRows] = useState<PatientSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+    setLoading(true);
+    const handle = setTimeout(async () => {
       const supabase = null as never;
-      const data = (await queryPatients(supabase)).sort((a, b) =>
-        (b.created_at ?? "").localeCompare(a.created_at ?? ""),
-      );
-      setPatients(
-        data.map((p) => ({
+      const res = await queryPatientsPaged(supabase, {
+        q: search.trim() || undefined,
+        page,
+        pageSize: PAGE_SIZE,
+        sort: "-created",
+      });
+      if (cancelled) return;
+      setTotal(res.totalCount);
+      setRows(
+        res.items.map((p) => ({
           id: p.patient_id,
           patientCode: p.patient_code,
           fullName: `${p.first_name} ${p.last_name}`,
@@ -38,21 +52,16 @@ export default function StaffPatientsPage() {
         })),
       );
       setLoading(false);
-    }
-    load();
-  }, []);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [search, page]);
 
-  if (loading) {
-    return (
-      <AppShell role="staff">
-        <SkeletonTable rows={8} columns={4} />
-      </AppShell>
-    );
-  }
-
-  const rows = patients.filter((p) =>
-    `${p.fullName} ${p.patientCode} ${p.contactNumber} ${p.email}`.toLowerCase().includes(search.toLowerCase()),
-  );
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, total);
 
   return (
     <AppShell role="staff">
@@ -60,7 +69,10 @@ export default function StaffPatientsPage() {
         <h2 className="text-headline-lg text-on-surface">Patients</h2>
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
           placeholder="Search by name/code/contact/email"
           className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
         />
@@ -76,6 +88,7 @@ export default function StaffPatientsPage() {
           rows={rows}
           rowKey={(p) => p.id}
           rowHref={(p) => `/staff/patients/${p.id}`}
+          loading={loading}
           renderMobileCard={(p) => (
             <div className="space-y-xs">
               <div className="flex items-center justify-between">
@@ -86,6 +99,19 @@ export default function StaffPatientsPage() {
             </div>
           )}
         />
+
+        <div className="flex items-center justify-between text-label-md text-on-surface-variant">
+          <span>{loading ? "Loading…" : `${rangeStart}–${rangeEnd} of ${total}`}</span>
+          <div className="flex items-center gap-sm">
+            <Button variant="secondary" disabled={page <= 1 || loading} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </Button>
+            <span>Page {page} / {pageCount}</span>
+            <Button variant="secondary" disabled={page >= pageCount || loading} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </Button>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

@@ -135,7 +135,10 @@ export default function PatientDashboardPage() {
   }
 
   const upcoming = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status));
-  const pendingProof = bookings.filter((b) => b.status === "Completed" && b.paymentStatus === "Unpaid");
+  // Completed visits with an outstanding balance — "Pay at Clinic" is the
+  // only payment mode now, so this means money owed, not a proof-of-payment
+  // upload (that flow doesn't exist for walk-in visits).
+  const paymentDue = bookings.filter((b) => b.status === "Completed" && b.paymentStatus === "Unpaid");
   const completed = bookings.filter((b) => b.status === "Completed" && b.paymentStatus === "Paid");
   const nextBooking = upcoming[0];
 
@@ -187,7 +190,7 @@ export default function PatientDashboardPage() {
 
         <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
           <StatCard icon="calendar_today" value={upcoming.length} label="Active Visits" eyebrow="Today" href="/patient/bookings" />
-          <StatCard icon="receipt_long" value={pendingProof.length} label="Payment Proof Needed" eyebrow="Pending" href="/patient/bookings" />
+          <StatCard icon="receipt_long" value={paymentDue.length} label="Payment Due" eyebrow="Pending" href="/patient/bookings" />
           <StatCard icon="check_circle" value={completed.length} label="Completed Visits" eyebrow="History" href="/patient/bookings" />
           <StatCard icon="medication" value={prescriptionCount} label="Current Prescriptions" eyebrow="Active" href="/patient/prescriptions" />
         </div>
