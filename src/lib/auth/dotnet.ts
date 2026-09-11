@@ -29,8 +29,18 @@ async function post<T>(path: string, body: unknown): Promise<{ ok: true; data: T
       body: JSON.stringify(body),
       cache: "no-store",
     });
-  } catch {
-    return { ok: false, status: 0, message: "Could not reach the authentication server." };
+  } catch (e) {
+    // TEMP DEBUG — remove once the deploy issue is found. Surfaces the actual
+    // fetch failure (and what URL it tried) straight in the response body so
+    // it's curl-able without needing the Vercel log viewer.
+    const err = e as { message?: string; cause?: { message?: string; code?: string } };
+    console.error("dotnetAuth fetch failed", { url: `${API_BASE_URL}${path}`, error: e });
+    return {
+      ok: false,
+      status: 0,
+      message: `[debug] fetch to ${API_BASE_URL}${path} failed: ${err?.message ?? String(e)}` +
+        (err?.cause ? ` | cause: ${err.cause.code ?? ""} ${err.cause.message ?? ""}` : ""),
+    };
   }
   const text = await res.text();
   const json = text ? safeParse(text) : undefined;
