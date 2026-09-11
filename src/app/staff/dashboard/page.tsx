@@ -13,12 +13,11 @@ import { queryStaffBookings, updateBookingStatus } from "@/lib/data/bookings";
 interface QueueRow {
   id: string;
   patientName: string;
-  doctorName: string;
   slotStartTime: string;
   queueNumber: string | null;
   status: string;
   paymentStatus: string;
-  isWalkIn: boolean;
+  amountDue: number;
 }
 
 // Stitch staff_dashboard. Was reading mockBookings regardless of what's
@@ -34,12 +33,11 @@ export default function StaffDashboardPage() {
       const rows: QueueRow[] = data.map((b) => ({
         id: b.booking_id,
         patientName: b.patients ? `${b.patients.first_name ?? ""} ${b.patients.last_name ?? ""}`.trim() : "",
-        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
         slotStartTime: b.slot_start_time.slice(0, 5),
         queueNumber: b.queue_number,
         status: b.status,
         paymentStatus: b.payments?.status ?? "Unpaid",
-        isWalkIn: b.is_walk_in,
+        amountDue: Number(b.amount_due ?? 0),
       }));
       setBookings(rows);
       setLoaded(true);
@@ -49,7 +47,7 @@ export default function StaffDashboardPage() {
 
   const todaysQueue = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status));
   const readyForPayment = bookings.filter((b) => b.status === "Completed" && b.paymentStatus === "Unpaid");
-  const walkInsToday = bookings.filter((b) => b.isWalkIn);
+  const totalDue = readyForPayment.reduce((sum, b) => sum + b.amountDue, 0);
 
   async function toggleCheckIn(id: string, currentStatus: string) {
     const nextStatus = currentStatus === "Confirmed" ? "CheckedIn" : "Confirmed";
@@ -71,11 +69,10 @@ export default function StaffDashboardPage() {
       <div className="space-y-xl">
         <h2 className="text-headline-lg text-on-surface">Staff Dashboard</h2>
 
-        <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-lg md:grid-cols-3">
           <StatCard icon="event_note" value={todaysQueue.length} label="Today's Appointments" />
           <StatCard icon="payments" value={readyForPayment.length} label="Ready for Payment" href="/staff/payments" />
-          <StatCard icon="directions_walk" value={walkInsToday.length} label="Walk-Ins Today" href="/staff/bookings?filter=walkin" />
-          <StatCard icon="check_circle" value={todaysQueue.length} label="Confirmed Today" />
+          <StatCard icon="payments" value={`₱${totalDue.toLocaleString()}`} label="Total Due" href="/staff/payments" />
         </div>
 
         <div className="flex flex-wrap gap-md">
@@ -119,7 +116,7 @@ export default function StaffDashboardPage() {
                     <div>
                       <p className="text-body-md font-medium text-on-surface">{b.patientName}</p>
                       <p className="text-label-sm text-on-surface-variant">
-                        {b.doctorName} · {b.slotStartTime} · Q#{b.queueNumber ?? "—"}
+                        {b.slotStartTime} · Q#{b.queueNumber ?? "—"}
                       </p>
                     </div>
                     <StatusPill status={b.status} />
@@ -136,7 +133,6 @@ export default function StaffDashboardPage() {
               <thead>
                 <tr className="bg-surface-container-low text-left text-label-md text-on-surface-variant">
                   <th className="px-lg py-sm">Patient</th>
-                  <th className="px-lg py-sm">Doctor</th>
                   <th className="px-lg py-sm">Time</th>
                   <th className="px-lg py-sm text-center">Queue #</th>
                   <th className="px-lg py-sm">Status</th>
@@ -147,7 +143,6 @@ export default function StaffDashboardPage() {
                 {todaysQueue.map((b) => (
                   <tr key={b.id} className="hover:bg-surface-container-low">
                     <td className="px-lg py-md">{b.patientName}</td>
-                    <td className="px-lg py-md">{b.doctorName}</td>
                     <td className="px-lg py-md">{b.slotStartTime}</td>
                     <td className="px-lg py-md text-center">{b.queueNumber}</td>
                     <td className="px-lg py-md">

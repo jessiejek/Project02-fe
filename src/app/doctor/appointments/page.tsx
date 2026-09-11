@@ -12,8 +12,6 @@ import { queryDoctorBookings } from "@/lib/data/bookings";
 interface AppointmentRow {
   id: string;
   patientName: string;
-  patientCode: string;
-  serviceNames: string[];
   slotStartTime: string;
   queueNumber: string | null;
   status: string;
@@ -39,8 +37,6 @@ export default function DoctorAppointmentsPage() {
           rows.map((b) => ({
             id: b.booking_id,
             patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
-            patientCode: b.patients?.patient_code ?? "",
-            serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
             slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
             queueNumber: b.queue_number,
             status: b.status,
@@ -54,9 +50,7 @@ export default function DoctorAppointmentsPage() {
     load();
   }, [meDoctorId]);
 
-  const rows = bookings.filter((b) =>
-    `${b.patientName} ${b.patientCode} ${b.serviceNames.join(" ")} ${b.status}`.toLowerCase().includes(search.toLowerCase()),
-  );
+  const rows = bookings.filter((b) => `${b.patientName} ${b.status}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <AppShell role="doctor">
@@ -71,16 +65,7 @@ export default function DoctorAppointmentsPage() {
         <DataTable
           columns={[
             { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
-            {
-              header: "Patient",
-              render: (r) => (
-                <>
-                  {r.patientName}
-                  {r.patientCode ? <span className="text-on-surface-variant"> ({r.patientCode})</span> : null}
-                </>
-              ),
-            },
-            { header: "Service", render: (r) => r.serviceNames.join(", ") || "—" },
+            { header: "Patient", render: (r) => r.patientName },
             { header: "Time", render: (r) => r.slotStartTime },
             { header: "Status", render: (r) => <StatusPill status={r.status} /> },
             { header: "Payment", render: (r) => <StatusPill status={r.paymentStatus} /> },
@@ -106,12 +91,9 @@ export default function DoctorAppointmentsPage() {
             <div className="space-y-sm">
               <div className="flex items-start justify-between gap-md">
                 <div>
-                  <p className="text-body-md font-medium text-on-surface">
-                    {r.patientName}
-                    {r.patientCode ? ` (${r.patientCode})` : ""}
-                  </p>
+                  <p className="text-body-md font-medium text-on-surface">{r.patientName}</p>
                   <p className="text-label-sm text-on-surface-variant">
-                    {r.slotStartTime} · Q#{r.queueNumber ?? "—"} · {r.serviceNames.join(", ") || "—"}
+                    {r.slotStartTime} · Q#{r.queueNumber ?? "—"}
                   </p>
                 </div>
                 <StatusPill status={r.status} />
