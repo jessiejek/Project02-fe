@@ -70,7 +70,7 @@ export default function StaffDashboardPage() {
         <h2 className="text-headline-lg text-on-surface">Staff Dashboard</h2>
 
         <div className="grid grid-cols-1 gap-lg md:grid-cols-3">
-          <StatCard icon="event_note" value={todaysQueue.length} label="Today's Appointments" />
+          <StatCard icon="event_note" value={todaysQueue.length} label="Today's Visits" />
           <StatCard icon="payments" value={readyForPayment.length} label="Ready for Payment" href="/staff/payments" />
           <StatCard icon="groups" value={totalPatientsToday} label="Total Patients" href="/staff/queue" />
         </div>
@@ -83,7 +83,7 @@ export default function StaffDashboardPage() {
             </Button>
           </Link>
           <Link href="/staff/payments">
-            <Button variant="secondary">Payment Queue</Button>
+            <Button variant="secondary">Payments</Button>
           </Link>
           <Link href="/staff/doctor-status">
             <Button variant="secondary">Doctor Status</Button>
@@ -97,7 +97,7 @@ export default function StaffDashboardPage() {
           <Toast
             variant="warning"
             message={`${readyForPayment.length} payment(s) ready for collection.`}
-            actionLabel="Go to Queue"
+            actionLabel="Go to Payments"
             actionHref="/staff/payments"
           />
         )}

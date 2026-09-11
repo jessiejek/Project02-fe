@@ -57,12 +57,43 @@ const STATUS_TONE: Record<string, PillTone> = {
   Invited: "info",
 };
 
+// Human-readable label per status — STATUS_TONE's keys are PascalCase enum
+// values (e.g. "NoAccount"), which read fine in code but collapse into an
+// unspaced word ("NOACCOUNT") once the pill's `uppercase` styling hits them.
+const STATUS_LABEL: Partial<Record<string, string>> = {
+  Pending: "Pending",
+  ProofSubmitted: "Proof submitted",
+  Confirmed: "Confirmed",
+  CheckedIn: "Checked in",
+  InProgress: "In progress",
+  OnHold: "On hold",
+  Cancelled: "Cancelled",
+  Completed: "Completed",
+  Expired: "Expired",
+  NoShow: "No-show",
+  Rescheduled: "Rescheduled",
+  Unpaid: "Unpaid",
+  Paid: "Paid",
+  Waived: "Waived",
+  Refunded: "Refunded",
+  Available: "Available",
+  RunningLate: "Running late",
+  UnavailableToday: "Unavailable today",
+  LinkedAccount: "Linked account",
+  NoAccount: "No account",
+  AccountUnknown: "Account unknown",
+  Active: "Active",
+  Inactive: "Inactive",
+  OnLeave: "On leave",
+  Invited: "Invited",
+};
+
 export interface StatusPillProps {
   /** A known status string (see STATUS_TONE above) — tone/icon resolve automatically. */
   status?: keyof typeof STATUS_TONE | (string & {});
   /** Override the resolved tone, or set it directly when `status` isn't in the map. */
   tone?: PillTone;
-  /** Override the display label (defaults to `status`). */
+  /** Override the display label (defaults to the humanized form of `status`). */
   label?: string;
   className?: string;
 }
@@ -75,7 +106,7 @@ export interface StatusPillProps {
  */
 export function StatusPill({ status, tone, label, className }: StatusPillProps) {
   const resolvedTone: PillTone = tone ?? (status ? STATUS_TONE[status] : undefined) ?? "neutral";
-  const text = label ?? status ?? "";
+  const text = label ?? (status ? STATUS_LABEL[status] : undefined) ?? status ?? "";
 
   return (
     <span

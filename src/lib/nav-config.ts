@@ -33,7 +33,7 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
       {
         items: [
           { label: "Dashboard", href: "/patient/dashboard", icon: "dashboard" },
-          { label: "Doctors", href: "/patient/doctors", icon: "medical_services" },
+          { label: "Your Doctor", href: "/patient/doctors", icon: "medical_services" },
           { label: "My Bookings", href: "/patient/bookings", icon: "event_available" },
           { label: "Medical Records", href: "/patient/medical-records", icon: "assignment" },
           { label: "Prescriptions", href: "/patient/prescriptions", icon: "prescriptions" },
@@ -52,7 +52,6 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
       {
         items: [
           { label: "Dashboard", href: "/staff/dashboard", icon: "dashboard" },
-          { label: "Bookings", href: "/staff/bookings", icon: "calendar_today" },
           { label: "Payments", href: "/staff/payments", icon: "payments" },
           { label: "Walk-In", href: "/staff/walk-in", icon: "directions_walk" },
           { label: "Queue", href: "/staff/queue", icon: "list_alt" },
@@ -92,7 +91,6 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
           { label: "Dashboard", href: "/admin/dashboard", icon: "dashboard" },
           { label: "Bookings", href: "/admin/bookings", icon: "calendar_today" },
           { label: "Walk-In", href: "/admin/walk-in", icon: "directions_walk" },
-          { label: "Calendar", href: "/admin/calendar", icon: "calendar_month" },
         ],
       },
       {

@@ -89,9 +89,13 @@ export default function DoctorStatusPage() {
       <div className="space-y-lg pb-24">
         <div className="flex flex-wrap items-center justify-between gap-md">
           <h2 className="text-headline-lg text-on-surface">Doctor Status Management</h2>
-          <Button variant="secondary" onClick={() => setSelectMode(!selectMode)}>
-            Select multiple ▾
-          </Button>
+          {/* Bulk actions only earn their keep once there's more than one
+              doctor to apply a status to. */}
+          {doctors.length > 1 && (
+            <Button variant="secondary" onClick={() => setSelectMode(!selectMode)}>
+              Select multiple ▾
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-lg sm:grid-cols-3">

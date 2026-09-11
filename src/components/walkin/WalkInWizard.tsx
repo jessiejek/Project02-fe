@@ -248,7 +248,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
 
   return (
     <AppShell role={role}>
-      <div className="mx-auto max-w-[40rem]">
+      <div className="mx-auto max-w-[40rem] pb-28">
         <StepIndicator steps={STEPS} currentStep={step === "done" ? STEPS.length : step} />
 
         {step === 1 && (
@@ -309,19 +309,28 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 </div>
               </div>
             )}
-            <Button disabled={!patientId} onClick={() => setStep(2)} className="w-full">
-              Continue
-            </Button>
           </Card>
         )}
 
-        {/* Floating, not buried below a long patient list — opens the
-            registration form in its own modal instead of pushing content
-            around inline. */}
+        {/* Sticky, not buried below a potentially-long patient list — Continue
+            stays reachable at any scroll position instead of requiring a
+            scroll past the whole list + pagination to find it. */}
+        {step === 1 && (
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-outline-variant bg-surface-container-lowest p-md md:left-sidebar">
+            <div className="mx-auto max-w-[40rem]">
+              <Button disabled={!patientId} onClick={() => setStep(2)} className="w-full">
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Floating above the sticky Continue bar — opens the registration
+            form in its own modal instead of pushing content around inline. */}
         {step === 1 && (
           <Button
             onClick={() => setQuickRegisterOpen(true)}
-            className="fixed bottom-lg right-lg z-40 shadow-lg"
+            className="fixed bottom-[88px] right-lg z-40 shadow-lg"
           >
             <Icon name="add_circle" className="text-[18px]" />
             Add New Patient

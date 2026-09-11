@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { todayManila } from "@/lib/clock";
 import { queryDoctors } from "@/lib/data/doctors";
@@ -16,6 +17,13 @@ export default async function BrowseDoctorsPage() {
     queryDayStatuses(supabase, today),
   ]);
   const doctors = allDoctors.filter((d) => d.staff_accounts?.status !== "Inactive");
+
+  // A "browse doctors" directory — search, specialization filter, a grid of
+  // cards to choose between — only earns its keep once there's a choice to
+  // make. With exactly one doctor, skip straight to their profile.
+  if (doctors.length === 1) {
+    redirect(`/patient/doctors/${doctors[0].doctor_id}`);
+  }
   const ratingByDoctor = new Map((ratingsRes.data ?? []).map((r) => [r.doctor_id, r]));
   const dayStatusByDoctor = new Map(dayStatuses.map((s) => [s.doctor_id, s.status]));
 
