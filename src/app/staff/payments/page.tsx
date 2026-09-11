@@ -13,6 +13,8 @@ import { one, serviceNames } from "@/lib/one";
 
 interface QueueRow {
   id: string;
+  patientName: string;
+  patientCode: string;
   doctorName: string;
   serviceNames: string[];
   appointmentDate: string;
@@ -50,6 +52,8 @@ export default function PaymentsQueuePage() {
         .filter((b) => (b.payments?.status ?? "Unpaid") === "Unpaid")
         .map((b) => ({
           id: b.booking_id,
+          patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
+          patientCode: b.patients?.patient_code ?? "",
           doctorName: b.doctors?.staff_accounts?.full_name ?? "",
           serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
           appointmentDate: b.appointment_date,
@@ -111,6 +115,15 @@ export default function PaymentsQueuePage() {
 
         <DataTable
           columns={[
+            {
+              header: "Patient",
+              render: (r) => (
+                <>
+                  {r.patientName}
+                  {r.patientCode ? <span className="text-on-surface-variant"> ({r.patientCode})</span> : null}
+                </>
+              ),
+            },
             { header: "Doctor", render: (r) => r.doctorName },
             { header: "Services", render: (r) => r.serviceNames.join(", ") },
             { header: "Date / Queue #", render: (r) => `${r.appointmentDate} · ${r.queueNumber ?? "—"}` },
@@ -137,8 +150,11 @@ export default function PaymentsQueuePage() {
             <div className="space-y-sm">
               <div className="flex items-start justify-between gap-md">
                 <div>
-                  <p className="text-body-md font-medium text-on-surface">{r.doctorName}</p>
-                  <p className="text-label-sm text-on-surface-variant">{r.serviceNames.join(", ")}</p>
+                  <p className="text-body-md font-medium text-on-surface">
+                    {r.patientName}
+                    {r.patientCode ? ` (${r.patientCode})` : ""}
+                  </p>
+                  <p className="text-label-sm text-on-surface-variant">{r.doctorName} · {r.serviceNames.join(", ")}</p>
                   <p className="text-label-sm text-on-surface-variant">
                     {r.appointmentDate} · Q#{r.queueNumber ?? "—"}
                   </p>
@@ -176,6 +192,12 @@ export default function PaymentsQueuePage() {
         }
       >
         <div className="space-y-md">
+          {activeBooking && (
+            <p className="text-body-md text-on-surface">
+              <strong>Patient:</strong> {activeBooking.patientName}
+              {activeBooking.patientCode ? ` (${activeBooking.patientCode})` : ""}
+            </p>
+          )}
           <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm">
             <option>Cash</option>
             <option>GCash</option>
