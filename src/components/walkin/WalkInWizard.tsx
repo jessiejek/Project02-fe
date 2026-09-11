@@ -10,6 +10,7 @@ import { StepIndicator } from "@/components/ui/StepIndicator";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Icon } from "@/components/ui/Icon";
 import { queryPatients, createPatient } from "@/lib/data/patients";
+import { clientPage } from "@/lib/data/paging";
 import { checkInWalkIn, type QueueTicket } from "@/lib/data/queue";
 import { cn } from "@/lib/cn";
 import type { Role } from "@/lib/nav-config";
@@ -108,6 +109,13 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
   const filteredPatients = patients.filter((p) =>
     `${p.fullName} ${p.patientCode} ${p.contactNumber} ${p.email}`.toLowerCase().includes(patientSearch.toLowerCase()),
   );
+  const PATIENTS_PAGE_SIZE = 10;
+  const [patientPage, setPatientPage] = useState(1);
+  // Back to page 1 whenever the search narrows/widens the list — staying on
+  // page 6 of a 2-result search would just show an empty page.
+  useEffect(() => setPatientPage(1), [patientSearch]);
+  const pagedPatients = clientPage(filteredPatients, { page: patientPage }, PATIENTS_PAGE_SIZE);
+  const patientPageCount = Math.max(1, Math.ceil(pagedPatients.totalCount / PATIENTS_PAGE_SIZE));
   const canQuickRegister =
     quickRegister.firstName.trim() !== "" &&
     quickRegister.lastName.trim() !== "" &&
@@ -252,11 +260,11 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
               placeholder="Search by name/code/phone/email"
               className="mb-md w-full rounded-lg border border-outline-variant px-md py-sm"
             />
-            <div className="mb-lg space-y-sm">
+            <div className="mb-md space-y-sm">
               {filteredPatients.length === 0 && (
                 <p className="text-label-md text-on-surface-variant">No matching patients.</p>
               )}
-              {filteredPatients.map((p) => (
+              {pagedPatients.items.map((p) => (
                 <button
                   key={p.id}
                   type="button"
@@ -274,6 +282,33 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 </button>
               ))}
             </div>
+            {filteredPatients.length > 0 && (
+              <div className="mb-lg flex items-center justify-between text-label-md text-on-surface-variant">
+                <span>
+                  {(patientPage - 1) * PATIENTS_PAGE_SIZE + 1}–
+                  {Math.min(patientPage * PATIENTS_PAGE_SIZE, filteredPatients.length)} of {filteredPatients.length}
+                </span>
+                <div className="flex items-center gap-sm">
+                  <Button
+                    variant="secondary"
+                    className="!px-sm !py-xs text-label-sm"
+                    disabled={patientPage <= 1}
+                    onClick={() => setPatientPage((p) => p - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <span>{patientPage} / {patientPageCount}</span>
+                  <Button
+                    variant="secondary"
+                    className="!px-sm !py-xs text-label-sm"
+                    disabled={patientPage >= patientPageCount}
+                    onClick={() => setPatientPage((p) => p + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
             <Button disabled={!patientId} onClick={() => setStep(2)} className="w-full">
               Continue
             </Button>
