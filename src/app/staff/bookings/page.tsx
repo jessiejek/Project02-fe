@@ -52,6 +52,7 @@ function StaffBookingsContent() {
   const searchParams = useSearchParams();
   const walkInOnly = searchParams.get("filter") === "walkin";
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [doctorFilter, setDoctorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -62,28 +63,32 @@ function StaffBookingsContent() {
   useEffect(() => {
     async function load() {
       const supabase = null as never;
-      const [rows, doctorsRes] = await Promise.all([
-        queryStaffBookings(supabase, "all"),
-        queryDoctors(supabase),
-      ]);
-      setBookings(
-        rows.map((b) => ({
-          id: b.booking_id,
-          patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
-          doctorId: b.doctor_id,
-          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
-          appointmentDate: b.appointment_date,
-          slotStartTime: b.slot_start_time.slice(0, 5),
-          queueNumber: b.queue_number,
-          status: b.status,
-          paymentStatus: b.payments?.status ?? "Unpaid",
-          isWalkIn: b.is_walk_in,
-        })),
-      );
-      setDoctors(
-        doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
-      );
+      try {
+        const [rows, doctorsRes] = await Promise.all([
+          queryStaffBookings(supabase, "all"),
+          queryDoctors(supabase),
+        ]);
+        setBookings(
+          rows.map((b) => ({
+            id: b.booking_id,
+            patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+            doctorId: b.doctor_id,
+            doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+            serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+            appointmentDate: b.appointment_date,
+            slotStartTime: b.slot_start_time.slice(0, 5),
+            queueNumber: b.queue_number,
+            status: b.status,
+            paymentStatus: b.payments?.status ?? "Unpaid",
+            isWalkIn: b.is_walk_in,
+          })),
+        );
+        setDoctors(
+          doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
+        );
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -156,6 +161,7 @@ function StaffBookingsContent() {
           rows={rows}
           rowKey={(r) => r.id}
           rowHref={(r) => `/staff/bookings/${r.id}`}
+          loading={loading}
           renderMobileCard={(r) => (
             <div className="space-y-xs">
               <div className="flex items-center justify-between">

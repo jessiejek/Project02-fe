@@ -25,24 +25,29 @@ interface DoctorRow {
 // Implementation-Phases/05-doctors-staff.md — real doctors only from here on.
 export default function AdminDoctorsPage() {
   const [doctors, setDoctors] = useState<DoctorRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [deactivating, setDeactivating] = useState<string | null>(null);
   const target = doctors.find((d) => d.id === deactivating);
 
   useEffect(() => {
     async function load() {
       const supabase = null as never;
-      const allDoctors = await queryDoctors(supabase);
-      const schedules = await Promise.all(allDoctors.map((d) => queryDoctorSchedules(supabase, d.doctor_id)));
-      setDoctors(
-        allDoctors.map((d, i) => ({
-          id: d.doctor_id,
-          name: d.staff_accounts?.full_name ?? "",
-          specialization: d.specialization,
-          consultationFee: Number(d.consultation_fee),
-          status: d.staff_accounts?.status ?? "Invited",
-          activeDays: schedules[i].filter((s) => s.is_active).map((s) => indexToDayName(s.day_of_week)),
-        })),
-      );
+      try {
+        const allDoctors = await queryDoctors(supabase);
+        const schedules = await Promise.all(allDoctors.map((d) => queryDoctorSchedules(supabase, d.doctor_id)));
+        setDoctors(
+          allDoctors.map((d, i) => ({
+            id: d.doctor_id,
+            name: d.staff_accounts?.full_name ?? "",
+            specialization: d.specialization,
+            consultationFee: Number(d.consultation_fee),
+            status: d.staff_accounts?.status ?? "Invited",
+            activeDays: schedules[i].filter((s) => s.is_active).map((s) => indexToDayName(s.day_of_week)),
+          })),
+        );
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -100,6 +105,7 @@ export default function AdminDoctorsPage() {
           ]}
           rows={doctors}
           rowKey={(d) => d.id}
+          loading={loading}
           renderMobileCard={(d) => (
             <div className="space-y-sm">
               <div className="flex items-start justify-between gap-md">

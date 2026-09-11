@@ -9,6 +9,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryReport } from "@/lib/data/admin";
 import { queryBookings } from "@/lib/data/bookings";
+import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
 
 interface BookingRow {
   id: string;
@@ -109,7 +110,10 @@ export default function AdminDashboardPage() {
   if (!loaded) {
     return (
       <AppShell role="admin">
-        <p className="text-body-md text-on-surface-variant">Loading dashboard…</p>
+        <div className="space-y-xl">
+          <SkeletonStats count={8} />
+          <SkeletonTable rows={5} columns={4} />
+        </div>
       </AppShell>
     );
   }

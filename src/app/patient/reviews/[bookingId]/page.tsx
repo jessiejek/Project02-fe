@@ -6,6 +6,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faStar } from "@fortawesome/free-solid-svg-icons";
 import { faStar as faStarOutline } from "@fortawesome/free-regular-svg-icons";
@@ -64,7 +65,7 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
   if (booking === undefined) {
     return (
       <AppShell role="patient">
-        <p className="text-body-md text-on-surface-variant">Loading…</p>
+        <SkeletonCard lines={3} />
       </AppShell>
     );
   }

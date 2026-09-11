@@ -117,6 +117,7 @@ export default function AdminAuditLogsPage() {
           ]}
           rows={rows}
           rowKey={(l) => l.id}
+          loading={loading}
           renderMobileCard={(l) => (
             <div className="space-y-xs">
               <div className="flex items-center justify-between">

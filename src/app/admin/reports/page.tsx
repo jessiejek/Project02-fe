@@ -7,6 +7,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
 import { queryReport } from "@/lib/data/admin";
 
 interface UnpaidVisitRow {
@@ -110,7 +111,10 @@ export default function AdminReportsPage() {
   if (loading) {
     return (
       <AppShell role="admin">
-        <p className="text-body-md text-on-surface-variant">Loading reports...</p>
+        <div className="space-y-lg">
+          <SkeletonStats />
+          <SkeletonTable rows={5} columns={5} />
+        </div>
       </AppShell>
     );
   }

@@ -20,6 +20,7 @@ import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
 import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
 import { queryVaccinationsByConsultation, replaceVaccinationsByConsultation } from "@/lib/data/patientFiles";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { queryAuditLogs, queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
 import {
   queryConsultationByBooking,
@@ -1104,7 +1105,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   if (!loaded) {
     return (
       <AppShell role="doctor">
-        <p className="text-body-md text-on-surface-variant">Loading…</p>
+        <div className="space-y-md">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={4} />
+        </div>
       </AppShell>
     );
   }

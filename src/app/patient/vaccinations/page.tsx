@@ -5,6 +5,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVaccinations } from "@/lib/data/patientFiles";
 import { printHtml, escapeHtml } from "@/lib/print";
@@ -23,6 +24,7 @@ export default function VaccinationsPage() {
   const { session, loading } = useSession();
   const [search, setSearch] = useState("");
   const [vaccinations, setVaccinations] = useState<VaccinationRow[]>([]);
+  const [vaxLoading, setVaxLoading] = useState(true);
 
   useEffect(() => {
     if (!session?.patientId) return;
@@ -30,18 +32,22 @@ export default function VaccinationsPage() {
 
     async function load() {
       const supabase = null as never;
-      const data = await queryVaccinations(supabase, patientId);
+      try {
+        const data = await queryVaccinations(supabase, patientId);
 
-      setVaccinations(
-        data.map((v) => ({
-          id: v.id,
-          vaccineName: v.vaccine_name,
-          doseNumber: v.dose_number,
-          administeredDate: v.administered_date,
-          status: v.status,
-          source: v.source,
-        })),
-      );
+        setVaccinations(
+          data.map((v) => ({
+            id: v.id,
+            vaccineName: v.vaccine_name,
+            doseNumber: v.dose_number,
+            administeredDate: v.administered_date,
+            status: v.status,
+            source: v.source,
+          })),
+        );
+      } finally {
+        setVaxLoading(false);
+      }
     }
 
     load();
@@ -50,7 +56,7 @@ export default function VaccinationsPage() {
   if (loading || !session?.patientId) {
     return (
       <AppShell role="patient">
-        <p className="text-body-md text-on-surface-variant">Loading your vaccinations...</p>
+        <SkeletonTable rows={5} columns={4} />
       </AppShell>
     );
   }
@@ -109,6 +115,7 @@ export default function VaccinationsPage() {
           ]}
           rows={filtered}
           rowKey={(v) => v.id}
+          loading={vaxLoading}
           emptyMessage="No vaccination records found."
           renderMobileCard={(v) => (
             <div className="space-y-xs">

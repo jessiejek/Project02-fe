@@ -37,6 +37,7 @@ interface DoctorOption {
 // Implementation-Phases/06-booking-flow.md.
 export default function AdminBookingsPage() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [doctors, setDoctors] = useState<DoctorOption[]>([]);
   const [doctorFilter, setDoctorFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -46,30 +47,35 @@ export default function AdminBookingsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     // §16.2 — debounce the free-text search into a server query.
     const handle = setTimeout(async () => {
       const supabase = null as never;
-      const [rows, doctorsRes] = await Promise.all([
-        queryStaffBookings(supabase, "all", { q: search.trim() || undefined }),
-        queryDoctors(supabase),
-      ]);
-      if (cancelled) return;
-      setBookings(
-        rows.map((b) => ({
-          id: b.booking_id,
-          patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
-          patientCode: b.patients?.patient_code ?? "",
-          doctorId: b.doctor_id,
-          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
-          appointmentDate: b.appointment_date,
-          status: b.status,
-          paymentStatus: b.payments?.status ?? "Unpaid",
-        })),
-      );
-      setDoctors(
-        doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
-      );
+      try {
+        const [rows, doctorsRes] = await Promise.all([
+          queryStaffBookings(supabase, "all", { q: search.trim() || undefined }),
+          queryDoctors(supabase),
+        ]);
+        if (cancelled) return;
+        setBookings(
+          rows.map((b) => ({
+            id: b.booking_id,
+            patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+            patientCode: b.patients?.patient_code ?? "",
+            doctorId: b.doctor_id,
+            doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+            serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+            appointmentDate: b.appointment_date,
+            status: b.status,
+            paymentStatus: b.payments?.status ?? "Unpaid",
+          })),
+        );
+        setDoctors(
+          doctorsRes.map((d) => ({ id: d.doctor_id, name: d.staff_accounts?.full_name ?? "" })),
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }, 250);
     return () => {
       cancelled = true;
@@ -118,6 +124,7 @@ export default function AdminBookingsPage() {
           rows={rows}
           rowKey={(r) => r.id}
           rowHref={(r) => `/admin/bookings/${r.id}`}
+          loading={loading}
           renderMobileCard={(r) => (
             <div className="space-y-xs">
               <div className="flex items-center justify-between">

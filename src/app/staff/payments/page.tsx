@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { queryBookings } from "@/lib/data/bookings";
 import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
 import { one, serviceNames } from "@/lib/one";
@@ -87,7 +88,7 @@ export default function PaymentsQueuePage() {
   if (loading) {
     return (
       <AppShell role="staff">
-        <p className="text-body-md text-on-surface-variant">Loading payment queue...</p>
+        <SkeletonTable rows={6} columns={5} />
       </AppShell>
     );
   }

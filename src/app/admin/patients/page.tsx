@@ -131,6 +131,7 @@ export default function AdminPatientsPage() {
           rows={rows}
           rowKey={(p) => p.id}
           rowHref={(p) => `/admin/patients/${p.id}`}
+          loading={loading}
           renderMobileCard={(p) => (
             <div className="space-y-xs">
               <div className="flex items-center justify-between">

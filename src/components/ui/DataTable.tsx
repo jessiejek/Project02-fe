@@ -4,6 +4,7 @@ import { type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/Icon";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export interface DataTableColumn<T> {
   header: string;
@@ -36,6 +37,9 @@ export interface DataTableProps<T> {
    * all widths, the default for every other screen.
    */
   renderMobileCard?: (row: T) => ReactNode;
+  /** Data hasn't arrived yet — render skeleton rows (keeping the real header,
+   * so the shape of what's coming is visible) instead of rows/emptyMessage. */
+  loading?: boolean;
 }
 
 const ALIGN_CLASS: Record<NonNullable<DataTableColumn<unknown>["align"]>, string> = {
@@ -60,6 +64,7 @@ export function DataTable<T>({
   pagination,
   emptyMessage = "No records found.",
   renderMobileCard,
+  loading = false,
 }: DataTableProps<T>) {
   const router = useRouter();
   const interactive = Boolean(rowHref || onRowClick);
@@ -80,7 +85,14 @@ export function DataTable<T>({
     <div className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
       {renderMobileCard && (
         <div className="divide-y divide-outline-variant/30 sm:hidden">
-          {rows.length === 0 ? (
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="space-y-sm p-lg">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="h-3 w-1/2" />
+              </div>
+            ))
+          ) : rows.length === 0 ? (
             <p className="px-lg py-xl text-center text-body-md text-on-surface-variant">{emptyMessage}</p>
           ) : (
             rows.map((row) => (
@@ -115,7 +127,17 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/30">
-            {rows.length === 0 ? (
+            {loading ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <tr key={i}>
+                  {columns.map((column, c) => (
+                    <td key={column.header} className={cn("px-lg py-md", ALIGN_CLASS[column.align ?? "left"])}>
+                      <Skeleton className={cn("h-4", c === 0 ? "w-1/2" : "w-3/4")} />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-lg py-xl text-center text-body-md text-on-surface-variant">
                   {emptyMessage}

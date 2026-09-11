@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { queryPatients } from "@/lib/data/patients";
 import type { PatientSummary } from "@/data/types";
 
@@ -44,7 +45,7 @@ export default function StaffPatientsPage() {
   if (loading) {
     return (
       <AppShell role="staff">
-        <p className="text-body-md text-on-surface-variant">Loading patients...</p>
+        <SkeletonTable rows={8} columns={4} />
       </AppShell>
     );
   }

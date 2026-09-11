@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Icon } from "@/components/ui/Icon";
 import { VitalsEditor } from "@/components/doctor/VitalsEditor";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryBookingById } from "@/lib/data/bookings";
 
@@ -41,7 +42,7 @@ function VitalsDetailWorkflow({ bookingId }: { bookingId: string }) {
   if (loading) {
     return (
       <AppShell role="doctor">
-        <p className="text-body-md text-on-surface-variant">Loading vitals...</p>
+        <SkeletonCard lines={5} />
       </AppShell>
     );
   }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { useSession } from "@/components/providers/SessionProvider";
 import { TemplateManager } from "@/components/doctor/TemplateManager";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { queryMedicines } from "@/lib/data/lookups";
 import {
   queryDiagnosisTemplates,
@@ -145,7 +146,11 @@ export default function DoctorSettingsPage() {
         )}
 
         {loading ? (
-          <p className="text-body-md text-on-surface-variant">Loading…</p>
+          <div className="space-y-lg">
+            <SkeletonCard lines={3} />
+            <SkeletonCard lines={3} />
+            <SkeletonCard lines={3} />
+          </div>
         ) : (
           <div className="space-y-lg">
             {/* 1. Diagnoses */}

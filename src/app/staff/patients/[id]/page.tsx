@@ -6,6 +6,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
+import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
 import { queryConsultations } from "@/lib/data/clinical";
 import { queryPatientById } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
@@ -103,7 +104,10 @@ export default function StaffPatientDetailPage({ params }: { params: Promise<{ i
   if (loading || patient === undefined) {
     return (
       <AppShell role="staff">
-        <p className="text-body-md text-on-surface-variant">Loading patient...</p>
+        <div className="space-y-md">
+          <SkeletonCard lines={3} />
+          <SkeletonTable rows={4} columns={3} />
+        </div>
       </AppShell>
     );
   }

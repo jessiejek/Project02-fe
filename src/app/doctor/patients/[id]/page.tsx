@@ -19,6 +19,7 @@ import { queryPatientById } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
 import { queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
 import { printHtml, escapeHtml } from "@/lib/print";
+import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
 import type { PrescriptionGroup, VitalFieldTemplate, BookingStatus } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -233,7 +234,10 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   if (!doctorId || !loaded) {
     return (
       <AppShell role="doctor">
-        <p className="text-body-md text-on-surface-variant">Loading…</p>
+        <div className="space-y-md">
+          <SkeletonCard lines={3} />
+          <SkeletonTable rows={5} columns={4} />
+        </div>
       </AppShell>
     );
   }

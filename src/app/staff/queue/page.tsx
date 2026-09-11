@@ -6,6 +6,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
 import { queryQueue, updateQueueEntry, type QueueBoard } from "@/lib/data/queue";
 
 // §16.3 — today's walk-in FCFS queue board.
@@ -52,6 +53,8 @@ export default function StaffQueuePage() {
           </Link>
         </div>
 
+        {loading && <SkeletonStats count={5} />}
+
         {s && (
           <div className="grid grid-cols-2 gap-md sm:grid-cols-5">
             <Card><p className="text-headline-lg text-on-surface">{s.waiting}</p><p className="text-label-md text-on-surface-variant">Waiting</p></Card>
@@ -62,7 +65,7 @@ export default function StaffQueuePage() {
           </div>
         )}
 
-        {loading && <p className="text-body-md text-on-surface-variant">Loading queue…</p>}
+        {loading && <SkeletonTable rows={5} columns={6} />}
 
         {!loading && board && board.items.length === 0 && (
           <Card><p className="text-body-md text-on-surface-variant">No one in the queue yet today.</p></Card>

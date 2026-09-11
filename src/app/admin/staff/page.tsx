@@ -15,6 +15,7 @@ import type { StaffMember } from "@/data/types";
 // Stitch staff_management.
 export default function AdminStaffPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [loading, setLoading] = useState(true);
   // admin.md §9: Invite Staff form was decorative — "Send Invite" had no
   // onClick at all, and Revoke didn't remove the pending invite.
   const [fullName, setFullName] = useState("");
@@ -27,8 +28,12 @@ export default function AdminStaffPage() {
   useEffect(() => {
     async function load() {
       const supabase = null as never;
-      const data = await queryStaffAccounts(supabase, { role: "Staff" });
-      setStaff(data.map((s) => ({ id: s.staff_id, fullName: s.full_name, email: s.email, role: "Staff", status: s.status })));
+      try {
+        const data = await queryStaffAccounts(supabase, { role: "Staff" });
+        setStaff(data.map((s) => ({ id: s.staff_id, fullName: s.full_name, email: s.email, role: "Staff", status: s.status })));
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -126,6 +131,7 @@ export default function AdminStaffPage() {
           ]}
           rows={staff}
           rowKey={(s) => s.id}
+          loading={loading}
           renderMobileCard={(s) => (
             <div className="space-y-sm">
               <div className="flex items-start justify-between gap-md">

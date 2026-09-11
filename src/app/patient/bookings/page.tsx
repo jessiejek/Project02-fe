@@ -47,6 +47,7 @@ export default function MyBookingsPage() {
   const { session, loading } = useSession();
   const [tab, setTab] = useState("all");
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [bookingsLoading, setBookingsLoading] = useState(true);
 
   useEffect(() => {
     if (!session?.patientId) return;
@@ -54,19 +55,23 @@ export default function MyBookingsPage() {
 
     async function loadBookings() {
       const supabase = null as never;
-      const rows = await queryMyBookings(supabase, patientId);
-      setBookings(
-        rows.map((b) => ({
-          id: b.booking_id,
-          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
-          appointmentDate: b.appointment_date,
-          slotStartTime: b.slot_start_time.slice(0, 5),
-          status: b.status,
-          queueNumber: b.queue_number,
-          paymentStatus: b.payments?.status ?? "Unpaid",
-        })),
-      );
+      try {
+        const rows = await queryMyBookings(supabase, patientId);
+        setBookings(
+          rows.map((b) => ({
+            id: b.booking_id,
+            doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+            serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+            appointmentDate: b.appointment_date,
+            slotStartTime: b.slot_start_time.slice(0, 5),
+            status: b.status,
+            queueNumber: b.queue_number,
+            paymentStatus: b.payments?.status ?? "Unpaid",
+          })),
+        );
+      } finally {
+        setBookingsLoading(false);
+      }
     }
 
     loadBookings();
@@ -99,6 +104,7 @@ export default function MyBookingsPage() {
           rows={rows}
           rowKey={(r) => r.id}
           rowHref={(r) => `/patient/bookings/${r.id}`}
+          loading={bookingsLoading}
           emptyMessage="No bookings in this category."
           renderMobileCard={(r) => (
             <div className="space-y-xs">

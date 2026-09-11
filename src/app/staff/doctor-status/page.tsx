@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDayStatuses, setDayStatus } from "@/lib/data/scheduling";
 
@@ -78,7 +79,7 @@ export default function DoctorStatusPage() {
   if (loading) {
     return (
       <AppShell role="staff">
-        <p className="text-body-md text-on-surface-variant">Loading doctor statuses...</p>
+        <SkeletonTable rows={4} columns={3} />
       </AppShell>
     );
   }

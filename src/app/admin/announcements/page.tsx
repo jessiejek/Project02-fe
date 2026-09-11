@@ -5,6 +5,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { queryAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement } from "@/lib/data/admin";
 
 const BLANK_FORM = { title: "", body: "", isActive: true };
@@ -97,7 +98,11 @@ export default function AdminAnnouncementsPage() {
   if (loading) {
     return (
       <AppShell role="admin">
-        <p className="text-body-md text-on-surface-variant">Loading announcements...</p>
+        <div className="space-y-md">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+        </div>
       </AppShell>
     );
   }

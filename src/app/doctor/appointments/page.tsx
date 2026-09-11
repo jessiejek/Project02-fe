@@ -24,23 +24,28 @@ export default function DoctorAppointmentsPage() {
   const { session } = useSession();
   const meDoctorId = session?.staffId ?? "";
   const [bookings, setBookings] = useState<AppointmentRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!meDoctorId) return;
     async function load() {
       const supabase = null as never;
-      const rows = await queryDoctorBookings(supabase, meDoctorId);
-      setBookings(
-        rows.map((b) => ({
-          id: b.booking_id,
-          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
-          slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
-          queueNumber: b.queue_number,
-          status: b.status,
-          paymentStatus: b.payments?.status ?? "Unpaid",
-        })),
-      );
+      try {
+        const rows = await queryDoctorBookings(supabase, meDoctorId);
+        setBookings(
+          rows.map((b) => ({
+            id: b.booking_id,
+            serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
+            slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+            queueNumber: b.queue_number,
+            status: b.status,
+            paymentStatus: b.payments?.status ?? "Unpaid",
+          })),
+        );
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, [meDoctorId]);
@@ -81,6 +86,7 @@ export default function DoctorAppointmentsPage() {
           ]}
           rows={rows}
           rowKey={(r) => r.id}
+          loading={loading}
           renderMobileCard={(r) => (
             <div className="space-y-sm">
               <div className="flex items-start justify-between gap-md">

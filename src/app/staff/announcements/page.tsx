@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { queryAnnouncements } from "@/lib/data/admin";
 import { queryStaffAccounts } from "@/lib/data/staff";
 
@@ -47,7 +48,11 @@ export default function StaffAnnouncementsPage() {
   if (loading) {
     return (
       <AppShell role="staff">
-        <p className="text-body-md text-on-surface-variant">Loading announcements...</p>
+        <div className="space-y-md">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+        </div>
       </AppShell>
     );
   }
