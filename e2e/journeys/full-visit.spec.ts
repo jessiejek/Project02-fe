@@ -175,7 +175,9 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.getByPlaceholder("Amount*").fill("500");
 
   // ── Complete → checklist modal → confirm ──────────────────────────────
-  await doctor.getByRole("button", { name: "Complete Consultation" }).click();
+  // exact: true — the floating counterpart button's name also contains
+  // "Complete Consultation" (prefixed with the "N/9" progress badge).
+  await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).click();
   await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
   // The "Consultation saved" screen only renders after handleComplete has
   // finished ALL its writes (row + PF → diagnoses → follow-up → lab orders →

@@ -1966,6 +1966,22 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         )}
       </Modal>
 
+      {/* Floating counterpart to the header's Complete Consultation button —
+          this is a long, scrolling form; without it, finishing means
+          scrolling all the way back up. Shrink-to-content pill, not a panel,
+          so it costs no more space than any other FAB. */}
+      {mode === "complete" && (
+        <Button
+          disabled={!canComplete}
+          onClick={() => setChecklistOpen(true)}
+          className="fixed bottom-lg right-lg z-40 shadow-lg"
+        >
+          <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
+            {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
+          </span>
+          Complete Consultation
+        </Button>
+      )}
     </AppShell>
   );
 }
