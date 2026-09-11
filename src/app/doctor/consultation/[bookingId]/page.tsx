@@ -894,6 +894,18 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Professional Fee Decision, contradicting that section outright.
   const canComplete = sectionSatisfied[0] && sectionSatisfied[1] && sectionSatisfied[2];
 
+  // Shared footer for every section that has no save of its own (Vitals,
+  // Prescription, Lab Orders and Medical Certificate already have one) — saves
+  // everything currently on the page as a Draft (or, in amend mode, as the
+  // Amended record) without moving the consultation to Completed.
+  const sectionSaveFooter = (
+    <div className="flex items-center justify-end gap-sm border-t border-outline-variant pt-md">
+      <Button disabled={mode === "amend" && !canComplete} onClick={saveCurrentProgress}>
+        Save
+      </Button>
+    </div>
+  );
+
   function buildConsultationRecord(): Consultation {
     return {
       id: consultationId ?? `c${Date.now()}`,
@@ -1174,6 +1186,19 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save your changes. Try again.");
     }
+  }
+
+  // Per-section "Save" button (Diagnosis, Vaccinations, Follow-up, PF Decision,
+  // SOAP & Chief Complaint) — every section's data already travels together in
+  // one persistConsultation() write (it's not split per-section server-side),
+  // so "save this section" really means "save current progress" the same way
+  // Ctrl+S already does: Draft in complete mode, Amended in amend mode. This
+  // just gives that same action a visible home inside each section, matching
+  // the Vitals/Prescription/Lab Orders/Medical Certificate sections, which
+  // already have their own local Save.
+  function saveCurrentProgress() {
+    if (mode === "complete") handleSaveDraft();
+    else handleSaveChanges();
   }
 
   // Doctor.md §4: Ctrl+1..8 jump, Ctrl+S save, Ctrl+Enter complete, `?` help.
@@ -1588,6 +1613,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         </div>
                         <textarea placeholder="Plan" value={plan} onChange={(e) => setPlan(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
                       </div>
+                      {sectionSaveFooter}
                     </div>
                   )}
 
@@ -1665,6 +1691,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         </button>
                         <Link href="/doctor/settings" className="text-on-surface-variant hover:underline">Manage templates</Link>
                       </div>
+                      {sectionSaveFooter}
                     </div>
                   )}
 
@@ -1788,7 +1815,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <input placeholder="Manufacturer" value={newVax.manufacturer} onChange={(e) => setNewVax({ ...newVax, manufacturer: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
                       </div>
                       <Button variant="secondary" onClick={addVaccination}>Stage Vaccination</Button>
-                      <p className="text-label-sm text-on-surface-variant">Saved on Complete Consultation, per Doctor.md §4.</p>
+                      {sectionSaveFooter}
                     </div>
                   )}
 
@@ -1801,6 +1828,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <input type="checkbox" checked={followUpReminder} onChange={(e) => setFollowUpReminder(e.target.checked)} className="h-5 w-5" />
                         Send reminder
                       </label>
+                      {sectionSaveFooter}
                     </div>
                   )}
 
@@ -1988,6 +2016,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         />
                       )}
                       {pfDecision === null && <p className="text-label-md text-on-surface-variant">Optional — choose Charge or Waive if a decision has been made.</p>}
+                      {sectionSaveFooter}
                     </div>
                   )}
                 </Card>
