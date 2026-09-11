@@ -12,7 +12,6 @@ import { queryBookingById } from "@/lib/data/bookings";
 
 interface BookingHeader {
   appointmentDate: string;
-  serviceNames: string[];
   patientId: string;
 }
 
@@ -32,7 +31,6 @@ function VitalsDetailWorkflow({ bookingId }: { bookingId: string }) {
       }
       setBooking({
         appointmentDate: b.appointment_date,
-        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         patientId: b.patient_id,
       });
     }
@@ -69,7 +67,7 @@ function VitalsDetailWorkflow({ bookingId }: { bookingId: string }) {
             <Icon name="chevron_left" className="text-[16px]" />
             Back to Consultation
           </Link>
-          <h1 className="text-headline-md text-on-surface">Vital Signs — {booking.serviceNames.join(", ")}</h1>
+          <h1 className="text-headline-md text-on-surface">Vital Signs</h1>
           <p className="text-label-md text-on-surface-variant">{booking.appointmentDate}</p>
         </div>
 

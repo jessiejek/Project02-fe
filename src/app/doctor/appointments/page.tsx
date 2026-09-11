@@ -26,13 +26,18 @@ export default function DoctorAppointmentsPage() {
   const [bookings, setBookings] = useState<AppointmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Defaults to today, like every other daily-queue view in the app — this
+  // page was pulling every booking ever made with no date scoping at all,
+  // which only gets worse as visit history piles up. "All" is one click away.
+  const [scope, setScope] = useState<"today" | "all">("today");
 
   useEffect(() => {
     if (!meDoctorId) return;
     async function load() {
+      setLoading(true);
       const supabase = null as never;
       try {
-        const rows = await queryDoctorBookings(supabase, meDoctorId);
+        const rows = await queryDoctorBookings(supabase, meDoctorId, { today: scope === "today" });
         setBookings(
           rows.map((b) => ({
             id: b.booking_id,
@@ -48,18 +53,36 @@ export default function DoctorAppointmentsPage() {
       }
     }
     load();
-  }, [meDoctorId]);
+  }, [meDoctorId, scope]);
 
   const rows = bookings.filter((b) => `${b.patientName} ${b.status}`.toLowerCase().includes(search.toLowerCase()));
 
   return (
     <AppShell role="doctor">
       <div className="space-y-lg">
-        <h2 className="text-headline-lg text-on-surface">My Appointments</h2>
+        <div className="flex flex-wrap items-center justify-between gap-md">
+          <h2 className="text-headline-lg text-on-surface">My Visits</h2>
+          <div className="flex overflow-hidden rounded-lg border border-outline-variant text-label-md">
+            <button
+              type="button"
+              onClick={() => setScope("today")}
+              className={scope === "today" ? "bg-primary px-md py-xs text-on-primary" : "px-md py-xs text-on-surface-variant"}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setScope("all")}
+              className={scope === "all" ? "bg-primary px-md py-xs text-on-primary" : "px-md py-xs text-on-surface-variant"}
+            >
+              All
+            </button>
+          </div>
+        </div>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search appointments..."
+          placeholder="Search visits..."
           className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
         />
         <DataTable

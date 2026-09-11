@@ -103,7 +103,7 @@ export default function DoctorDashboardPage() {
           {/* The queue lives on its own page — this is the one link out to it. */}
           <Link href="/doctor/appointments">
             <Button>
-              Go to Appointments
+              Go to My Visits
               <Icon name="chevron_right" className="text-[18px]" />
             </Button>
           </Link>

@@ -31,7 +31,6 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
     patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "Unknown patient",
     patientContact: b.patients?.contact_number ?? "",
     patientEmail: b.patients?.email ?? "",
-    serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
     appointmentDate: b.appointment_date,
     slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
     status: b.status,
@@ -49,7 +48,7 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
     <AppShell role="doctor">
       <div className="mx-auto max-w-[40rem] space-y-lg">
         <Link href="/doctor/appointments" className="text-label-md text-primary hover:underline">
-          ← Back to appointments
+          ← Back to visits
         </Link>
 
         {/* Doctor.md §3: "Hero shows patient/date/queue/status/payment/service
@@ -59,7 +58,6 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
           <div className="mb-md flex items-start justify-between">
             <div>
               <h1 className="text-headline-md text-on-surface">{booking.patientName}</h1>
-              <p className="text-body-md text-on-surface-variant">{booking.serviceNames.join(", ")}</p>
               <p className="text-body-md text-on-surface-variant">{booking.appointmentDate} · {booking.slotStartTime}</p>
             </div>
             <StatusPill status={booking.status} />
@@ -104,7 +102,7 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
           )}
           {isClosed && (
             <Button disabled className="w-full">
-              Appointment Ready
+              Visit Closed
             </Button>
           )}
         </Card>
@@ -118,7 +116,7 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
         )}
 
         {isClosed && (
-          <p className="text-body-md text-on-surface-variant">No consultation record for this appointment.</p>
+          <p className="text-body-md text-on-surface-variant">No consultation record for this visit.</p>
         )}
       </div>
     </AppShell>

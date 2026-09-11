@@ -24,7 +24,6 @@ interface BookingView {
   doctorId: string;
   doctorName: string;
   doctorSpecialization: string;
-  serviceNames: string[];
   appointmentDate: string;
   status: string;
   paymentMode: string;
@@ -70,7 +69,6 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
         doctorId: b.doctor_id,
         doctorName: b.doctors?.staff_accounts?.full_name ?? "",
         doctorSpecialization: b.doctors?.specialization ?? "",
-        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         appointmentDate: b.appointment_date,
         status: b.status,
         paymentMode: b.payment_mode,
@@ -144,8 +142,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
         <Card>
           <div className="mb-md flex items-start justify-between">
             <div>
-              <h2 className="text-headline-sm text-on-surface">Appointment</h2>
-              <p className="text-body-md text-on-surface-variant">{booking.serviceNames.join(", ")}</p>
+              <h2 className="text-headline-sm text-on-surface">Visit</h2>
             </div>
             <StatusPill status={booking.status} />
           </div>
@@ -209,7 +206,6 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                      <div class="card">
                        <p><strong>Patient:</strong> ${escapeHtml(booking.patientName)}</p>
                        <p><strong>Doctor:</strong> ${escapeHtml(booking.doctorName)}</p>
-                       <p><strong>Services:</strong> ${escapeHtml(booking.serviceNames.join(", "))}</p>
                        <p><strong>Date:</strong> ${escapeHtml(booking.appointmentDate)}</p>
                        <p><strong>Amount:</strong> ₱${escapeHtml(String(booking.amountDue))}</p>
                        <p><strong>Payment:</strong> ${escapeHtml(booking.paymentStatus)}</p>
@@ -229,7 +225,6 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                      <div class="card">
                        <p><strong>Patient:</strong> ${escapeHtml(booking.patientName)} (${escapeHtml(booking.patientCode)})</p>
                        <p><strong>Doctor:</strong> ${escapeHtml(booking.doctorName)} — ${escapeHtml(booking.doctorSpecialization)}</p>
-                       <p><strong>Services:</strong> ${escapeHtml(booking.serviceNames.join(", "))}</p>
                        <p><strong>Amount due:</strong> ₱${escapeHtml(String(booking.amountDue))}</p>
                        <p><strong>Payment:</strong> ${escapeHtml(booking.paymentStatus)}${booking.orNumber ? ` · ${escapeHtml(booking.orNumber)}` : ""}</p>
                      </div>`,

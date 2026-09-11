@@ -71,7 +71,7 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
       {
         items: [
           { label: "Dashboard", href: "/doctor/dashboard", icon: "dashboard" },
-          { label: "Appointments", href: "/doctor/appointments", icon: "event_note" },
+          { label: "My Visits", href: "/doctor/appointments", icon: "event_note" },
           { label: "Patients", href: "/doctor/patients", icon: "groups" },
           { label: "Schedule", href: "/doctor/schedule", icon: "schedule" },
           { label: "Settings", href: "/doctor/settings", icon: "settings" },

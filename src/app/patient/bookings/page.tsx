@@ -19,7 +19,6 @@ const TABS = [
 interface BookingRow {
   id: string;
   doctorName: string;
-  serviceNames: string[];
   appointmentDate: string;
   slotStartTime: string;
   status: string;
@@ -61,7 +60,6 @@ export default function MyBookingsPage() {
           rows.map((b) => ({
             id: b.booking_id,
             doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-            serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
             appointmentDate: b.appointment_date,
             slotStartTime: b.slot_start_time.slice(0, 5),
             status: b.status,
@@ -95,7 +93,6 @@ export default function MyBookingsPage() {
         <DataTable
           columns={[
             { header: "Doctor", render: (r) => r.doctorName },
-            { header: "Services", render: (r) => r.serviceNames.join(", ") },
             { header: "Date / Time", render: (r) => `${r.appointmentDate} · ${r.slotStartTime}` },
             { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
             { header: "Status", render: (r) => <StatusPill status={r.status} /> },
@@ -112,7 +109,6 @@ export default function MyBookingsPage() {
                 <p className="text-body-md font-medium text-on-surface">{r.doctorName}</p>
                 <StatusPill status={r.status} />
               </div>
-              <p className="text-label-md text-on-surface-variant">{r.serviceNames.join(", ")}</p>
               <div className="flex items-center justify-between text-label-sm text-on-surface-variant">
                 <span>{r.appointmentDate} · {r.slotStartTime}</span>
                 <StatusPill status={r.paymentStatus} />

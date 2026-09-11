@@ -17,7 +17,6 @@ const TIMELINE = ["Pending", "Confirmed", "CheckedIn", "Completed"];
 interface BookingView {
   id: string;
   doctorName: string;
-  serviceNames: string[];
   appointmentDate: string;
   slotStartTime: string;
   slotEndTime: string;
@@ -61,7 +60,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       setBooking({
         id: b.booking_id,
         doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         appointmentDate: b.appointment_date,
         slotStartTime: b.slot_start_time.slice(0, 5),
         slotEndTime: b.slot_end_time.slice(0, 5),
@@ -127,7 +125,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           <div className="mb-md flex items-start justify-between">
             <div>
               <h1 className="text-headline-md text-on-surface">{booking.doctorName}</h1>
-              <p className="text-body-md text-on-surface-variant">{booking.serviceNames.join(", ")}</p>
             </div>
             <StatusPill status={booking.status} />
           </div>
@@ -259,7 +256,6 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           <p className="text-center text-headline-sm text-on-surface">OR #{orNumber}</p>
           <div className="border-t border-outline-variant pt-sm">
             <ReceiptField label="Doctor" value={booking.doctorName} />
-            <ReceiptField label="Services" value={booking.serviceNames.join(", ")} />
             <ReceiptField label="Date" value={booking.appointmentDate} />
             <ReceiptField label="Amount" value={`₱${booking.totalFee}`} />
             <ReceiptField label="Method" value={booking.paymentMode === "PayAtClinic" ? "Pay at Clinic" : "Online"} />

@@ -20,7 +20,6 @@ interface BookingView {
   patientDob: string;
   doctorName: string;
   doctorSpecialization: string;
-  serviceNames: string[];
   appointmentDate: string;
   slotStartTime: string;
   status: string;
@@ -71,7 +70,6 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
         patientDob: b.patients?.date_of_birth ?? "",
         doctorName: b.doctors?.staff_accounts?.full_name ?? "",
         doctorSpecialization: b.doctors?.specialization ?? "",
-        serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         appointmentDate: b.appointment_date,
         slotStartTime: b.slot_start_time.slice(0, 5),
         status: b.status,
@@ -160,8 +158,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
         <Card>
           <div className="mb-md flex items-start justify-between">
             <div>
-              <h2 className="text-headline-sm text-on-surface">Appointment</h2>
-              <p className="text-body-md text-on-surface-variant">{booking.serviceNames.join(", ")}</p>
+              <h2 className="text-headline-sm text-on-surface">Visit</h2>
             </div>
             <StatusPill status={booking.status} />
           </div>
@@ -332,7 +329,6 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
           <div className="border-t border-outline-variant pt-sm">
             <Field label="Patient" value={booking.patientName} />
             <Field label="Doctor" value={booking.doctorName} />
-            <Field label="Services" value={booking.serviceNames.join(", ")} />
             <Field label="Date" value={booking.appointmentDate} />
             <Field label="Amount" value={`₱${booking.amountDue}`} />
             <Field label="Method" value={paymentMethod} />

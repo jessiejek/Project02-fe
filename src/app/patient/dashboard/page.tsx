@@ -18,7 +18,6 @@ import { resendVerification } from "@/lib/auth/account";
 interface BookingRow {
   id: string;
   doctorName: string;
-  serviceNames: string[];
   appointmentDate: string;
   slotStartTime: string;
   status: string;
@@ -83,7 +82,6 @@ export default function PatientDashboardPage() {
         return {
           id: b.booking_id,
           doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
           appointmentDate: b.appointment_date,
           slotStartTime: b.slot_start_time.slice(0, 5),
           status: b.status,
@@ -188,7 +186,7 @@ export default function PatientDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
-          <StatCard icon="calendar_today" value={upcoming.length} label="Scheduled Appointments" eyebrow="Upcoming" href="/patient/bookings" />
+          <StatCard icon="calendar_today" value={upcoming.length} label="Active Visits" eyebrow="Today" href="/patient/bookings" />
           <StatCard icon="receipt_long" value={pendingProof.length} label="Payment Proof Needed" eyebrow="Pending" href="/patient/bookings" />
           <StatCard icon="check_circle" value={completed.length} label="Completed Visits" eyebrow="History" href="/patient/bookings" />
           <StatCard icon="medication" value={prescriptionCount} label="Current Prescriptions" eyebrow="Active" href="/patient/prescriptions" />
@@ -300,9 +298,8 @@ export default function PatientDashboardPage() {
           <div className="space-y-lg lg:col-span-4">
             {nextBooking && (
               <div className="relative overflow-hidden rounded-xl bg-primary p-lg text-on-primary shadow-lg">
-                <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Next Appointment</h3>
+                <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Your Visit Today</h3>
                 <h4 className="text-headline-md">{nextBooking.doctorName}</h4>
-                <p className="mb-lg text-label-md opacity-80">{nextBooking.serviceNames.join(", ")}</p>
                 <div className="mb-lg flex items-center justify-between rounded-lg bg-on-primary/10 p-md">
                   <div className="flex items-center gap-sm">
                     <Icon name="calendar_today" />

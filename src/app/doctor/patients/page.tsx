@@ -13,7 +13,6 @@ interface DoctorPatientRow {
   fullName: string;
   patientCode: string;
   latestVisitDate: string | null;
-  latestVisitServices: string[];
   latestBookingId: string | null;
 }
 
@@ -42,7 +41,6 @@ export default function DoctorPatientsPage() {
           fullName: `${patient.first_name} ${patient.last_name}`,
           patientCode: patient.patient_code ?? "",
           latestVisitDate: booking.appointment_date,
-          latestVisitServices: booking.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
           latestBookingId: booking.booking_id,
         });
       }
@@ -82,7 +80,7 @@ export default function DoctorPatientsPage() {
                 <p className="mb-md text-label-sm text-on-surface-variant">{p.patientCode}</p>
                 {p.latestVisitDate && (
                   <p className="mb-md text-label-md text-on-surface-variant">
-                    Latest visit: {p.latestVisitDate} — {p.latestVisitServices.join(", ")}
+                    Latest visit: {p.latestVisitDate}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-sm">

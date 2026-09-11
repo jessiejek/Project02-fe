@@ -26,7 +26,6 @@ interface BookingRow {
   patientCode: string;
   doctorId: string;
   doctorName: string;
-  serviceNames: string[];
   appointmentDate: string;
   status: string;
   paymentStatus: string;
@@ -135,7 +134,6 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
             patientCode: b.patients?.patient_code ?? "",
             doctorId: b.doctor_id,
             doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-            serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
             appointmentDate: b.appointment_date,
             status: b.status,
             paymentStatus: b.payments?.status ?? "Unpaid",
@@ -177,7 +175,7 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
       <DataTable
         columns={[
           { header: "Patient", render: (r) => `${r.patientName} (${r.patientCode})` },
-          { header: "Doctor", render: (r) => `${r.doctorName} — ${r.serviceNames.join(", ")}` },
+          { header: "Doctor", render: (r) => r.doctorName },
           { header: "Status", render: (r) => <StatusPill status={r.status} /> },
           { header: "Payment", render: (r) => <StatusPill status={r.paymentStatus} /> },
         ]}
@@ -191,7 +189,7 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
               <p className="text-body-md font-medium text-on-surface">{r.patientName} <span className="text-label-sm text-on-surface-variant">({r.patientCode})</span></p>
               <StatusPill status={r.status} />
             </div>
-            <p className="text-label-md text-on-surface-variant">{r.doctorName} — {r.serviceNames.join(", ")}</p>
+            <p className="text-label-md text-on-surface-variant">{r.doctorName}</p>
             <div className="flex justify-end">
               <StatusPill status={r.paymentStatus} />
             </div>

@@ -14,7 +14,6 @@ interface UnpaidVisitRow {
   bookingId: string;
   patientName: string;
   doctorName: string;
-  serviceNames: string[];
   visitDate: string;
   amountDue: number;
 }
@@ -76,7 +75,6 @@ export default function AdminReportsPage() {
             bookingId: b.booking_id ?? "",
             patientName: b.patient_name ?? "Unknown Patient",
             doctorName: b.doctor_name ?? "Unknown Doctor",
-            serviceNames: [], // services menu is vestigial (§16.6 — flat fee schedule)
             visitDate: b.appointment_date ?? "",
             amountDue: Number(b.amount_due ?? 0),
           })),
@@ -129,9 +127,9 @@ export default function AdminReportsPage() {
 
     const chunks: string[] = [];
     chunks.push("Unpaid Completed Visits");
-    chunks.push(line(["Visit Date", "Patient", "Doctor", "Services", "Amount Due", "Booking ID"]));
+    chunks.push(line(["Visit Date", "Patient", "Doctor", "Amount Due", "Booking ID"]));
     for (const b of unpaidCompleted) {
-      chunks.push(line([b.visitDate, b.patientName, b.doctorName, b.serviceNames.join("; "), b.amountDue, b.bookingId]));
+      chunks.push(line([b.visitDate, b.patientName, b.doctorName, b.amountDue, b.bookingId]));
     }
     chunks.push("");
     chunks.push("Daily Booking Summary");
@@ -193,7 +191,7 @@ export default function AdminReportsPage() {
                   <div key={b.bookingId} className="space-y-xs rounded-lg border border-outline-variant p-md">
                     <p className="text-body-md font-medium text-on-surface">{b.patientName}</p>
                     <p className="text-label-sm text-on-surface-variant">
-                      {b.doctorName} · {b.serviceNames.join(", ")} · {b.visitDate}
+                      {b.doctorName} · {b.visitDate}
                     </p>
                     <div className="flex items-center justify-between gap-md">
                       <span className="text-body-md text-on-surface">₱{b.amountDue}</span>
@@ -208,7 +206,7 @@ export default function AdminReportsPage() {
                 <table className="w-full text-body-md">
                   <thead>
                     <tr className="text-left text-label-md text-on-surface-variant">
-                      <th className="py-sm">Patient</th><th className="py-sm">Doctor</th><th className="py-sm">Service</th><th className="py-sm">Visit Date</th><th className="py-sm text-right">Amount Due</th><th className="py-sm text-right">Action</th>
+                      <th className="py-sm">Patient</th><th className="py-sm">Doctor</th><th className="py-sm">Visit Date</th><th className="py-sm text-right">Amount Due</th><th className="py-sm text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -216,7 +214,6 @@ export default function AdminReportsPage() {
                       <tr key={b.bookingId} className="border-t border-outline-variant/40">
                         <td className="py-sm">{b.patientName}</td>
                         <td className="py-sm">{b.doctorName}</td>
-                        <td className="py-sm">{b.serviceNames.join(", ")}</td>
                         <td className="py-sm">{b.visitDate}</td>
                         <td className="py-sm text-right">₱{b.amountDue}</td>
                         <td className="py-sm text-right">

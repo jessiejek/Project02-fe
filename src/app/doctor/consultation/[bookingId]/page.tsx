@@ -52,7 +52,6 @@ import { queryDoctorById } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
 import { queryPatientById } from "@/lib/data/patients";
 import { printMedicalCertificate, printLabRequest } from "@/lib/print-forms";
-import { one, serviceNames } from "@/lib/one";
 import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFieldTemplate } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -92,7 +91,6 @@ interface ConsultationBooking {
   doctorId: string;
   doctorName: string;
   appointmentDate: string;
-  serviceNames: string[];
   totalFee: number;
   // §16.6 — doctor-set fee-line inputs, seeded from the booking row.
   visitType: "New" | "FollowUp";
@@ -591,7 +589,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         doctorId: bookingRow.doctor_id,
         doctorName: bookingRow.doctors?.staff_accounts?.full_name ?? "",
         appointmentDate: bookingRow.appointment_date,
-        serviceNames: bookingRow.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         totalFee: Number(bookingRow.total_fee),
         visitType: bookingRow.visit_type ?? "New",
         discountCategory: bookingRow.discount_category ?? "",

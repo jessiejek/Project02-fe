@@ -9,14 +9,12 @@ import { Modal } from "@/components/ui/Modal";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { queryBookings } from "@/lib/data/bookings";
 import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
-import { one, serviceNames } from "@/lib/one";
 
 interface QueueRow {
   id: string;
   patientName: string;
   patientCode: string;
   doctorName: string;
-  serviceNames: string[];
   appointmentDate: string;
   queueNumber: string | null;
   amountDue: number;
@@ -55,7 +53,6 @@ export default function PaymentsQueuePage() {
           patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
           patientCode: b.patients?.patient_code ?? "",
           doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
           appointmentDate: b.appointment_date,
           queueNumber: b.queue_number,
           amountDue: Number(b.amount_due),
@@ -125,7 +122,6 @@ export default function PaymentsQueuePage() {
               ),
             },
             { header: "Doctor", render: (r) => r.doctorName },
-            { header: "Services", render: (r) => r.serviceNames.join(", ") },
             { header: "Date / Queue #", render: (r) => `${r.appointmentDate} · ${r.queueNumber ?? "—"}` },
             { header: "Amount Due", align: "right", render: (r) => `₱${r.amountDue}` },
             {
@@ -154,7 +150,7 @@ export default function PaymentsQueuePage() {
                     {r.patientName}
                     {r.patientCode ? ` (${r.patientCode})` : ""}
                   </p>
-                  <p className="text-label-sm text-on-surface-variant">{r.doctorName} · {r.serviceNames.join(", ")}</p>
+                  <p className="text-label-sm text-on-surface-variant">{r.doctorName}</p>
                   <p className="text-label-sm text-on-surface-variant">
                     {r.appointmentDate} · Q#{r.queueNumber ?? "—"}
                   </p>
