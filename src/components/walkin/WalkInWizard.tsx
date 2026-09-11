@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { StepIndicator } from "@/components/ui/StepIndicator";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Icon } from "@/components/ui/Icon";
@@ -273,82 +274,100 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => setQuickRegisterOpen(!quickRegisterOpen)}
-              className="mb-md text-label-md text-primary hover:underline"
-            >
-              + Quick Register New Patient
-            </button>
-            {quickRegisterOpen && (
-              <div className="mb-lg grid grid-cols-1 gap-md rounded-lg border border-outline-variant p-md sm:grid-cols-2">
-                {registerError && (
-                  <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container sm:col-span-2">{registerError}</p>
-                )}
-                <input
-                  value={quickRegister.firstName}
-                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, firstName: e.target.value }))}
-                  placeholder="First Name*"
-                  className="rounded-lg border border-outline-variant px-md py-sm"
-                />
-                <input
-                  value={quickRegister.middleName}
-                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, middleName: e.target.value }))}
-                  placeholder="Middle Name"
-                  className="rounded-lg border border-outline-variant px-md py-sm"
-                />
-                <input
-                  value={quickRegister.lastName}
-                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, lastName: e.target.value }))}
-                  placeholder="Last Name*"
-                  className="rounded-lg border border-outline-variant px-md py-sm"
-                />
-                <input
-                  value={quickRegister.dateOfBirth}
-                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
-                  type="date"
-                  className="rounded-lg border border-outline-variant px-md py-sm"
-                />
-                <select
-                  value={quickRegister.sex}
-                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, sex: e.target.value as "" | "Male" | "Female" }))}
-                  className="rounded-lg border border-outline-variant px-md py-sm text-on-surface-variant"
-                >
-                  <option value="">Sex*</option>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                </select>
-                <input
-                  value={quickRegister.contactNumber}
-                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, contactNumber: e.target.value }))}
-                  placeholder="Contact Number"
-                  className="rounded-lg border border-outline-variant px-md py-sm"
-                />
-                <input
-                  value={quickRegister.address}
-                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, address: e.target.value }))}
-                  placeholder="Address"
-                  className="rounded-lg border border-outline-variant px-md py-sm sm:col-span-2"
-                />
-                <label className="flex items-center gap-sm text-label-md text-on-surface-variant sm:col-span-2">
-                  <input type="checkbox" checked={preparePortal} onChange={(e) => setPreparePortal(e.target.checked)} className="h-5 w-5" />
-                  Prepare Portal Account — creates login access, patient sets password on first login.
-                </label>
-                {preparePortal && (
-                  <p className="text-label-sm text-on-surface-variant sm:col-span-2">
-                    Not wired yet — this registers as a guest record for now; portal invites need an email field this form doesn&apos;t collect.
-                  </p>
-                )}
-                <Button type="button" variant="secondary" onClick={handleQuickRegister} disabled={!canQuickRegister || registering} className="sm:col-span-2">
-                  {registering ? "Registering…" : "Register Patient"}
-                </Button>
-              </div>
-            )}
             <Button disabled={!patientId} onClick={() => setStep(2)} className="w-full">
               Continue
             </Button>
           </Card>
         )}
+
+        {/* Floating, not buried below a long patient list — opens the
+            registration form in its own modal instead of pushing content
+            around inline. */}
+        {step === 1 && (
+          <Button
+            onClick={() => setQuickRegisterOpen(true)}
+            className="fixed bottom-lg right-lg z-40 shadow-lg"
+          >
+            <Icon name="add_circle" className="text-[18px]" />
+            Add New Patient
+          </Button>
+        )}
+
+        <Modal
+          isOpen={quickRegisterOpen}
+          onClose={() => setQuickRegisterOpen(false)}
+          title="Register New Patient"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setQuickRegisterOpen(false)} disabled={registering}>
+                Cancel
+              </Button>
+              <Button onClick={handleQuickRegister} disabled={!canQuickRegister || registering}>
+                {registering ? "Registering…" : "Register Patient"}
+              </Button>
+            </>
+          }
+        >
+          <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
+            {registerError && (
+              <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container sm:col-span-2">{registerError}</p>
+            )}
+            <input
+              value={quickRegister.firstName}
+              onChange={(e) => setQuickRegister((prev) => ({ ...prev, firstName: e.target.value }))}
+              placeholder="First Name*"
+              className="rounded-lg border border-outline-variant px-md py-sm"
+            />
+            <input
+              value={quickRegister.middleName}
+              onChange={(e) => setQuickRegister((prev) => ({ ...prev, middleName: e.target.value }))}
+              placeholder="Middle Name"
+              className="rounded-lg border border-outline-variant px-md py-sm"
+            />
+            <input
+              value={quickRegister.lastName}
+              onChange={(e) => setQuickRegister((prev) => ({ ...prev, lastName: e.target.value }))}
+              placeholder="Last Name*"
+              className="rounded-lg border border-outline-variant px-md py-sm"
+            />
+            <input
+              value={quickRegister.dateOfBirth}
+              onChange={(e) => setQuickRegister((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+              type="date"
+              className="rounded-lg border border-outline-variant px-md py-sm"
+            />
+            <select
+              value={quickRegister.sex}
+              onChange={(e) => setQuickRegister((prev) => ({ ...prev, sex: e.target.value as "" | "Male" | "Female" }))}
+              className="rounded-lg border border-outline-variant px-md py-sm text-on-surface-variant"
+            >
+              <option value="">Sex*</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+            <input
+              value={quickRegister.contactNumber}
+              onChange={(e) => setQuickRegister((prev) => ({ ...prev, contactNumber: e.target.value }))}
+              placeholder="Contact Number"
+              className="rounded-lg border border-outline-variant px-md py-sm"
+            />
+            <input
+              value={quickRegister.address}
+              onChange={(e) => setQuickRegister((prev) => ({ ...prev, address: e.target.value }))}
+              placeholder="Address"
+              className="rounded-lg border border-outline-variant px-md py-sm sm:col-span-2"
+            />
+            <label className="flex items-center gap-sm text-label-md text-on-surface-variant sm:col-span-2">
+              <input type="checkbox" checked={preparePortal} onChange={(e) => setPreparePortal(e.target.checked)} className="h-5 w-5" />
+              Prepare Portal Account — creates login access, patient sets password on first login.
+            </label>
+            {preparePortal && (
+              <p className="text-label-sm text-on-surface-variant sm:col-span-2">
+                Not wired yet — this registers as a guest record for now; portal invites need an email field this form doesn&apos;t collect.
+              </p>
+            )}
+          </div>
+        </Modal>
 
         {step === 2 && patient && (
           <Card>
