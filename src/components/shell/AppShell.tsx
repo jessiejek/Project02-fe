@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import type { Role } from "@/lib/nav-config";
@@ -11,6 +11,8 @@ export interface AppShellProps {
   children: ReactNode;
 }
 
+const COLLAPSE_KEY = "clinic-sidebar-collapsed";
+
 /**
  * Single shared app shell for all 61 screens (per React-Conversion-Guide.md
  * §5) — replaces every hand-rolled sidebar/topbar block in the original
@@ -20,15 +22,48 @@ export interface AppShellProps {
  */
 export function AppShell({ role, roleBadge, children }: AppShellProps) {
   const [isMobileNavOpen, setMobileNavOpen] = useState(false);
+  // Icon-only collapse, desktop only. Defaults open; reads the saved
+  // preference after mount (each page.tsx renders its own <AppShell>, so
+  // this doesn't persist across navigations as component state — it has to
+  // round-trip through localStorage instead, same as any other per-viewer
+  // UI preference).
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
+    } catch {
+      // Private browsing / storage blocked — just stay expanded.
+    }
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // Ignore — worst case the preference doesn't stick this session.
+      }
+      return next;
+    });
+  }
 
   return (
     <div className="flex min-h-screen">
-      {/* Desktop sidebar — fixed width, flex child (no ml-[260px] math anywhere) */}
-      <aside className="hidden w-sidebar shrink-0 md:flex">
-        <Sidebar role={role} />
+      {/* Desktop sidebar — fixed width, flex child (no ml-[260px] math anywhere).
+          `sticky top-0 h-screen` pins it to the viewport so Logout (and the
+          rest of the nav) never scrolls out of reach on a long page — only
+          the nav's own item list scrolls internally if it overflows. */}
+      <aside
+        className={`sticky top-0 hidden h-screen shrink-0 md:flex ${collapsed ? "w-sidebar-collapsed" : "w-sidebar"}`}
+      >
+        <Sidebar role={role} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
       </aside>
 
-      {/* Mobile off-canvas drawer */}
+      {/* Mobile off-canvas drawer — always full width, collapsing an icon-only
+          rail makes no sense on a drawer the user opens on demand and closes
+          right after tapping a link. */}
       {isMobileNavOpen && (
         <div className="fixed inset-0 z-50 flex md:hidden">
           <button

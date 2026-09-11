@@ -121,6 +121,8 @@
 
   /* Sidebar width, used by AppShell + its layout math (single source of truth) */
   --spacing-sidebar: 260px;
+  /* Collapsed (icon-only) sidebar width */
+  --spacing-sidebar-collapsed: 72px;
 }
 
 /*
