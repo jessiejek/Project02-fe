@@ -6,7 +6,7 @@
  * Canonical §4/§6 shapes, served entirely by the .NET API. The leading
  * `_supabase` parameter is a migration vestige (callers pass `null as never`).
  */
-import { api } from "@/lib/api/client";
+import { api, ApiError } from "@/lib/api/client";
 
 // ── consultations ──────────────────────────────────────────────────────────
 export interface ConsultationRow {
@@ -194,8 +194,14 @@ export async function upsertFollowUpByConsultation(
   await api.put(`/api/follow-ups/by-consultation/${consultationId}`, body);
 }
 
+/** Idempotent: "no follow-up to delete" (404) is the goal state, not a failure —
+ * every consultation with no follow-up set hits this every single save. */
 export async function deleteFollowUpByConsultation(_supabase: unknown, consultationId: string): Promise<void> {
-  await api.delete(`/api/follow-ups/by-consultation/${consultationId}`);
+  try {
+    await api.delete(`/api/follow-ups/by-consultation/${consultationId}`);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 404)) throw e;
+  }
 }
 
 // ── medical_certificates (§16.8 Form 2) ──────────────────────────────────

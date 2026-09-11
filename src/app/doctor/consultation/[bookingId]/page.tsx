@@ -208,6 +208,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [rxVersion, setRxVersion] = useState(0);
   const [rxSavedAt, setRxSavedAt] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  // Save Draft / Complete / Save Changes all funnel through persistConsultation,
+  // which makes several sequential API calls — if any of them throws, the
+  // whole thing used to fail silently (the button just... did nothing).
+  // Surface it instead.
+  const [saveError, setSaveError] = useState("");
+  const [completing, setCompleting] = useState(false);
   // Progress is a floating panel (not a fixed sidebar column) so the
   // accordion itself can use the full page width. Minimized, it collapses to
   // a pill showing whichever section is currently open — e.g. "1/5 SOAP &
@@ -965,15 +971,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
 
   async function handleSaveDraft() {
-    await persistConsultation("Draft");
-    setDraftSavedAt(new Date().toLocaleTimeString());
+    setSaveError("");
+    try {
+      const savedId = await persistConsultation("Draft");
+      if (!savedId) throw new Error("Could not save the draft. Check your connection and try again.");
+      setDraftSavedAt(new Date().toLocaleTimeString());
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save the draft. Try again.");
+    }
   }
 
   async function handleComplete() {
-    await persistConsultation("Completed");
-    setSavedConsultation(buildConsultationRecord());
-    setChecklistOpen(false);
-    setJustCompleted(true);
+    setSaveError("");
+    try {
+      const savedId = await persistConsultation("Completed");
+      if (!savedId) throw new Error("Could not complete the consultation. Check your connection and try again.");
+      setSavedConsultation(buildConsultationRecord());
+      setChecklistOpen(false);
+      setJustCompleted(true);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not complete the consultation. Try again.");
+    }
   }
 
   // §16.8 Form 2 — save the certificate row (upsert on consultation) then print
@@ -1080,23 +1098,28 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   async function handleSaveChanges() {
     if (!canComplete || !booking) return;
-    const savedId = await persistConsultation("Amended");
-    if (!savedId) return;
-    const supabase = null as never;
-    const details = "Consultation record";
-    await writeAuditLog(supabase, {
-      entity_type: "Consultation",
-      entity_id: savedId,
-      action: "Amended",
-      details,
-    });
-    setSavedConsultation(buildConsultationRecord());
-    setAmendmentHistory((prev) => [
-      { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: details },
-      ...prev,
-    ]);
-    setAmendSnapshot(null);
-    setMode("view");
+    setSaveError("");
+    try {
+      const savedId = await persistConsultation("Amended");
+      if (!savedId) throw new Error("Could not save your changes. Check your connection and try again.");
+      const supabase = null as never;
+      const details = "Consultation record";
+      await writeAuditLog(supabase, {
+        entity_type: "Consultation",
+        entity_id: savedId,
+        action: "Amended",
+        details,
+      });
+      setSavedConsultation(buildConsultationRecord());
+      setAmendmentHistory((prev) => [
+        { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: details },
+        ...prev,
+      ]);
+      setAmendSnapshot(null);
+      setMode("view");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save your changes. Try again.");
+    }
   }
 
   // Doctor.md §4: Ctrl+1..8 jump, Ctrl+S save, Ctrl+Enter complete, `?` help.
@@ -1296,6 +1319,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         {mode === "amend" && (
           <Toast variant="warning" message="Manual save only — autosave is off in amend mode." dismissible={false} />
         )}
+        {saveError && <Toast key={saveError} variant="error" message={saveError} />}
         {draftSavedAt && mode === "complete" && (
           <Toast key={draftSavedAt} variant="success" message={`Draft saved at ${draftSavedAt}.`} />
         )}
@@ -2008,10 +2032,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         title="Completion Checklist"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setChecklistOpen(false)}>
+            <Button variant="secondary" onClick={() => setChecklistOpen(false)} disabled={completing}>
               Go Back
             </Button>
-            <Button onClick={handleComplete}>
+            <Button
+              loading={completing}
+              onClick={async () => {
+                setCompleting(true);
+                await handleComplete();
+                setCompleting(false);
+              }}
+            >
               Confirm &amp; Complete
             </Button>
           </>
@@ -2028,6 +2059,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         {!sectionSatisfied[6] && (
           <p className="mt-md rounded-lg bg-amber-50 px-md py-sm text-label-md text-amber-700">
             No follow-up set — confirm this is intentional?
+          </p>
+        )}
+        {saveError && (
+          <p className="mt-md rounded-lg bg-error-container px-md py-sm text-label-md text-on-error-container">
+            {saveError}
           </p>
         )}
       </Modal>
