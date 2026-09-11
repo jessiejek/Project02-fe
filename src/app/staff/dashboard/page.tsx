@@ -17,7 +17,6 @@ interface QueueRow {
   queueNumber: string | null;
   status: string;
   paymentStatus: string;
-  amountDue: number;
 }
 
 // Stitch staff_dashboard. Was reading mockBookings regardless of what's
@@ -37,7 +36,6 @@ export default function StaffDashboardPage() {
         queueNumber: b.queue_number,
         status: b.status,
         paymentStatus: b.payments?.status ?? "Unpaid",
-        amountDue: Number(b.amount_due ?? 0),
       }));
       setBookings(rows);
       setLoaded(true);
@@ -47,7 +45,9 @@ export default function StaffDashboardPage() {
 
   const todaysQueue = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status));
   const readyForPayment = bookings.filter((b) => b.status === "Completed" && b.paymentStatus === "Unpaid");
-  const totalDue = readyForPayment.reduce((sum, b) => sum + b.amountDue, 0);
+  // Staff sees headcount, not money — revenue belongs on the doctor's own
+  // dashboard, not the front desk's.
+  const totalPatientsToday = bookings.length;
 
   async function toggleCheckIn(id: string, currentStatus: string) {
     const nextStatus = currentStatus === "Confirmed" ? "CheckedIn" : "Confirmed";
@@ -72,7 +72,7 @@ export default function StaffDashboardPage() {
         <div className="grid grid-cols-1 gap-lg md:grid-cols-3">
           <StatCard icon="event_note" value={todaysQueue.length} label="Today's Appointments" />
           <StatCard icon="payments" value={readyForPayment.length} label="Ready for Payment" href="/staff/payments" />
-          <StatCard icon="payments" value={`₱${totalDue.toLocaleString()}`} label="Total Due" href="/staff/payments" />
+          <StatCard icon="groups" value={totalPatientsToday} label="Total Patients" href="/staff/queue" />
         </div>
 
         <div className="flex flex-wrap gap-md">

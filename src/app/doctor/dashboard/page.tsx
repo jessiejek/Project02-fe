@@ -24,6 +24,7 @@ interface QueueRow {
   slotStartTime: string;
   queueNumber: string | null;
   status: string;
+  paidAmount: number;
 }
 
 // Stitch doctor_dashboard.
@@ -56,6 +57,7 @@ export default function DoctorDashboardPage() {
           slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
           queueNumber: b.queue_number,
           status: b.status,
+          paidAmount: b.payments?.status === "Paid" ? Number(b.payments.amount ?? 0) : 0,
         }))
         .sort((a, b) => (a.queueNumber ?? "").localeCompare(b.queueNumber ?? ""));
       setQueue(rows);
@@ -70,6 +72,7 @@ export default function DoctorDashboardPage() {
   }, [meDoctorId]);
 
   const upNext = queue.find((b) => b.status === "Confirmed");
+  const collectedToday = queue.reduce((sum, b) => sum + b.paidAmount, 0);
 
   async function setStatus(status: DayStatus) {
     const supabase = null as never;
@@ -113,11 +116,12 @@ export default function DoctorDashboardPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-lg md:grid-cols-5">
           <Card><p className="text-headline-lg text-on-surface">{queue.length}</p><p className="text-label-md text-on-surface-variant">Booked</p></Card>
           <Card><p className="text-headline-lg text-on-surface">{queue.filter(b => b.status === "Confirmed").length}</p><p className="text-label-md text-on-surface-variant">Waiting</p></Card>
           <Card><p className="text-headline-lg text-on-surface">{queue.filter(b => b.status === "CheckedIn").length}</p><p className="text-label-md text-on-surface-variant">CheckedIn</p></Card>
           <Card><p className="text-headline-lg text-on-surface">{queue.filter(b => b.status === "Completed").length}</p><p className="text-label-md text-on-surface-variant">Completed</p></Card>
+          <Card><p className="text-headline-lg text-on-surface">{peso(collectedToday)}</p><p className="text-label-md text-on-surface-variant">Collected Today</p></Card>
         </div>
 
         <div className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">

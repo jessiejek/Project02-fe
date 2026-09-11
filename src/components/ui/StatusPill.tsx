@@ -23,11 +23,14 @@ const TONE_ICON: Record<PillTone, string> = {
 // mapped to one tone, so every screen renders the same pill for the same
 // status instead of re-deciding the color per screen.
 const STATUS_TONE: Record<string, PillTone> = {
-  // Booking status
+  // Booking status — Completed is the only "done" state and is the only one
+  // that gets the green success tone; Confirmed/CheckedIn are still-waiting
+  // states and share info (blue) so they're never mistaken for Completed at
+  // a glance (they used to collide on the same green).
   Pending: "warning",
   ProofSubmitted: "info",
-  Confirmed: "success",
-  CheckedIn: "success",
+  Confirmed: "info",
+  CheckedIn: "info",
   InProgress: "warning",
   OnHold: "warning",
   Cancelled: "danger",
