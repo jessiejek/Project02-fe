@@ -457,6 +457,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // §16.6 — doctor picks the fee line; the backend recomputes the booking total
   // on consultation save. Seeded from the booking row in the load effect.
   const [visitType, setVisitType] = useState<"New" | "FollowUp">("New");
+  // What staff tagged it as at check-in, kept separately so the doctor can
+  // see (and reverse) their own override without losing that context.
+  const [staffVisitType, setStaffVisitType] = useState<"New" | "FollowUp" | null>(null);
   const [discountCategory, setDiscountCategory] = useState<"Senior" | "PWD" | "">("");
   const [medCertRequested, setMedCertRequested] = useState(false);
   const [feeSchedule, setFeeSchedule] = useState<{
@@ -660,6 +663,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setSavedConsultation(loadedConsultation);
       setPfAmount(String(realBooking.totalFee || ""));
       setVisitType(realBooking.visitType);
+      setStaffVisitType(realBooking.visitType);
       setDiscountCategory(realBooking.discountCategory);
       setMedCertRequested(realBooking.medCertRequested);
       queryClinicSettings(supabase)
@@ -1267,7 +1271,36 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-md">
-          <h1 className="text-headline-md text-on-surface">Consultation — {booking.serviceNames.join(", ")}</h1>
+          <div>
+            <h1 className="text-headline-md text-on-surface">Consultation — {booking.serviceNames.join(", ")}</h1>
+            {/* Noticeable, and reversible — staff's New/Follow-up tag from
+                check-in drives the fee, so the doctor needs to see it without
+                digging into §9, and can flip it right here if it's wrong. */}
+            <div className="mt-xs flex flex-wrap items-center gap-sm">
+              {(["New", "FollowUp"] as const).map((vt) => (
+                <button
+                  key={vt}
+                  type="button"
+                  onClick={() => setVisitType(vt)}
+                  className={cn(
+                    "rounded-full border px-md py-xs text-label-md font-medium",
+                    visitType === vt
+                      ? vt === "New"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-tertiary bg-tertiary/10 text-tertiary"
+                      : "border-outline-variant text-on-surface-variant",
+                  )}
+                >
+                  {vt === "New" ? "New Visit" : "Follow-up Visit"}
+                </button>
+              ))}
+              {staffVisitType && visitType !== staffVisitType && (
+                <span className="text-label-sm text-on-surface-variant">
+                  (staff tagged this {staffVisitType === "New" ? "New" : "Follow-up"} at check-in)
+                </span>
+              )}
+            </div>
+          </div>
           <div className="flex flex-wrap gap-sm">
             <div className="relative">
               <Button
