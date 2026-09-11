@@ -17,7 +17,15 @@ import { printHtml, escapeHtml } from "@/lib/print";
 // §16.3 — no appointment slots. Walk-in FCFS queue: pick the patient, confirm
 // the visit type / discount, check in → queue ticket.
 const STEPS = ["Patient", "Confirm"];
-const BLANK_QUICK_REGISTER = { firstName: "", lastName: "", dateOfBirth: "", contactNumber: "", sex: "" as "" | "Male" | "Female" };
+const BLANK_QUICK_REGISTER = {
+  firstName: "",
+  middleName: "",
+  lastName: "",
+  dateOfBirth: "",
+  contactNumber: "",
+  address: "",
+  sex: "" as "" | "Male" | "Female",
+};
 
 interface PatientRow {
   id: string;
@@ -91,10 +99,12 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
     try {
       data = await createPatient(supabase, {
         first_name: quickRegister.firstName,
+        middle_name: quickRegister.middleName || null,
         last_name: quickRegister.lastName,
         date_of_birth: quickRegister.dateOfBirth,
         sex: quickRegister.sex as "Male" | "Female",
         contact_number: quickRegister.contactNumber || null,
+        address: quickRegister.address || null,
       });
     } catch {
       setRegistering(false);
@@ -258,6 +268,12 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                   className="rounded-lg border border-outline-variant px-md py-sm"
                 />
                 <input
+                  value={quickRegister.middleName}
+                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, middleName: e.target.value }))}
+                  placeholder="Middle Name"
+                  className="rounded-lg border border-outline-variant px-md py-sm"
+                />
+                <input
                   value={quickRegister.lastName}
                   onChange={(e) => setQuickRegister((prev) => ({ ...prev, lastName: e.target.value }))}
                   placeholder="Last Name*"
@@ -282,6 +298,12 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                   value={quickRegister.contactNumber}
                   onChange={(e) => setQuickRegister((prev) => ({ ...prev, contactNumber: e.target.value }))}
                   placeholder="Contact Number"
+                  className="rounded-lg border border-outline-variant px-md py-sm"
+                />
+                <input
+                  value={quickRegister.address}
+                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, address: e.target.value }))}
+                  placeholder="Address"
                   className="rounded-lg border border-outline-variant px-md py-sm sm:col-span-2"
                 />
                 <label className="flex items-center gap-sm text-label-md text-on-surface-variant sm:col-span-2">

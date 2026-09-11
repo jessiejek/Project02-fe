@@ -79,10 +79,12 @@ export async function createPatient(
   _supabase: unknown,
   fields: {
     first_name: string;
+    middle_name?: string | null;
     last_name: string;
     date_of_birth: string;
     sex: "Male" | "Female";
     contact_number?: string | null;
+    address?: string | null;
     email?: string;
     patient_code?: string;
   },
@@ -91,10 +93,12 @@ export async function createPatient(
   const row = {
     patient_code,
     first_name: fields.first_name.trim(),
+    middle_name: fields.middle_name?.trim() || null,
     last_name: fields.last_name.trim(),
     date_of_birth: fields.date_of_birth,
     sex: fields.sex,
     contact_number: fields.contact_number || null,
+    address: fields.address?.trim() || null,
     email: fields.email ?? "",
     is_guest: true,
     user_id: null,
