@@ -248,10 +248,14 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   expect(vaxText, "vaccination lot persisted").toContain(VAX.lot);
   expect(vaxText, "vaccination route persisted").toContain(VAX.route);
 
-  // ── staff: finish the queue entry + collect payment ─────────────────────
+  // ── staff: the queue entry is already Completed — the doctor's Complete
+  // Consultation click flips the booking's own status via the queue
+  // "/complete" endpoint, same as this manual button used to. Regression
+  // test for a real bug: that call was missing, so a completed consultation
+  // never showed up as "Ready for Payment" until staff manually clicked
+  // Complete here — this asserts it's automatic now, not a leftover manual step.
   await staff.goto("/staff/queue");
   const row2 = staff.locator("tr", { hasText: ticket.queue_number });
-  await row2.getByRole("button", { name: "Complete" }).click();
   await expect(row2.getByText("COMPLETED")).toBeVisible();
 
   await staff.goto("/staff/payments");

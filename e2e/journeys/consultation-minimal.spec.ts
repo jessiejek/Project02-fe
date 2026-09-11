@@ -1,5 +1,5 @@
 import { test, expect } from "../support/fixtures";
-import { createPatient, checkInWalkIn, getConsultationByBooking } from "../support/api";
+import { createPatient, checkInWalkIn, getConsultationByBooking, getBooking } from "../support/api";
 
 /**
  * Regression test for a real production bug: completing a consultation with
@@ -75,4 +75,12 @@ test("consultation completes with only the required fields — no follow-up, no 
   const consult = await getConsultationByBooking(doctorApi, ticket.booking_id);
   const fu = consult.follow_ups ?? consult.follow_up ?? consult.followUp;
   expect(Array.isArray(fu) ? fu.length : fu, "no follow-up should exist").toBeFalsy();
+
+  // Regression: the consultation row and the booking/queue row track status
+  // separately. Completing the clinical record used to leave the booking
+  // stuck on its old status (e.g. CheckedIn) forever, so it never surfaced
+  // in staff's "Ready for Payment" list — a doctor could finish a visit and
+  // it would just silently never reach the front desk.
+  const booking = await getBooking(doctorApi, ticket.booking_id);
+  expect(booking.status, "booking itself must also flip to Completed").toBe("Completed");
 });

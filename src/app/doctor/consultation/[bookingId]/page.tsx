@@ -20,6 +20,7 @@ import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
 import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
 import { queryVaccinationsByConsultation, replaceVaccinationsByConsultation } from "@/lib/data/patientFiles";
+import { updateQueueEntry } from "@/lib/data/queue";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { queryAuditLogs, queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
 import {
@@ -86,6 +87,8 @@ interface ConsultationBooking {
   patientId: string;
   patientName: string;
   patientCode: string;
+  patientSex: string;
+  patientDob: string;
   doctorId: string;
   doctorName: string;
   appointmentDate: string;
@@ -514,6 +517,32 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // practice — the printed cert reads more naturally naming the doctor than
   // a generic clinic_name), while staying an editable field either way.
   const doctorClinicLabel = booking ? `${booking.doctorName.replace(/^Dr\.?\s+/i, "").trim()}, MD Clinic` : "";
+
+  // Standard clinical patient identifier: Name, Sex, Birthday (+ age) — this
+  // is what should always be on screen, not a services list that's empty for
+  // every walk-in visit (there are no itemized "services" in a flat-fee,
+  // no-appointment-slots clinic — see AGENTS/memory).
+  function patientAge(dob: string): number | null {
+    if (!dob) return null;
+    const [ty, tm, td] = todayManila().split("-").map(Number);
+    const [by, bm, bd] = dob.split("-").map(Number);
+    if (!by) return null;
+    let age = ty - by;
+    if (tm < bm || (tm === bm && td < bd)) age--;
+    return age;
+  }
+  function formatDob(dob: string): string {
+    if (!dob) return "";
+    return new Date(`${dob}T00:00:00`).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
+  }
+  function patientIdentifierLine(b: ConsultationBooking): string {
+    const age = patientAge(b.patientDob);
+    return [
+      b.patientCode || null,
+      b.patientSex || null,
+      b.patientDob ? `${formatDob(b.patientDob)}${age !== null ? ` (${age}y)` : ""}` : null,
+    ].filter(Boolean).join(" · ");
+  }
   const [mcExamFrom, setMcExamFrom] = useState("");
   const [mcExamTo, setMcExamTo] = useState("");
   const [mcDiagnosis, setMcDiagnosis] = useState("");
@@ -557,6 +586,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         patientId: bookingRow.patient_id,
         patientName: [bookingRow.patients?.first_name, bookingRow.patients?.last_name].filter(Boolean).join(" "),
         patientCode: bookingRow.patients?.patient_code ?? "",
+        patientSex: bookingRow.patients?.sex ?? "",
+        patientDob: bookingRow.patients?.date_of_birth ?? "",
         doctorId: bookingRow.doctor_id,
         doctorName: bookingRow.doctors?.staff_accounts?.full_name ?? "",
         appointmentDate: bookingRow.appointment_date,
@@ -1005,6 +1036,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     try {
       const savedId = await persistConsultation("Completed");
       if (!savedId) throw new Error("Could not complete the consultation. Check your connection and try again.");
+      // The consultation row and the booking/queue row track status
+      // separately — completing the clinical record does NOT by itself move
+      // the booking off the queue. Staff's "Ready for Payment" list filters
+      // on the booking's own status, so without this call a doctor could
+      // finish a visit and it would just sit there, invisible to staff.
+      const supabase = null as never;
+      await updateQueueEntry(supabase, bookingId, "complete");
       setSavedConsultation(buildConsultationRecord());
       setChecklistOpen(false);
       setJustCompleted(true);
@@ -1202,7 +1240,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           <Card className="space-y-sm text-body-md text-on-surface-variant">
             <p className="text-body-md text-on-surface">
               <strong>Patient:</strong> {booking.patientName || "—"}
-              {booking.patientCode ? ` (${booking.patientCode})` : ""}
+              {patientIdentifierLine(booking) ? ` · ${patientIdentifierLine(booking)}` : ""}
             </p>
             <p><strong>Chief Complaint:</strong> {chiefComplaint}</p>
             <p><strong>Diagnoses:</strong> {diagnoses.map((d) => d.description).join(", ")}</p>
@@ -1223,10 +1261,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         <div className="mx-auto max-w-[40rem] space-y-lg">
           <div className="flex flex-wrap items-center justify-between gap-md">
             <div>
-              <h1 className="text-headline-sm text-on-surface">
-                {booking.patientName || "Patient"}
-                {booking.patientCode ? ` (${booking.patientCode})` : ""}
-              </h1>
+              <h1 className="text-headline-sm text-on-surface">{booking.patientName || "Patient"}</h1>
+              {patientIdentifierLine(booking) && (
+                <p className="text-label-sm text-on-surface-variant">{patientIdentifierLine(booking)}</p>
+              )}
               <p className="text-label-md text-on-surface-variant">
                 Completed {booking.appointmentDate} by {booking.doctorName}
               </p>
@@ -1355,11 +1393,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
         <div className="flex flex-wrap items-center justify-between gap-md">
           <div>
-            <h1 className="text-headline-md text-on-surface">
-              {booking.patientName || "Patient"}
-              {booking.patientCode ? ` (${booking.patientCode})` : ""}
-              <span className="text-on-surface-variant font-normal"> — {booking.serviceNames.join(", ")}</span>
-            </h1>
+            <h1 className="text-headline-md text-on-surface">{booking.patientName || "Patient"}</h1>
+            {patientIdentifierLine(booking) && (
+              <p className="text-label-md text-on-surface-variant">{patientIdentifierLine(booking)}</p>
+            )}
             {/* Noticeable, and reversible — staff's New/Follow-up tag from
                 check-in drives the fee, so the doctor needs to see it without
                 digging into §9, and can flip it right here if it's wrong. */}
