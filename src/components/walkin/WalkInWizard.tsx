@@ -283,9 +283,10 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 >
                   <div>
                     <p className="text-body-md text-on-surface">{p.fullName}</p>
-                    <p className="text-label-sm text-on-surface-variant">{p.patientCode} · {p.contactNumber}</p>
+                    <p className="text-label-sm text-on-surface-variant">{p.contactNumber}</p>
                     {/* Staff.md ask: name alone doesn't identify a patient — two
-                        "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do. */}
+                        "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do
+                        (the MF-code did too, but staff don't work off it). */}
                     <p className="text-label-sm text-on-surface-variant">
                       {p.sex} · {computeAge(p.dateOfBirth)} yrs · {p.dateOfBirth}
                     </p>
