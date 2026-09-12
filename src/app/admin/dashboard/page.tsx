@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { todayManila } from "@/lib/clock";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
@@ -10,6 +10,7 @@ import { queryDoctors } from "@/lib/data/doctors";
 import { queryReport } from "@/lib/data/admin";
 import { queryBookings } from "@/lib/data/bookings";
 import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
+import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 interface BookingRow {
   id: string;
@@ -45,8 +46,7 @@ export default function AdminDashboardPage() {
   const [doctorLoads, setDoctorLoads] = useState<DoctorLoad[]>([]);
   const [recentBookings, setRecentBookings] = useState<BookingRow[]>([]);
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(async () => {
       const supabase = null as never;
       const today = todayManila();
       const monthStart = `${today.slice(0, 7)}-01`;
@@ -103,9 +103,18 @@ export default function AdminDashboardPage() {
       );
 
       setLoaded(true);
-    }
-    load();
   }, []);
+
+  useEffect(() => {
+    async function init() {
+      await load();
+    }
+    init();
+  }, [load]);
+
+  useClinicHubEvent("PatientCheckedIn", load);
+  useClinicHubEvent("QueueUpdated", load);
+  useClinicHubEvent("PaymentUpdated", load);
 
   if (!loaded) {
     return (

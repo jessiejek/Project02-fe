@@ -35,6 +35,8 @@ export default function StaffQueuePage() {
 
   useClinicHubEvent("PatientCheckedIn", refresh);
   useClinicHubEvent("QueueUpdated", refresh);
+  // Amount Due drops to 0 once paid — without this it sits stale here.
+  useClinicHubEvent("PaymentUpdated", refresh);
 
   async function act(bookingId: string, action: "call" | "hold" | "complete" | "no-show") {
     setBusyId(bookingId);
