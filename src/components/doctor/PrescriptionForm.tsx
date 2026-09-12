@@ -547,6 +547,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   const [templateTitle, setTemplateTitle] = useState("");
   const [rxTab, setRxTab] = useState("new");
   const [saving, setSaving] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [toast, setToast] = useState<{ key: number; variant: ToastVariant; message: string } | null>(null);
   const [favorites, setFavorites] = useState<{ id: string; item: PrescriptionLineItem }[]>([]);
   const [templates, setTemplates] = useState<PrescriptionTemplate[]>([]);
@@ -645,7 +646,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     });
   }
 
-  async function handleSave() {
+  function handleSaveClick() {
     if (items.length === 0) {
       showToast("error", "Select Prescriptions to continue this process!");
       return;
@@ -654,7 +655,10 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       showToast("error", "Template title required!");
       return;
     }
+    setConfirmOpen(true);
+  }
 
+  async function confirmSave() {
     setSaving(true);
     try {
       const supabase = null as never;
@@ -695,6 +699,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         });
       }
 
+      setConfirmOpen(false);
       if (embedded) {
         onSaved?.();
       } else {
@@ -713,7 +718,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
 
       <div className="flex items-center justify-between">
         {!embedded && <h1 className="text-headline-md text-on-surface">Prescriptions</h1>}
-        <Button loading={saving} onClick={handleSave} className={cn(embedded && "ml-auto")}>
+        <Button loading={saving} onClick={handleSaveClick} className={cn(embedded && "ml-auto")}>
           <Icon name="check" className="text-[16px]" />
           Save
         </Button>
@@ -834,6 +839,29 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         }
       >
         <p className="text-body-md text-on-surface-variant">Are you sure you want to delete this template?</p>
+      </Modal>
+
+      <Modal
+        isOpen={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        title="Confirm Prescription"
+        footer={
+          <>
+            <Button variant="secondary" disabled={saving} onClick={() => setConfirmOpen(false)}>
+              Go Back
+            </Button>
+            <Button loading={saving} onClick={confirmSave}>Confirm &amp; Save</Button>
+          </>
+        }
+      >
+        <ul className="space-y-xs text-body-md">
+          {items.map((item, i) => (
+            <li key={item.id} className="text-on-surface">
+              {i + 1}. {item.genericName} {item.dosage} — #{item.quantity}
+              {item.instruction ? <span className="text-on-surface-variant"> · {item.instruction}</span> : null}
+            </li>
+          ))}
+        </ul>
       </Modal>
     </div>
   );

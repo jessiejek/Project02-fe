@@ -205,6 +205,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [labsConfirmPrint, setLabsConfirmPrint] = useState<boolean | null>(null);
+  const [certConfirmPrint, setCertConfirmPrint] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
   const [openSection, setOpenSection] = useState(0);
   // Bumped after each in-place prescription save to remount the embedded
@@ -907,7 +909,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Shared footer for every section that has no save of its own (Vitals,
   // Prescription, Lab Orders and Medical Certificate already have one) — saves
   // everything currently on the page as a Draft (or, in amend mode, as the
-  // Amended record) without moving the consultation to Completed.
+  // Amended record) without moving the consultation to Completed. Opens the
+  // review modal first so the doctor sees the full entry before it writes —
+  // "Save" here always saves the whole consultation record, not just this
+  // section, so the confirmation has to show the whole thing.
   // The confirmation toast lives *here*, not just at the top of the page —
   // a doctor working in section 6 of 9 would never scroll back up to see it.
   const sectionSaveFooter = (
@@ -919,7 +924,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         <Button
           disabled={mode === "amend" && !canComplete}
           loading={mode === "complete" ? savingDraft : savingChanges}
-          onClick={saveCurrentProgress}
+          onClick={() => setReviewOpen(true)}
         >
           Save
         </Button>
@@ -1555,21 +1560,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           </div>
         </div>
 
-        {/* Quick-access Save, right above the accordion — the header's Save
-            Draft/Save Changes button scrolls out of view on a form this long.
-            Opens a review of everything about to be written, since a doctor
-            saving from mid-scroll can't see the full entry at a glance. */}
-        <div className="flex items-center justify-end">
-          <Button
-            variant="secondary"
-            loading={mode === "complete" ? savingDraft : savingChanges}
-            onClick={() => setReviewOpen(true)}
-          >
-            <Icon name="check" className="text-[16px]" />
-            Save
-          </Button>
-        </div>
-
         <div className="space-y-md">
             {SECTIONS.map((section, i) => {
               const isOpen = openSection === i;
@@ -1829,10 +1819,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <p className="text-label-md text-on-surface-variant">No tests selected (optional). Saved with the consultation.</p>
                       ) : (
                         <div className="flex flex-wrap gap-sm border-t border-outline-variant pt-md">
-                          <Button loading={savingLabs} disabled={!booking} onClick={() => handleSaveLabOrders(true)}>
+                          <Button loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(true)}>
                             Save & Print Lab Request
                           </Button>
-                          <Button variant="secondary" loading={savingLabs} disabled={!booking} onClick={() => handleSaveLabOrders(false)}>
+                          <Button variant="secondary" loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(false)}>
                             Save without printing
                           </Button>
                         </div>
@@ -1971,10 +1961,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         </label>
                       </div>
                       <div className="flex flex-wrap gap-sm">
-                        <Button loading={issuingCert} disabled={!clinicRow} onClick={() => handleIssueMedCert(true)}>
+                        <Button loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(true)}>
                           {certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
                         </Button>
-                        <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => handleIssueMedCert(false)}>
+                        <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(false)}>
                           Save without printing
                         </Button>
                       </div>
@@ -2315,6 +2305,71 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             </div>
           );
         })()}
+      </Modal>
+
+      <Modal
+        isOpen={labsConfirmPrint !== null}
+        onClose={() => setLabsConfirmPrint(null)}
+        title="Confirm Lab Orders"
+        footer={
+          <>
+            <Button variant="secondary" disabled={savingLabs} onClick={() => setLabsConfirmPrint(null)}>
+              Go Back
+            </Button>
+            <Button
+              loading={savingLabs}
+              onClick={async () => {
+                const printAfter = labsConfirmPrint === true;
+                setLabsConfirmPrint(null);
+                await handleSaveLabOrders(printAfter);
+              }}
+            >
+              {labsConfirmPrint ? "Confirm & Print" : "Confirm & Save"}
+            </Button>
+          </>
+        }
+      >
+        {labOrders.length === 0 ? (
+          <p className="text-body-md text-on-surface-variant">No tests selected.</p>
+        ) : (
+          <ul className="space-y-xs text-body-md">
+            {labOrders.map((l, i) => (
+              <li key={i} className="text-on-surface">
+                {l.testName}
+                {l.reason ? <span className="text-on-surface-variant"> — {l.reason}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={certConfirmPrint !== null}
+        onClose={() => setCertConfirmPrint(null)}
+        title="Confirm Medical Certificate"
+        footer={
+          <>
+            <Button variant="secondary" disabled={issuingCert} onClick={() => setCertConfirmPrint(null)}>
+              Go Back
+            </Button>
+            <Button
+              loading={issuingCert}
+              onClick={async () => {
+                const printAfter = certConfirmPrint === true;
+                setCertConfirmPrint(null);
+                await handleIssueMedCert(printAfter);
+              }}
+            >
+              {certConfirmPrint ? "Confirm & Print" : "Confirm & Save"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-sm text-body-md">
+          <p><strong>Diagnosis:</strong> {mcDiagnosis || assessment || "—"}</p>
+          <p><strong>Recommendations:</strong> {mcRecommendations || plan || "—"}</p>
+          {mcComeBackOn && <p><strong>Come back on:</strong> {mcComeBackOn}</p>}
+        </div>
       </Modal>
 
       <Modal
