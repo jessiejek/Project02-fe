@@ -204,7 +204,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [lastVisitOpen, setLastVisitOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(false);
+  // Which section's Save opened the review modal — the modal only shows
+  // that section's own fields (Doctor asked: SOAP's Save should review just
+  // SOAP, Diagnosis's Save should review just Diagnosis), even though the
+  // write underneath always persists the whole consultation record.
+  const [reviewSection, setReviewSection] = useState<number | null>(null);
   const [labsConfirmPrint, setLabsConfirmPrint] = useState<boolean | null>(null);
   const [certConfirmPrint, setCertConfirmPrint] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
@@ -913,25 +917,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Completed. Sits at the top-right of the section, in the same slot as
   // SOAP's "Use Template…"/"Save as Template" row — visible only while that
   // section is open, since it's the first thing rendered inside it. Opens
-  // the review modal first so the doctor sees the full entry before it
-  // writes — "Save" here always saves the whole consultation record, not
-  // just this section, so the confirmation has to show the whole thing.
-  const sectionSaveHeader = (
-    <div className="space-y-sm">
-      {draftSavedAt && mode === "complete" && (
-        <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
-      )}
-      <div className="flex items-center justify-end gap-sm">
-        <Button
-          disabled={mode === "amend" && !canComplete}
-          loading={mode === "complete" ? savingDraft : savingChanges}
-          onClick={() => setReviewOpen(true)}
-        >
-          Save
-        </Button>
+  // the review modal scoped to *this* section — the write underneath always
+  // persists the whole record, but the doctor only sees the fields for the
+  // section they clicked Save on.
+  function renderSectionSaveHeader(sectionIndex: number) {
+    return (
+      <div className="space-y-sm">
+        {draftSavedAt && mode === "complete" && (
+          <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
+        )}
+        <div className="flex items-center justify-end gap-sm">
+          <Button
+            disabled={mode === "amend" && !canComplete}
+            loading={mode === "complete" ? savingDraft : savingChanges}
+            onClick={() => setReviewSection(sectionIndex)}
+          >
+            Save
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   function buildConsultationRecord(): Consultation {
     return {
@@ -1623,7 +1629,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                           <Button
                             disabled={mode === "amend" && !canComplete}
                             loading={mode === "complete" ? savingDraft : savingChanges}
-                            onClick={() => setReviewOpen(true)}
+                            onClick={() => setReviewSection(0)}
                           >
                             Save
                           </Button>
@@ -1684,7 +1690,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 2 && (
                     <div className="mt-md space-y-md">
-                      {sectionSaveHeader}
+                      {renderSectionSaveHeader(2)}
                       <div className="space-y-sm">
                         {diagnoses.map((d, idx) => (
                           <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
@@ -1844,7 +1850,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 5 && (
                     <div className="mt-md space-y-md">
-                      {sectionSaveHeader}
+                      {renderSectionSaveHeader(5)}
                       <div className="space-y-sm">
                         {vaccinations.map((v, idx) => (
                           <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
@@ -1874,7 +1880,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 6 && (
                     <div className="mt-md space-y-md">
-                      {sectionSaveHeader}
+                      {renderSectionSaveHeader(6)}
                       <DatePicker value={followUpDate} onChange={setFollowUpDate} />
                       <input placeholder="Reason" value={followUpReason} onChange={(e) => setFollowUpReason(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" />
                       <textarea placeholder="Instructions" value={followUpInstructions} onChange={(e) => setFollowUpInstructions(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
@@ -1983,7 +1989,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 8 && (
                     <div className="mt-md space-y-md">
-                      {sectionSaveHeader}
+                      {renderSectionSaveHeader(8)}
                       {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
                       <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
                         <div className="flex flex-wrap items-center gap-sm">
@@ -2216,18 +2222,18 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       </Modal>
 
       <Modal
-        isOpen={reviewOpen}
-        onClose={() => setReviewOpen(false)}
-        title="Review Entry Before Saving"
+        isOpen={reviewSection !== null}
+        onClose={() => setReviewSection(null)}
+        title={reviewSection !== null ? SECTIONS[reviewSection] : ""}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setReviewOpen(false)}>
+            <Button variant="secondary" onClick={() => setReviewSection(null)}>
               Go Back
             </Button>
             <Button
               loading={mode === "complete" ? savingDraft : savingChanges}
               onClick={() => {
-                setReviewOpen(false);
+                setReviewSection(null);
                 saveCurrentProgress();
               }}
             >
@@ -2240,29 +2246,32 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           const entry = buildConsultationRecord();
           return (
             <div className="space-y-md text-body-md">
-              <div>
-                <p className="text-label-sm text-on-surface-variant">Chief Complaint</p>
-                <p className="text-on-surface">{entry.chiefComplaint || "—"}</p>
-              </div>
-              {(entry.subjective || entry.objective || entry.assessment || entry.plan) && (
-                <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                  {([
-                    ["Subjective", entry.subjective],
-                    ["Objective", entry.objective],
-                    ["Assessment", entry.assessment],
-                    ["Plan", entry.plan],
-                  ] as const).map(([label, value]) => (
-                    <div key={label}>
-                      <p className="text-label-sm text-on-surface-variant">{label}</p>
-                      <p className="text-on-surface">{value || "—"}</p>
+              {reviewSection === 0 && (
+                <>
+                  <div>
+                    <p className="text-label-sm text-on-surface-variant">Chief Complaint</p>
+                    <p className="text-on-surface">{entry.chiefComplaint || "—"}</p>
+                  </div>
+                  {(entry.subjective || entry.objective || entry.assessment || entry.plan) && (
+                    <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+                      {([
+                        ["Subjective", entry.subjective],
+                        ["Objective", entry.objective],
+                        ["Assessment", entry.assessment],
+                        ["Plan", entry.plan],
+                      ] as const).map(([label, value]) => (
+                        <div key={label}>
+                          <p className="text-label-sm text-on-surface-variant">{label}</p>
+                          <p className="text-on-surface">{value || "—"}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
-              <div>
-                <p className="mb-xs text-label-sm text-on-surface-variant">Diagnosis</p>
-                {entry.diagnoses.length === 0 ? (
-                  <p className="text-on-surface-variant">None entered</p>
+              {reviewSection === 2 &&
+                (entry.diagnoses.length === 0 ? (
+                  <p className="text-on-surface-variant">No diagnoses entered.</p>
                 ) : (
                   <ul className="space-y-xs">
                     {entry.diagnoses.map((d, i) => (
@@ -2271,44 +2280,38 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                       </li>
                     ))}
                   </ul>
-                )}
-              </div>
-              {!!entry.labOrders?.length && (
-                <div>
-                  <p className="mb-xs text-label-sm text-on-surface-variant">Lab Orders</p>
-                  <ul className="space-y-xs">
-                    {entry.labOrders.map((l, i) => (
-                      <li key={i} className="text-on-surface">{l.testName}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {!!entry.vaccinationsAdministered?.length && (
-                <div>
-                  <p className="mb-xs text-label-sm text-on-surface-variant">Vaccinations</p>
+                ))}
+              {reviewSection === 5 &&
+                (!entry.vaccinationsAdministered?.length ? (
+                  <p className="text-on-surface-variant">No vaccinations staged.</p>
+                ) : (
                   <ul className="space-y-xs">
                     {entry.vaccinationsAdministered.map((v, i) => (
                       <li key={i} className="text-on-surface">{v.vaccineName}</li>
                     ))}
                   </ul>
+                ))}
+              {reviewSection === 6 && (
+                <div>
+                  <p className="text-label-sm text-on-surface-variant">Follow-up</p>
+                  <p className="text-on-surface">
+                    {entry.followUpDate ? `${entry.followUpDate}${entry.followUpReason ? ` — ${entry.followUpReason}` : ""}` : "None set"}
+                  </p>
+                  {entry.followUpInstructions && (
+                    <p className="mt-xs text-on-surface-variant">{entry.followUpInstructions}</p>
+                  )}
                 </div>
               )}
-              <div>
-                <p className="text-label-sm text-on-surface-variant">Follow-up</p>
-                <p className="text-on-surface">
-                  {entry.followUpDate ? `${entry.followUpDate}${entry.followUpReason ? ` — ${entry.followUpReason}` : ""}` : "None set"}
-                </p>
-              </div>
-              {entry.feeDecision && (
-                <div>
-                  <p className="text-label-sm text-on-surface-variant">Professional Fee</p>
+              {reviewSection === 8 &&
+                (entry.feeDecision ? (
                   <p className="text-on-surface">
                     {entry.feeDecision.type === "Charge"
                       ? `Charge — ₱${entry.feeDecision.amount ?? 0}`
                       : `Waived — ${entry.feeDecision.waiveReason || "no reason given"}`}
                   </p>
-                </div>
-              )}
+                ) : (
+                  <p className="text-on-surface-variant">No decision made yet.</p>
+                ))}
               {saveError && (
                 <p className="rounded-lg bg-error-container px-md py-sm text-label-md text-on-error-container">{saveError}</p>
               )}
