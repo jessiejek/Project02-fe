@@ -204,6 +204,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [lastVisitOpen, setLastVisitOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const [openSection, setOpenSection] = useState(0);
   // Bumped after each in-place prescription save to remount the embedded
@@ -1554,6 +1555,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           </div>
         </div>
 
+        {/* Quick-access Save, right above the accordion — the header's Save
+            Draft/Save Changes button scrolls out of view on a form this long.
+            Opens a review of everything about to be written, since a doctor
+            saving from mid-scroll can't see the full entry at a glance. */}
+        <div className="flex items-center justify-end">
+          <Button
+            variant="secondary"
+            loading={mode === "complete" ? savingDraft : savingChanges}
+            onClick={() => setReviewOpen(true)}
+          >
+            <Icon name="check" className="text-[16px]" />
+            Save
+          </Button>
+        </div>
+
         <div className="space-y-md">
             {SECTIONS.map((section, i) => {
               const isOpen = openSection === i;
@@ -2197,6 +2213,108 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             {saveError}
           </p>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={reviewOpen}
+        onClose={() => setReviewOpen(false)}
+        title="Review Entry Before Saving"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReviewOpen(false)}>
+              Go Back
+            </Button>
+            <Button
+              loading={mode === "complete" ? savingDraft : savingChanges}
+              onClick={() => {
+                setReviewOpen(false);
+                saveCurrentProgress();
+              }}
+            >
+              Confirm &amp; Save
+            </Button>
+          </>
+        }
+      >
+        {(() => {
+          const entry = buildConsultationRecord();
+          return (
+            <div className="space-y-md text-body-md">
+              <div>
+                <p className="text-label-sm text-on-surface-variant">Chief Complaint</p>
+                <p className="text-on-surface">{entry.chiefComplaint || "—"}</p>
+              </div>
+              {(entry.subjective || entry.objective || entry.assessment || entry.plan) && (
+                <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+                  {([
+                    ["Subjective", entry.subjective],
+                    ["Objective", entry.objective],
+                    ["Assessment", entry.assessment],
+                    ["Plan", entry.plan],
+                  ] as const).map(([label, value]) => (
+                    <div key={label}>
+                      <p className="text-label-sm text-on-surface-variant">{label}</p>
+                      <p className="text-on-surface">{value || "—"}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div>
+                <p className="mb-xs text-label-sm text-on-surface-variant">Diagnosis</p>
+                {entry.diagnoses.length === 0 ? (
+                  <p className="text-on-surface-variant">None entered</p>
+                ) : (
+                  <ul className="space-y-xs">
+                    {entry.diagnoses.map((d, i) => (
+                      <li key={i} className="text-on-surface">
+                        {d.description} <span className="text-label-sm text-on-surface-variant">({d.type})</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {!!entry.labOrders?.length && (
+                <div>
+                  <p className="mb-xs text-label-sm text-on-surface-variant">Lab Orders</p>
+                  <ul className="space-y-xs">
+                    {entry.labOrders.map((l, i) => (
+                      <li key={i} className="text-on-surface">{l.testName}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {!!entry.vaccinationsAdministered?.length && (
+                <div>
+                  <p className="mb-xs text-label-sm text-on-surface-variant">Vaccinations</p>
+                  <ul className="space-y-xs">
+                    {entry.vaccinationsAdministered.map((v, i) => (
+                      <li key={i} className="text-on-surface">{v.vaccineName}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div>
+                <p className="text-label-sm text-on-surface-variant">Follow-up</p>
+                <p className="text-on-surface">
+                  {entry.followUpDate ? `${entry.followUpDate}${entry.followUpReason ? ` — ${entry.followUpReason}` : ""}` : "None set"}
+                </p>
+              </div>
+              {entry.feeDecision && (
+                <div>
+                  <p className="text-label-sm text-on-surface-variant">Professional Fee</p>
+                  <p className="text-on-surface">
+                    {entry.feeDecision.type === "Charge"
+                      ? `Charge — ₱${entry.feeDecision.amount ?? 0}`
+                      : `Waived — ${entry.feeDecision.waiveReason || "no reason given"}`}
+                  </p>
+                </div>
+              )}
+              {saveError && (
+                <p className="rounded-lg bg-error-container px-md py-sm text-label-md text-on-error-container">{saveError}</p>
+              )}
+            </div>
+          );
+        })()}
       </Modal>
 
       <Modal
