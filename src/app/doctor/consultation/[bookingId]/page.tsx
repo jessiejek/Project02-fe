@@ -906,17 +906,18 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Professional Fee Decision, contradicting that section outright.
   const canComplete = sectionSatisfied[0] && sectionSatisfied[1] && sectionSatisfied[2];
 
-  // Shared footer for every section that has no save of its own (Vitals,
-  // Prescription, Lab Orders and Medical Certificate already have one) — saves
-  // everything currently on the page as a Draft (or, in amend mode, as the
-  // Amended record) without moving the consultation to Completed. Opens the
-  // review modal first so the doctor sees the full entry before it writes —
-  // "Save" here always saves the whole consultation record, not just this
-  // section, so the confirmation has to show the whole thing.
-  // The confirmation toast lives *here*, not just at the top of the page —
-  // a doctor working in section 6 of 9 would never scroll back up to see it.
-  const sectionSaveFooter = (
-    <div className="space-y-sm border-t border-outline-variant pt-md">
+  // Shared header-row Save for every section that has no save of its own
+  // (Vitals, Prescription, Lab Orders and Medical Certificate already have
+  // one) — saves everything currently on the page as a Draft (or, in amend
+  // mode, as the Amended record) without moving the consultation to
+  // Completed. Sits at the top-right of the section, in the same slot as
+  // SOAP's "Use Template…"/"Save as Template" row — visible only while that
+  // section is open, since it's the first thing rendered inside it. Opens
+  // the review modal first so the doctor sees the full entry before it
+  // writes — "Save" here always saves the whole consultation record, not
+  // just this section, so the confirmation has to show the whole thing.
+  const sectionSaveHeader = (
+    <div className="space-y-sm">
       {draftSavedAt && mode === "complete" && (
         <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
       )}
@@ -1579,6 +1580,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 0 && (
                     <div className="mt-md space-y-md">
+                      {draftSavedAt && mode === "complete" && (
+                        <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
+                      )}
                       <div className="flex flex-wrap items-center justify-between gap-sm">
                         {lastVisitSoap && (
                           <button
@@ -1616,6 +1620,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                           >
                             Save as Template
                           </button>
+                          <Button
+                            disabled={mode === "amend" && !canComplete}
+                            loading={mode === "complete" ? savingDraft : savingChanges}
+                            onClick={() => setReviewOpen(true)}
+                          >
+                            Save
+                          </Button>
                         </div>
                       </div>
 
@@ -1654,7 +1665,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         </div>
                         <textarea placeholder="Plan" value={plan} onChange={(e) => setPlan(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
                       </div>
-                      {sectionSaveFooter}
                     </div>
                   )}
 
@@ -1674,6 +1684,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                   {isOpen && i === 2 && (
                     <div className="mt-md space-y-md">
+                      {sectionSaveHeader}
                       <div className="space-y-sm">
                         {diagnoses.map((d, idx) => (
                           <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
@@ -1732,7 +1743,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         </button>
                         <Link href="/doctor/settings" className="text-on-surface-variant hover:underline">Manage templates</Link>
                       </div>
-                      {sectionSaveFooter}
                     </div>
                   )}
 
@@ -1761,6 +1771,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   {isOpen && i === 4 && (
                     <div className="mt-md space-y-md">
                       {labsSavedAt && <Toast key={labsSavedAt} variant="success" message={`Lab request saved at ${labsSavedAt}.`} />}
+
+                      {labOrders.length > 0 && (
+                        <div className="flex flex-wrap items-center justify-end gap-sm">
+                          <Button loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(true)}>
+                            Save & Print Lab Request
+                          </Button>
+                          <Button variant="secondary" loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(false)}>
+                            Save without printing
+                          </Button>
+                        </div>
+                      )}
 
                       {/* §16.8 Form 3 — the pre-printed panel as checkboxes */}
                       {labCatalog.length > 0 && (
@@ -1815,23 +1836,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                       </div>
                       <Button variant="secondary" onClick={addLabOrder} disabled={!newLab.testName.trim()}>Add test</Button>
 
-                      {labOrders.length === 0 ? (
+                      {labOrders.length === 0 && (
                         <p className="text-label-md text-on-surface-variant">No tests selected (optional). Saved with the consultation.</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-sm border-t border-outline-variant pt-md">
-                          <Button loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(true)}>
-                            Save & Print Lab Request
-                          </Button>
-                          <Button variant="secondary" loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(false)}>
-                            Save without printing
-                          </Button>
-                        </div>
                       )}
                     </div>
                   )}
 
                   {isOpen && i === 5 && (
                     <div className="mt-md space-y-md">
+                      {sectionSaveHeader}
                       <div className="space-y-sm">
                         {vaccinations.map((v, idx) => (
                           <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
@@ -1856,12 +1869,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <input placeholder="Manufacturer" value={newVax.manufacturer} onChange={(e) => setNewVax({ ...newVax, manufacturer: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
                       </div>
                       <Button variant="secondary" onClick={addVaccination}>Stage Vaccination</Button>
-                      {sectionSaveFooter}
                     </div>
                   )}
 
                   {isOpen && i === 6 && (
                     <div className="mt-md space-y-md">
+                      {sectionSaveHeader}
                       <DatePicker value={followUpDate} onChange={setFollowUpDate} />
                       <input placeholder="Reason" value={followUpReason} onChange={(e) => setFollowUpReason(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" />
                       <textarea placeholder="Instructions" value={followUpInstructions} onChange={(e) => setFollowUpInstructions(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
@@ -1869,7 +1882,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <input type="checkbox" checked={followUpReminder} onChange={(e) => setFollowUpReminder(e.target.checked)} className="h-5 w-5" />
                         Send reminder
                       </label>
-                      {sectionSaveFooter}
                     </div>
                   )}
 
@@ -1911,6 +1923,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         <Link href="/doctor/settings" className="text-label-sm text-on-surface-variant hover:underline">
                           Manage templates
                         </Link>
+                        <Button loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(true)}>
+                          {certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
+                        </Button>
+                        <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(false)}>
+                          Save without printing
+                        </Button>
                       </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
                         <input
@@ -1960,19 +1978,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                           <input type="date" value={mcComeBackOn} onChange={(e) => setMcComeBackOn(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
                         </label>
                       </div>
-                      <div className="flex flex-wrap gap-sm">
-                        <Button loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(true)}>
-                          {certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
-                        </Button>
-                        <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(false)}>
-                          Save without printing
-                        </Button>
-                      </div>
                     </div>
                   )}
 
                   {isOpen && i === 8 && (
                     <div className="mt-md space-y-md">
+                      {sectionSaveHeader}
                       {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
                       <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
                         <div className="flex flex-wrap items-center gap-sm">
@@ -2057,7 +2068,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         />
                       )}
                       {pfDecision === null && <p className="text-label-md text-on-surface-variant">Optional — choose Charge or Waive if a decision has been made.</p>}
-                      {sectionSaveFooter}
                     </div>
                   )}
                 </Card>

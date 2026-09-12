@@ -142,6 +142,17 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
     <div className="space-y-lg">
       {savedAt && <Toast key={savedAt} variant="success" message={`Vitals saved at ${savedAt}.`} />}
 
+      {/* Top-right, same slot as every other section's Save (SOAP's
+          "Use Template…"/"Save as Template" row, etc.) — visible only while
+          this section is open, since it's the first thing it renders. */}
+      <div className="flex justify-end gap-sm">
+        <Button variant="secondary" onClick={() => setOthersModalOpen(true)}>
+          <Icon name="add_circle" className="text-[16px]" />
+          Others
+        </Button>
+        <Button loading={saving} onClick={() => setConfirmOpen(true)}>Save</Button>
+      </div>
+
       <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
         {defaultTemplates.map((t) => (
           <VitalInputCard key={t.id} template={t} value={values[t.id] ?? ""} onChange={(v) => setValue(t.id, v)} />
@@ -159,18 +170,6 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
             />
           );
         })}
-      </div>
-
-      <Button variant="secondary" onClick={() => setOthersModalOpen(true)}>
-        <Icon name="add_circle" className="text-[16px]" />
-        Others
-      </Button>
-
-      {/* Save sits at the bottom-right of every section's content, after its
-          add-item action — same position as Diagnosis/Lab Orders/Vaccinations,
-          not a special case up top. */}
-      <div className="flex justify-end border-t border-outline-variant pt-md">
-        <Button loading={saving} onClick={() => setConfirmOpen(true)}>Save</Button>
       </div>
 
       <Modal isOpen={othersModalOpen} onClose={() => setOthersModalOpen(false)} title="Add Other Vital">

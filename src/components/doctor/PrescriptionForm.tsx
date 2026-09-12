@@ -716,7 +716,16 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     <div className={cn(!embedded && "mx-auto max-w-[64rem]", "space-y-lg")}>
       {toast && <Toast key={toast.key} variant={toast.variant} message={toast.message} />}
 
-      {!embedded && <h1 className="text-headline-md text-on-surface">Prescriptions</h1>}
+      {/* Top-right, same slot as every other consultation section's Save
+          (SOAP's "Use Template…"/"Save as Template" row, etc.) — visible
+          only while this section is open. */}
+      <div className="flex items-center justify-between">
+        {!embedded && <h1 className="text-headline-md text-on-surface">Prescriptions</h1>}
+        <Button loading={saving} onClick={handleSaveClick} className={cn(embedded && "ml-auto")}>
+          <Icon name="check" className="text-[16px]" />
+          Save
+        </Button>
+      </div>
 
       <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
         <Card className="space-y-md">
@@ -772,16 +781,6 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
             />
           )}
         </Card>
-      </div>
-
-      {/* Save sits at the bottom-right of the section's content, matching
-          every other consultation section (Diagnosis/Lab Orders/Vitals/…)
-          instead of floating in its own header row up top. */}
-      <div className="flex justify-end border-t border-outline-variant pt-md">
-        <Button loading={saving} onClick={handleSaveClick}>
-          <Icon name="check" className="text-[16px]" />
-          Save
-        </Button>
       </div>
 
       <EditLineItemModal
