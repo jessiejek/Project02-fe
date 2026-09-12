@@ -7,7 +7,9 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { SkeletonTable } from "@/components/ui/Skeleton";
+import { todayManila } from "@/lib/clock";
 import { queryQueue } from "@/lib/data/queue";
+import { queryStaffBookings } from "@/lib/data/bookings";
 import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
@@ -30,7 +32,17 @@ function newOrNumber(bookingId: string) {
 // staff/today bookings list, and the three didn't agree (a booking the queue
 // board showed as Completed+owing never showed up here). Reading the same
 // queue board the Staff Queue page and both dashboards already use closes
-// that gap — one source of truth instead of three.
+// that gap for today's visits.
+//
+// The queue board only ever holds today's walk-ins, so it can't surface a
+// patient who went unpaid on an earlier day and comes back later — for that
+// we still need /api/bookings/staff/for-payment, a purpose-built endpoint
+// that existed in this codebase but was never wired to any screen. It's
+// merged in as a supplement (deduped against the queue board, which stays
+// authoritative for today) rather than trusted alone, since its own
+// correctness hasn't been independently verified the way the queue board's
+// has — if it turns out to be unreliable too, this degrades to "today only"
+// rather than silently hiding today's real data.
 export default function PaymentsQueuePage() {
   const [loading, setLoading] = useState(true);
   const [queue, setQueue] = useState<QueueRow[]>([]);
@@ -47,7 +59,7 @@ export default function PaymentsQueuePage() {
   async function load() {
     const supabase = null as never;
     const board = await queryQueue(supabase);
-    const mapped: QueueRow[] = board.items
+    const today: QueueRow[] = board.items
       .filter((e) => e.status === "Completed" && Number(e.amount_due) > 0)
       .map((e) => ({
         id: e.booking_id,
@@ -58,7 +70,34 @@ export default function PaymentsQueuePage() {
         amountDue: Number(e.amount_due),
       }));
 
-    setQueue(mapped);
+    // The queue board is same-day only and already proved reliable; this
+    // supplemental list is scoped to strictly *earlier* days and still
+    // requires Completed, so even if the for-payment endpoint misbehaves on
+    // today's bookings (it has — it returned a Checked-In and an In-Progress
+    // visit with the fix's first draft), it can't override or duplicate what
+    // the queue board already got right for today.
+    const todayStr = todayManila();
+    const seen = new Set(today.map((r) => r.id));
+    let older: QueueRow[] = [];
+    try {
+      const rows = await queryStaffBookings(supabase, "for-payment");
+      older = rows
+        .filter((b) => !seen.has(b.booking_id) && b.status === "Completed" && b.appointment_date < todayStr && Number(b.amount_due) > 0)
+        .map((b) => ({
+          id: b.booking_id,
+          patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
+          patientCode: b.patients?.patient_code ?? "",
+          appointmentDate: b.appointment_date,
+          queueNumber: b.queue_number,
+          amountDue: Number(b.amount_due),
+        }));
+    } catch {
+      // The for-payment endpoint is unverified — if it fails, today's real
+      // queue-board data (already loaded above) still renders correctly.
+      older = [];
+    }
+
+    setQueue([...today, ...older]);
     setLoading(false);
   }
 
