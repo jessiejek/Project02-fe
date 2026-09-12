@@ -454,55 +454,87 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
 
         {step === 2 && patient && (
           <Card>
-            <h2 className="mb-md text-headline-md text-on-surface">Confirm &amp; Check In</h2>
-            <div className="mb-lg space-y-md rounded-lg bg-surface-container-low p-md text-body-md">
-              <p><strong>Patient:</strong> {patient.fullName} <span className="text-on-surface-variant">({patient.patientCode})</span></p>
+            <h2 className="mb-lg text-headline-md text-on-surface">Confirm &amp; Check In</h2>
 
-              <div className="flex flex-wrap items-center gap-sm">
-                <span className="text-label-md text-on-surface-variant">Visit type</span>
-                {(["New", "FollowUp"] as const).map((vt) => (
-                  <button
-                    key={vt}
-                    type="button"
-                    onClick={() => setVisitType(vt)}
-                    className={cn(
-                      "rounded-full border px-md py-xs text-label-md",
-                      visitType === vt ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
-                    )}
+            {/* Patient identity — avatar + name up front, the way a receipt or
+                ticket leads with who it's for. */}
+            <div className="mb-lg flex items-center gap-md rounded-xl bg-surface-container-low p-md">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Icon name="person" className="text-[20px]" />
+              </div>
+              <div>
+                <p className="text-body-lg font-medium text-on-surface">{patient.fullName}</p>
+                <p className="text-label-sm text-on-surface-variant">{patient.patientCode}</p>
+              </div>
+            </div>
+
+            <div className="mb-lg space-y-lg">
+              <div>
+                <p className="mb-sm text-label-md font-medium text-on-surface-variant">Visit type</p>
+                <div className="inline-flex rounded-full border border-outline-variant bg-surface-container-lowest p-[3px]">
+                  {(["New", "FollowUp"] as const).map((vt) => (
+                    <button
+                      key={vt}
+                      type="button"
+                      onClick={() => setVisitType(vt)}
+                      className={cn(
+                        "rounded-full px-lg py-sm text-label-md transition-colors",
+                        visitType === vt
+                          ? "bg-primary text-on-primary shadow-sm"
+                          : "text-on-surface-variant hover:text-on-surface",
+                      )}
+                    >
+                      {vt === "New" ? "New" : "Follow-up"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-sm text-label-md font-medium text-on-surface-variant">Discount</p>
+                <div className="flex flex-wrap items-center gap-sm">
+                  <select
+                    value={discountCategory}
+                    onChange={(e) => setDiscountCategory(e.target.value as "Senior" | "PWD" | "")}
+                    className="rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-sm text-body-md text-on-surface"
                   >
-                    {vt === "New" ? "New" : "Follow-up"}
-                  </button>
-                ))}
+                    <option value="">None</option>
+                    <option value="Senior">Senior citizen</option>
+                    <option value="PWD">PWD</option>
+                  </select>
+                  {discountCategory === "Senior" && patient?.dateOfBirth && isSeniorCitizen(patient.dateOfBirth) && (
+                    <span className="inline-flex items-center gap-xs rounded-full bg-primary/10 px-sm py-xs text-label-sm text-primary">
+                      <Icon name="star" className="text-[12px]" />
+                      Auto-detected from date of birth
+                    </span>
+                  )}
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-sm">
-                <span className="text-label-md text-on-surface-variant">Discount</span>
-                <select
-                  value={discountCategory}
-                  onChange={(e) => setDiscountCategory(e.target.value as "Senior" | "PWD" | "")}
-                  className="rounded-lg border border-outline-variant px-md py-xs text-label-md"
-                >
-                  <option value="">None</option>
-                  <option value="Senior">Senior citizen</option>
-                  <option value="PWD">PWD</option>
-                </select>
-                {discountCategory === "Senior" && patient?.dateOfBirth && isSeniorCitizen(patient.dateOfBirth) && (
-                  <span className="text-label-sm text-on-surface-variant">(auto-detected from date of birth)</span>
-                )}
-              </div>
-
-              <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
-                <input type="checkbox" checked={medCertRequested} onChange={(e) => setMedCertRequested(e.target.checked)} className="h-5 w-5" />
-                Medical certificate requested
+              <label className="flex cursor-pointer items-center justify-between gap-md rounded-xl border border-outline-variant p-md">
+                <span className="flex items-center gap-sm text-body-md text-on-surface">
+                  <Icon name="description" className="text-[18px] text-on-surface-variant" />
+                  Medical certificate requested
+                </span>
+                <input
+                  type="checkbox"
+                  checked={medCertRequested}
+                  onChange={(e) => setMedCertRequested(e.target.checked)}
+                  className="h-5 w-5 accent-primary"
+                />
               </label>
 
-              <p className="flex items-center gap-sm">
-                <strong>Payment:</strong>
-                <span className="rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
-                  Pay at Clinic — provisional fee computed at check-in, finalised at consultation
-                </span>
-              </p>
+              <div className="flex items-start gap-sm rounded-xl bg-primary/5 p-md">
+                <Icon name="payments" className="mt-[2px] text-[18px] text-primary" />
+                <div>
+                  <p className="text-label-md font-medium text-on-surface">Pay at Clinic</p>
+                  <p className="text-label-sm text-on-surface-variant">
+                    Provisional fee computed at check-in, finalised at consultation.
+                  </p>
+                </div>
+              </div>
             </div>
+
             {createError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{createError}</p>}
             <div className="flex gap-md">
               <Button variant="secondary" onClick={() => setStep(1)} className="flex-1">
