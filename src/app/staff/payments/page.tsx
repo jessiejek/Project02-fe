@@ -7,7 +7,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { queryBookings } from "@/lib/data/bookings";
+import { queryQueue } from "@/lib/data/queue";
 import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
@@ -15,21 +15,22 @@ interface QueueRow {
   id: string;
   patientName: string;
   patientCode: string;
-  doctorName: string;
   appointmentDate: string;
   queueNumber: string | null;
   amountDue: number;
-}
-
-interface QueueRowWithPayment extends QueueRow {
-  paymentStatus: string;
 }
 
 function newOrNumber(bookingId: string) {
   return `OR-${bookingId.slice(0, 8).toUpperCase()}`;
 }
 
-// Stitch payments_queue — pre-filtered to Completed + Unpaid, per Staff.md §4.
+// Was querying the generic /api/bookings?status=Completed directly (no date
+// scope, no page-size hint) and filtering for Unpaid client-side — a third
+// definition of "who owes money" alongside the walk-in queue board and the
+// staff/today bookings list, and the three didn't agree (a booking the queue
+// board showed as Completed+owing never showed up here). Reading the same
+// queue board the Staff Queue page and both dashboards already use closes
+// that gap — one source of truth instead of three.
 export default function PaymentsQueuePage() {
   const [loading, setLoading] = useState(true);
   const [queue, setQueue] = useState<QueueRow[]>([]);
@@ -45,17 +46,16 @@ export default function PaymentsQueuePage() {
 
   async function load() {
     const supabase = null as never;
-    const rows = await queryBookings(supabase, { status: "Completed" });
-    const mapped: QueueRow[] = rows
-      .filter((b) => (b.payments?.status ?? "Unpaid") === "Unpaid")
-      .map((b) => ({
-        id: b.booking_id,
-        patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
-        patientCode: b.patients?.patient_code ?? "",
-        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-        appointmentDate: b.appointment_date,
-        queueNumber: b.queue_number,
-        amountDue: Number(b.amount_due),
+    const board = await queryQueue(supabase);
+    const mapped: QueueRow[] = board.items
+      .filter((e) => e.status === "Completed" && Number(e.amount_due) > 0)
+      .map((e) => ({
+        id: e.booking_id,
+        patientName: e.patient_name || "—",
+        patientCode: e.patient_code ?? "",
+        appointmentDate: board.date,
+        queueNumber: e.queue_number,
+        amountDue: Number(e.amount_due),
       }));
 
     setQueue(mapped);
@@ -127,7 +127,6 @@ export default function PaymentsQueuePage() {
                 </>
               ),
             },
-            { header: "Doctor", render: (r) => r.doctorName },
             { header: "Date / Queue #", render: (r) => `${r.appointmentDate} · ${r.queueNumber ?? "—"}` },
             { header: "Amount Due", align: "right", render: (r) => `₱${r.amountDue}` },
             {
@@ -156,7 +155,6 @@ export default function PaymentsQueuePage() {
                     {r.patientName}
                     {r.patientCode ? ` (${r.patientCode})` : ""}
                   </p>
-                  <p className="text-label-sm text-on-surface-variant">{r.doctorName}</p>
                   <p className="text-label-sm text-on-surface-variant">
                     {r.appointmentDate} · Q#{r.queueNumber ?? "—"}
                   </p>
