@@ -267,33 +267,49 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
               placeholder="Search by name/code/phone/email"
               className="mb-md w-full rounded-lg border border-outline-variant px-md py-sm"
             />
-            <div className="mb-md space-y-sm">
-              {filteredPatients.length === 0 && (
-                <p className="text-label-md text-on-surface-variant">No matching patients.</p>
+            <div className="mb-md overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest">
+              {filteredPatients.length === 0 ? (
+                <p className="px-md py-lg text-center text-label-md text-on-surface-variant">No matching patients.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b border-outline-variant bg-surface-container-low">
+                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Patient</th>
+                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Contact</th>
+                        {/* Staff.md ask: name alone doesn't identify a patient — two
+                            "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do
+                            (the MF-code did too, but staff don't work off it). */}
+                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Sex</th>
+                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Age</th>
+                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Date of Birth</th>
+                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Account</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline-variant/30">
+                      {pagedPatients.items.map((p) => (
+                        <tr
+                          key={p.id}
+                          onClick={() => setPatientId(p.id)}
+                          className={cn(
+                            "cursor-pointer transition-colors",
+                            patientId === p.id ? "bg-primary/10" : "hover:bg-surface-container-low",
+                          )}
+                        >
+                          <td className="px-md py-sm text-body-md text-on-surface">{p.fullName}</td>
+                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{p.contactNumber}</td>
+                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{p.sex}</td>
+                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{computeAge(p.dateOfBirth)}</td>
+                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{p.dateOfBirth}</td>
+                          <td className="px-md py-sm">
+                            <StatusPill status={p.accountStatus} />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-              {pagedPatients.items.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPatientId(p.id)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-lg border p-md text-left",
-                    patientId === p.id ? "border-primary ring-2 ring-primary/20" : "border-outline-variant",
-                  )}
-                >
-                  <div>
-                    <p className="text-body-md text-on-surface">{p.fullName}</p>
-                    <p className="text-label-sm text-on-surface-variant">{p.contactNumber}</p>
-                    {/* Staff.md ask: name alone doesn't identify a patient — two
-                        "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do
-                        (the MF-code did too, but staff don't work off it). */}
-                    <p className="text-label-sm text-on-surface-variant">
-                      {p.sex} · {computeAge(p.dateOfBirth)} yrs · {p.dateOfBirth}
-                    </p>
-                  </div>
-                  <StatusPill status={p.accountStatus} />
-                </button>
-              ))}
             </div>
             {filteredPatients.length > 0 && (
               <div className="mb-lg flex items-center justify-between text-label-md text-on-surface-variant">
