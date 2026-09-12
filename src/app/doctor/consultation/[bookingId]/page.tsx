@@ -7,6 +7,7 @@ import { useSearchParams, notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { Modal } from "@/components/ui/Modal";
 import { Drawer } from "@/components/ui/Drawer";
 import { Toast } from "@/components/ui/Toast";
@@ -92,6 +93,7 @@ interface ConsultationBooking {
   doctorName: string;
   appointmentDate: string;
   totalFee: number;
+  paymentStatus: string;
   // §16.6 — doctor-set fee-line inputs, seeded from the booking row.
   visitType: "New" | "FollowUp";
   discountCategory: "Senior" | "PWD" | "";
@@ -592,6 +594,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         doctorName: bookingRow.doctors?.staff_accounts?.full_name ?? "",
         appointmentDate: bookingRow.appointment_date,
         totalFee: Number(bookingRow.total_fee),
+        paymentStatus: bookingRow.payments?.status ?? "Unpaid",
         visitType: bookingRow.visit_type ?? "New",
         discountCategory: bookingRow.discount_category ?? "",
         medCertRequested: bookingRow.med_cert_requested ?? false,
@@ -1302,7 +1305,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         <div className="mx-auto max-w-[40rem] space-y-lg">
           <div className="flex flex-wrap items-center justify-between gap-md">
             <div>
-              <h1 className="text-headline-sm text-on-surface">{booking.patientName || "Patient"}</h1>
+              <div className="flex flex-wrap items-center gap-sm">
+                <h1 className="text-headline-sm text-on-surface">{booking.patientName || "Patient"}</h1>
+                <StatusPill status={booking.paymentStatus} />
+              </div>
               {patientIdentifierLine(booking) && (
                 <p className="text-label-sm text-on-surface-variant">{patientIdentifierLine(booking)}</p>
               )}
@@ -1434,7 +1440,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
         <div className="flex flex-wrap items-center justify-between gap-md">
           <div>
-            <h1 className="text-headline-md text-on-surface">{booking.patientName || "Patient"}</h1>
+            <div className="flex flex-wrap items-center gap-sm">
+              <h1 className="text-headline-md text-on-surface">{booking.patientName || "Patient"}</h1>
+              <StatusPill status={booking.paymentStatus} />
+            </div>
             {patientIdentifierLine(booking) && (
               <p className="text-label-md text-on-surface-variant">{patientIdentifierLine(booking)}</p>
             )}
