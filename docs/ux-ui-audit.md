@@ -2,6 +2,31 @@
 
 Produced with the Intent design system (`/intent` → `/evaluate` → routed specialist skills). Analysis-only — no code changed. This is meant to be handed back to Claude a section at a time when you're ready to execute ("do #3", "do the Journey section", etc).
 
+## Addendum — Walk-in → payment data-flow audit (2026-09-12)
+
+Triggered by a real report: the doctor's dashboard showed a patient as "completed, unpaid," but the Staff Payments page showed nothing to collect. This is a data-consistency audit of the full chain (walk-in → staff registers → doctor consults → doctor completes → staff collects payment), not a UI/UX finding — logged here since it came out of the same session.
+
+**Root cause: four different code paths independently decided "who owes money," and they disagreed.**
+
+| # | Surface | Was reading from | Problem |
+|---|---|---|---|
+| 1 | Staff Dashboard "Ready for Payment" | `GET /api/bookings/staff/today` (`queryStaffBookings`), string-matching `paymentStatus === "Unpaid"` | Disagreed with the queue board on a booking's status |
+| 2 | Staff Payments page | `GET /api/bookings?status=Completed` (generic `queryBookings`, no date scope, no page-size hint) | A *third* endpoint, never reconciled with the other two. A purpose-built `queryStaffBookings(..., "for-payment")` existed in the codebase and was never called from anywhere |
+| 3 | Doctor Dashboard "Needs attention" | `GET /api/queue` (`queryQueue`) | This one was already correct — it's what exposed the other two as wrong |
+| 4 | Admin Dashboard "Unpaid Completed" stat | `v_unpaid_completed_visits` (a backend reporting view, via `queryReport`) | A *fourth* source, not touched in this pass — admin-only KPI reporting, not an actionable collection queue, so lower urgency. Flagged below, not fixed. |
+
+**Fixed (both pushed):** Staff Dashboard and Staff Payments were switched to read from the same queue board (`/api/queue`) that the Staff Queue page and the Doctor Dashboard already use and that real-time SignalR events already keep fresh. All three operational surfaces now agree on one definition of "Completed with `amount_due > 0`."
+
+**Verified live, not just read** — ran the actual flow end to end against the dev server:
+1. Registered a walk-in (Bianca Reyes, staff role) → Q-004, ₱450 provisional fee.
+2. Completed her consultation (doctor role) without collecting payment.
+3. Opened Staff Payments (staff role) → she appeared correctly: "Bianca Reyes (MF-8794) · ₱450 · Confirm Payment." Staff Dashboard's Ready for Payment count and toast also updated to 1.
+
+**Not fixed — flagged for awareness:**
+- **Admin Dashboard's "Unpaid Completed" stat (`v_unpaid_completed_visits`)** is a fourth, separate source. It's a backend reporting view, which architecturally might be the *most* authoritative of the four (a real SQL view vs. ad-hoc endpoint filtering) — but no staff-facing endpoint currently exposes it, so it couldn't be reused for the Payments page even if that were the better long-term source. Worth asking whoever owns the `.NET` backend whether `/api/queue` and `v_unpaid_completed_visits` are guaranteed to agree, or whether the reporting view should become the single source of truth everywhere instead.
+- **`staff/bookings/[id]/page.tsx`** (a single booking's detail view, reached by booking ID) reads its own record directly via `queryBookingById` rather than any list/aggregation endpoint. This is architecturally lower-risk (a direct-by-ID read isn't the same class of bug as a filtered list disagreeing with another filtered list), so it was left as-is — no evidence of a problem, but not independently verified against the backend.
+- This only reaches back to the queue board's existing "today" scope. A booking that goes unpaid on one day and is still unpaid days later would age out of `/api/queue` and might not resurface on Payments — the old generic-bookings approach (bugged as it was) at least queried across all dates. If cross-day unpaid collection turns out to matter in practice, that's a real gap to close next, likely by finally wiring up the unused `for-payment` backend endpoint once its own correctness is confirmed.
+
 ## Revision 2 (2026-09-12, re-walked after your latest commits through `f002775`)
 
 Re-checked live against the dev server. Since the first pass you shipped: real-time SignalR updates for Staff Queue/Dashboard/Doctor Visits/Payments, payment status in the consultation header, a build-version footer, and a My Patients list-layout fix.
