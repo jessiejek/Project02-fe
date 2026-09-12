@@ -19,6 +19,10 @@ import {
   deleteRxTemplate,
   upsertRxGroupByBooking,
 } from "@/lib/data/clinical";
+import { queryClinicSettings } from "@/lib/data/admin";
+import { queryDoctorById } from "@/lib/data/doctors";
+import { queryPatientById } from "@/lib/data/patients";
+import { printPrescription } from "@/lib/print-forms";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -140,13 +144,55 @@ interface EditLineItemModalProps {
   onSave: (item: PrescriptionLineItem) => void;
 }
 
+// Same field set as NewRxTab (§16.8 Form 1's Rx-pad columns) — editing a line
+// item used to only expose Medication/Dosage/Quantity/Instructions, silently
+// dropping the meal/timing/duration/indication it was added with.
 function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
   const [genericName, setGenericName] = useState(item?.genericName ?? "");
   const [dosage, setDosage] = useState(item?.dosage ?? "");
   const [quantity, setQuantity] = useState(item?.quantity ?? "");
+  const [mealRelation, setMealRelation] = useState<"Before" | "After" | null>(item?.mealRelation ?? null);
+  const [timingSlots, setTimingSlots] = useState<string[]>(
+    item?.timing ? item.timing.split(",").map((s) => s.trim()).filter(Boolean) : [],
+  );
+  const [durationKind, setDurationKind] = useState<"Maintain" | "Days" | "Weeks" | null>(item?.durationKind ?? null);
+  const [durationValue, setDurationValue] = useState(item?.durationValue ? String(item.durationValue) : "");
+  const [indication, setIndication] = useState(item?.indication ?? "");
   const [instruction, setInstruction] = useState(item?.instruction ?? "");
 
+  // Re-seed every field when a different item is opened for editing.
+  useEffect(() => {
+    setGenericName(item?.genericName ?? "");
+    setDosage(item?.dosage ?? "");
+    setQuantity(item?.quantity ?? "");
+    setMealRelation(item?.mealRelation ?? null);
+    setTimingSlots(item?.timing ? item.timing.split(",").map((s) => s.trim()).filter(Boolean) : []);
+    setDurationKind(item?.durationKind ?? null);
+    setDurationValue(item?.durationValue ? String(item.durationValue) : "");
+    setIndication(item?.indication ?? "");
+    setInstruction(item?.instruction ?? "");
+  }, [item]);
+
   if (!item) return null;
+
+  function toggleSlot(slot: string) {
+    setTimingSlots((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
+  }
+
+  function handleSave() {
+    onSave({
+      ...item!,
+      genericName,
+      dosage,
+      quantity,
+      mealRelation,
+      timing: timingSlots.length ? timingSlots.join(", ") : null,
+      durationKind,
+      durationValue: durationKind === "Days" || durationKind === "Weeks" ? Number(durationValue) || null : null,
+      indication: indication.trim() || null,
+      instruction,
+    });
+  }
 
   return (
     <Modal
@@ -154,16 +200,102 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
       onClose={onClose}
       title="Edit Prescription"
       footer={
-        <Button onClick={() => onSave({ ...item, genericName, dosage, quantity, instruction })} disabled={!genericName.trim() || !quantity.trim()}>
+        <Button onClick={handleSave} disabled={!genericName.trim() || !quantity.trim()}>
           Save
         </Button>
       }
     >
       <div className="space-y-md">
-        <input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Medication" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-        <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-        <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="Quantity (e.g. 50pcs)" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-        <textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Instructions" rows={3} className="w-full rounded-lg border border-outline-variant p-md" />
+        <input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Medication — pick from the list or just type it" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+        <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+        <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+
+        <div>
+          <p className="mb-xs text-label-sm text-on-surface-variant">Meals</p>
+          <div className="grid grid-cols-2 gap-sm">
+            {(["Before", "After"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setMealRelation((prev) => (prev === option ? null : option))}
+                aria-pressed={mealRelation === option}
+                className={cn(
+                  "rounded-lg border px-md py-sm text-label-md",
+                  mealRelation === option ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
+                )}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-xs text-label-sm text-on-surface-variant">Timing</p>
+          <div className="grid grid-cols-4 gap-sm">
+            {TIMING_SLOTS.map((slot) => (
+              <button
+                key={slot}
+                type="button"
+                onClick={() => toggleSlot(slot)}
+                aria-pressed={timingSlots.includes(slot)}
+                className={cn(
+                  "rounded-lg border px-xs py-sm text-label-sm",
+                  timingSlots.includes(slot) ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
+                )}
+              >
+                {slot}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-xs text-label-sm text-on-surface-variant">Duration</p>
+          <div className="flex flex-wrap items-center gap-sm">
+            {(["Maintain", "Days", "Weeks"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setDurationKind((prev) => (prev === k ? null : k))}
+                aria-pressed={durationKind === k}
+                className={cn(
+                  "rounded-lg border px-md py-sm text-label-md",
+                  durationKind === k ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
+                )}
+              >
+                {k}
+              </button>
+            ))}
+            {(durationKind === "Days" || durationKind === "Weeks") && (
+              <input
+                type="number"
+                min={1}
+                value={durationValue}
+                onChange={(e) => setDurationValue(e.target.value)}
+                placeholder={`# ${durationKind.toLowerCase()}`}
+                className="w-28 rounded-lg border border-outline-variant px-md py-sm text-body-md"
+              />
+            )}
+          </div>
+        </div>
+
+        <input
+          value={indication}
+          onChange={(e) => setIndication(e.target.value)}
+          placeholder="Indication (e.g. for fever, for cough)"
+          className="w-full rounded-lg border border-outline-variant px-md py-sm"
+        />
+        <div>
+          <textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value.slice(0, 200))}
+            placeholder="Sig. / extra instructions (optional)"
+            rows={2}
+            className="w-full rounded-lg border border-outline-variant p-md"
+          />
+          <p className="mt-xs text-right text-label-sm text-on-surface-variant">{instruction.length}/200</p>
+        </div>
       </div>
     </Modal>
   );
@@ -547,6 +679,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   const [templateTitle, setTemplateTitle] = useState("");
   const [rxTab, setRxTab] = useState("new");
   const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [toast, setToast] = useState<{ key: number; variant: ToastVariant; message: string } | null>(null);
   const [favorites, setFavorites] = useState<{ id: string; item: PrescriptionLineItem }[]>([]);
@@ -712,6 +845,56 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     }
   }
 
+  // Same letterhead form the patient portal prints from — the doctor
+  // previously had no way to hand a patient a physical Rx from inside the
+  // consultation at all, only Save.
+  async function handlePrint() {
+    if (items.length === 0) {
+      showToast("error", "Select Prescriptions to continue this process!");
+      return;
+    }
+    setPrinting(true);
+    try {
+      const supabase = null as never;
+      const [clinic, doctor, patient] = await Promise.all([
+        queryClinicSettings(supabase),
+        queryDoctorById(supabase, doctorId),
+        queryPatientById(supabase, patientId),
+      ]);
+      printPrescription({
+        clinic: clinic
+          ? { clinic_name: clinic.clinic_name, address: clinic.address, contact_number: clinic.contact_number }
+          : { clinic_name: "Grace Medical Clinic", address: "", contact_number: null },
+        doctor: {
+          full_name: doctor?.staff_accounts?.full_name ?? "",
+          license_number: doctor?.license_number ?? null,
+          ptr_number: doctor?.ptr_number ?? null,
+        },
+        patient: {
+          full_name: patient ? `${patient.first_name} ${patient.last_name}`.trim() : "",
+          patient_code: patient?.patient_code,
+          date_of_birth: patient?.date_of_birth ?? null,
+          sex: patient?.sex ?? null,
+          address: patient?.address ?? null,
+        },
+        items: items.map((i) => ({
+          generic_name: i.genericName,
+          dosage: i.dosage,
+          quantity: i.quantity,
+          instruction: i.instruction,
+          timing: i.timing,
+          meal_relation: i.mealRelation,
+          duration_kind: i.durationKind,
+          duration_value: i.durationValue,
+          indication: i.indication,
+          is_controlled_substance: i.isControlledSubstance,
+        })),
+      });
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   return (
     <div className={cn(!embedded && "mx-auto max-w-[64rem]", "space-y-lg")}>
       {toast && <Toast key={toast.key} variant={toast.variant} message={toast.message} />}
@@ -719,12 +902,18 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       {/* Top-right, same slot as every other consultation section's Save
           (SOAP's "Use Template…"/"Save as Template" row, etc.) — visible
           only while this section is open. */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-sm">
         {!embedded && <h1 className="text-headline-md text-on-surface">Prescriptions</h1>}
-        <Button loading={saving} onClick={handleSaveClick} className={cn(embedded && "ml-auto")}>
-          <Icon name="check" className="text-[16px]" />
-          Save
-        </Button>
+        <div className={cn("flex items-center gap-sm", embedded && "ml-auto")}>
+          <Button variant="secondary" loading={printing} onClick={handlePrint}>
+            <Icon name="print" className="text-[16px]" />
+            Print
+          </Button>
+          <Button loading={saving} onClick={handleSaveClick}>
+            <Icon name="check" className="text-[16px]" />
+            Save
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
