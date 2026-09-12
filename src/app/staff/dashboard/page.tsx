@@ -9,6 +9,7 @@ import { Toast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { queryStaffBookings, updateBookingStatus } from "@/lib/data/bookings";
+import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 interface QueueRow {
   id: string;
@@ -42,6 +43,23 @@ export default function StaffDashboardPage() {
     }
     load();
   }, []);
+
+  async function reload() {
+    const data = await queryStaffBookings(null as never, "today");
+    setBookings(
+      data.map((b) => ({
+        id: b.booking_id,
+        patientName: b.patients ? `${b.patients.first_name ?? ""} ${b.patients.last_name ?? ""}`.trim() : "",
+        slotStartTime: b.slot_start_time.slice(0, 5),
+        queueNumber: b.queue_number,
+        status: b.status,
+        paymentStatus: b.payments?.status ?? "Unpaid",
+      })),
+    );
+  }
+  useClinicHubEvent("PatientCheckedIn", reload);
+  useClinicHubEvent("QueueUpdated", reload);
+  useClinicHubEvent("PaymentUpdated", reload);
 
   const todaysQueue = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status));
   const readyForPayment = bookings.filter((b) => b.status === "Completed" && b.paymentStatus === "Unpaid");

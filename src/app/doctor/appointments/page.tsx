@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
 import { DataTable } from "@/components/ui/DataTable";
@@ -8,6 +8,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctorBookings } from "@/lib/data/bookings";
+import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 interface AppointmentRow {
   id: string;
@@ -31,29 +32,37 @@ export default function DoctorAppointmentsPage() {
   // which only gets worse as visit history piles up. "All" is one click away.
   const [scope, setScope] = useState<"today" | "all">("today");
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!meDoctorId) return;
-    async function load() {
-      setLoading(true);
-      const supabase = null as never;
-      try {
-        const rows = await queryDoctorBookings(supabase, meDoctorId, { today: scope === "today" });
-        setBookings(
-          rows.map((b) => ({
-            id: b.booking_id,
-            patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
-            slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
-            queueNumber: b.queue_number,
-            status: b.status,
-            paymentStatus: b.payments?.status ?? "Unpaid",
-          })),
-        );
-      } finally {
-        setLoading(false);
-      }
+    setLoading(true);
+    const supabase = null as never;
+    try {
+      const rows = await queryDoctorBookings(supabase, meDoctorId, { today: scope === "today" });
+      setBookings(
+        rows.map((b) => ({
+          id: b.booking_id,
+          patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
+          slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+          queueNumber: b.queue_number,
+          status: b.status,
+          paymentStatus: b.payments?.status ?? "Unpaid",
+        })),
+      );
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [meDoctorId, scope]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Only meaningful in "today" scope — a full-history pull doesn't need to
+  // react to a new check-in the way the day's live list does.
+  useClinicHubEvent("PatientCheckedIn", () => {
+    if (scope === "today") load();
+  });
+  useClinicHubEvent("QueueUpdated", load);
 
   const rows = bookings.filter((b) => `${b.patientName} ${b.status}`.toLowerCase().includes(search.toLowerCase()));
 

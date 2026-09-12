@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
 import { queryQueue, updateQueueEntry, type QueueBoard } from "@/lib/data/queue";
+import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 // §16.3 — today's walk-in FCFS queue board.
 export default function StaffQueuePage() {
@@ -26,9 +27,14 @@ export default function StaffQueuePage() {
 
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 20_000);
+    // Real-time (below) is the primary trigger; this poll is just the
+    // fallback for a dropped/blocked SignalR connection, so it can be slow.
+    const t = setInterval(refresh, 60_000);
     return () => clearInterval(t);
   }, [refresh]);
+
+  useClinicHubEvent("PatientCheckedIn", refresh);
+  useClinicHubEvent("QueueUpdated", refresh);
 
   async function act(bookingId: string, action: "call" | "hold" | "complete" | "no-show") {
     setBusyId(bookingId);

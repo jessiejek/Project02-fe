@@ -9,6 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { queryBookings } from "@/lib/data/bookings";
 import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
+import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 interface QueueRow {
   id: string;
@@ -42,28 +43,33 @@ export default function PaymentsQueuePage() {
 
   const totalDue = queue.reduce((sum, b) => sum + b.amountDue, 0);
 
+  async function load() {
+    const supabase = null as never;
+    const rows = await queryBookings(supabase, { status: "Completed" });
+    const mapped: QueueRow[] = rows
+      .filter((b) => (b.payments?.status ?? "Unpaid") === "Unpaid")
+      .map((b) => ({
+        id: b.booking_id,
+        patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
+        patientCode: b.patients?.patient_code ?? "",
+        doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+        appointmentDate: b.appointment_date,
+        queueNumber: b.queue_number,
+        amountDue: Number(b.amount_due),
+      }));
+
+    setQueue(mapped);
+    setLoading(false);
+  }
+
   useEffect(() => {
-    async function load() {
-      const supabase = null as never;
-      const rows = await queryBookings(supabase, { status: "Completed" });
-      const mapped: QueueRow[] = rows
-        .filter((b) => (b.payments?.status ?? "Unpaid") === "Unpaid")
-        .map((b) => ({
-          id: b.booking_id,
-          patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
-          patientCode: b.patients?.patient_code ?? "",
-          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          appointmentDate: b.appointment_date,
-          queueNumber: b.queue_number,
-          amountDue: Number(b.amount_due),
-        }));
-
-      setQueue(mapped);
-      setLoading(false);
-    }
-
     load();
   }, []);
+
+  // A visit going Completed is what makes it show up here; a payment
+  // getting confirmed/waived elsewhere is what makes it drop off.
+  useClinicHubEvent("QueueUpdated", load);
+  useClinicHubEvent("PaymentUpdated", load);
 
   async function handleConfirm() {
     if (!activeBooking) return;

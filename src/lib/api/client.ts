@@ -64,6 +64,12 @@ export function clearCachedToken() {
   cachedToken = undefined;
 }
 
+/** For non-fetch consumers (the SignalR hub connection) that need the same
+ * access token this client attaches as `Authorization: Bearer`. */
+export async function getAccessToken(): Promise<string | undefined> {
+  return tokenProvider();
+}
+
 type RequestOptions = {
   /** Extra query params; undefined/null values are dropped. */
   query?: Record<string, string | number | boolean | undefined | null>;
