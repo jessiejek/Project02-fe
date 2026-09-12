@@ -76,6 +76,16 @@ export default function StaffDashboardPage() {
   });
   useClinicHubEvent("PaymentUpdated", loadQueue);
 
+  // Fallback poll for a dropped/blocked SignalR connection (same pattern as
+  // /staff/queue) — self-corrects within a minute if push doesn't arrive.
+  useEffect(() => {
+    const t = setInterval(() => {
+      loadBookings();
+      loadQueue();
+    }, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   const todaysQueue = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status));
   const readyForPayment = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
   // Staff sees headcount, not money — revenue belongs on the doctor's own

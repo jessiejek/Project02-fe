@@ -116,6 +116,13 @@ export default function AdminDashboardPage() {
   useClinicHubEvent("QueueUpdated", load);
   useClinicHubEvent("PaymentUpdated", load);
 
+  // Fallback poll for a dropped/blocked SignalR connection (same pattern as
+  // /staff/queue) — self-corrects within a minute if push doesn't arrive.
+  useEffect(() => {
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [load]);
+
   if (!loaded) {
     return (
       <AppShell role="admin">

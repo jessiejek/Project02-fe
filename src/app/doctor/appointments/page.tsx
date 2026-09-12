@@ -68,6 +68,13 @@ export default function DoctorAppointmentsPage() {
   // page's Payment column until the doctor manually refreshes.
   useClinicHubEvent("PaymentUpdated", load);
 
+  // Fallback poll for a dropped/blocked SignalR connection (same pattern as
+  // /staff/queue) — self-corrects within a minute if push doesn't arrive.
+  useEffect(() => {
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [load]);
+
   const STATUS_FILTERS: Record<typeof statusFilter, string[] | null> = {
     all: null,
     waiting: ["CheckedIn"],

@@ -91,6 +91,20 @@ export default function DoctorDashboardPage() {
   });
   useClinicHubEvent("PaymentUpdated", loadAttention);
 
+  // Real-time is the primary trigger; this poll is the fallback for a
+  // dropped/blocked SignalR connection (same pattern as /staff/queue), so a
+  // stale "unpaid" tag self-corrects within a minute even if push never
+  // arrives — matters most in production, where a proxy or a
+  // multi-instance backend without a shared backplane can silently break
+  // the push path while everything else still works.
+  useEffect(() => {
+    const t = setInterval(() => {
+      loadQueue();
+      loadAttention();
+    }, 60_000);
+    return () => clearInterval(t);
+  }, [loadQueue, loadAttention]);
+
   useEffect(() => {
     if (!meDoctorId) return;
     async function load() {

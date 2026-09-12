@@ -110,6 +110,13 @@ export default function PaymentsQueuePage() {
   useClinicHubEvent("QueueUpdated", load);
   useClinicHubEvent("PaymentUpdated", load);
 
+  // Fallback poll for a dropped/blocked SignalR connection (same pattern as
+  // /staff/queue) — self-corrects within a minute if push doesn't arrive.
+  useEffect(() => {
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   async function handleConfirm() {
     if (!activeBooking) return;
     setSubmitting(true);
