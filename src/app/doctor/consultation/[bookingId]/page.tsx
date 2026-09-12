@@ -884,7 +884,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         return <Icon name="check_circle" className={cn(className, "text-green-600")} />;
       }
       return (
-        <span className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-blue-100 px-xs font-bold text-blue-700", className)}>
+        <span
+          title={`${filled} of ${fields.length} fields filled in this section`}
+          aria-label={`${filled} of ${fields.length} fields filled`}
+          className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-blue-100 px-xs font-bold text-blue-700", className)}
+        >
           {filled}/{fields.length}
         </span>
       );
@@ -1326,11 +1330,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           {sc && (
             <>
               <Card className="space-y-sm text-body-md text-on-surface-variant">
-                <p><strong>Chief Complaint:</strong> {sc.chiefComplaint}</p>
-                <p><strong>Subjective:</strong> {sc.subjective}</p>
-                <p><strong>Objective:</strong> {sc.objective}</p>
-                <p><strong>Assessment:</strong> {sc.assessment}</p>
-                <p><strong>Plan:</strong> {sc.plan}</p>
+                <p><strong>Chief Complaint:</strong> {sc.chiefComplaint || "Not recorded."}</p>
+                <p><strong>Subjective:</strong> {sc.subjective || "Not recorded."}</p>
+                <p><strong>Objective:</strong> {sc.objective || "Not recorded."}</p>
+                <p><strong>Assessment:</strong> {sc.assessment || "Not recorded."}</p>
+                <p><strong>Plan:</strong> {sc.plan || "Not recorded."}</p>
               </Card>
               <Card>
                 <h4 className="mb-sm text-headline-sm text-on-surface">Vital Signs</h4>
@@ -1343,7 +1347,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               <Card>
                 <h4 className="mb-sm text-headline-sm text-on-surface">Diagnoses</h4>
                 <p className="text-body-md text-on-surface-variant">
-                  {sc.diagnoses.length > 0 ? sc.diagnoses.map((d) => `${d.description} (${d.type})`).join(", ") : "None recorded."}
+                  {sc.diagnoses.length > 0 ? sc.diagnoses.map((d) => `${d.description} (${d.type})`).join(", ") : "No diagnoses recorded."}
                 </p>
               </Card>
               <Card>
@@ -1357,7 +1361,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-body-md text-on-surface-variant">None prescribed.</p>
+                  <p className="text-body-md text-on-surface-variant">No prescriptions recorded.</p>
                 )}
               </Card>
               <Card>
@@ -1371,7 +1375,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-body-md text-on-surface-variant">None ordered.</p>
+                  <p className="text-body-md text-on-surface-variant">No lab orders recorded.</p>
                 )}
               </Card>
               <Card>
@@ -1385,13 +1389,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-body-md text-on-surface-variant">None administered.</p>
+                  <p className="text-body-md text-on-surface-variant">No vaccinations recorded.</p>
                 )}
               </Card>
               <Card>
                 <h4 className="mb-sm text-headline-sm text-on-surface">Follow-up</h4>
                 <p className="text-body-md text-on-surface-variant">
-                  {sc.followUpDate ? `${sc.followUpDate} — ${sc.followUpReason ?? ""}${sc.followUpInstructions ? ` (${sc.followUpInstructions})` : ""}${sc.followUpReminder ? " · reminder on" : ""}` : "No follow-up scheduled."}
+                  {sc.followUpDate ? `${sc.followUpDate} — ${sc.followUpReason ?? ""}${sc.followUpInstructions ? ` (${sc.followUpInstructions})` : ""}${sc.followUpReminder ? " · reminder on" : ""}` : "No follow-up recorded."}
                 </p>
               </Card>
               <Card>
@@ -1431,7 +1435,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     <AppShell role="doctor">
       <div className="space-y-lg">
         {mode === "amend" && (
-          <Toast variant="warning" message="Manual save only — autosave is off in amend mode." dismissible={false} />
+          <Toast variant="info" message="Manual save only — autosave is off in amend mode." dismissible={false} />
         )}
         {saveError && <Toast key={saveError} variant="error" message={saveError} />}
         {draftSavedAt && mode === "complete" && (
@@ -1455,6 +1459,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 <button
                   key={vt}
                   type="button"
+                  aria-pressed={visitType === vt}
                   onClick={() => setVisitType(vt)}
                   className={cn(
                     "rounded-full border px-md py-xs text-label-md font-medium",
@@ -1482,6 +1487,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 onClick={() => setProgressOpen((v) => !v)}
                 aria-expanded={progressOpen}
                 aria-haspopup="true"
+                title={`${sectionSatisfied.filter(Boolean).length} of ${SECTIONS.length} sections complete`}
+                aria-label={`Progress: ${sectionSatisfied.filter(Boolean).length} of ${SECTIONS.length} sections complete`}
               >
                 <Icon name="monitoring" className="text-[18px]" />
                 {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}

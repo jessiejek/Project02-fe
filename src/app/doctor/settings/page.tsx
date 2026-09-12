@@ -82,6 +82,7 @@ export default function DoctorSettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [slowLoad, setSlowLoad] = useState(false);
   const [medicines, setMedicines] = useState<{ id: string; generic_name: string }[]>([]);
 
   const [diagnoses, setDiagnoses] = useState<DiagnosisTemplateRow[]>([]);
@@ -90,6 +91,15 @@ export default function DoctorSettingsPage() {
   const [favorites, setFavorites] = useState<FavoriteMedicineRow[]>([]);
   const [rxSets, setRxSets] = useState<RxTemplateRow[]>([]);
   const [mcTemplates, setMcTemplates] = useState<MedicalCertificateTemplateRow[]>([]);
+
+  // A skeleton alone doesn't tell a doctor on a slow connection whether the
+  // page is still working or just stuck — after a few seconds, say so. Only
+  // relevant while `loading` is shown, so nothing to reset when it flips off.
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setSlowLoad(true), 6000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   useEffect(() => {
     if (sessionLoading) return;
@@ -156,6 +166,11 @@ export default function DoctorSettingsPage() {
 
         {loading ? (
           <div className="space-y-lg">
+            {slowLoad && (
+              <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
+                Still loading — this is taking longer than usual.
+              </p>
+            )}
             <SkeletonCard lines={3} />
             <SkeletonCard lines={3} />
             <SkeletonCard lines={3} />

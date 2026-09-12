@@ -27,6 +27,7 @@ export default function DoctorAppointmentsPage() {
   const [bookings, setBookings] = useState<AppointmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "waiting" | "in-progress" | "completed">("all");
   // Defaults to today, like every other daily-queue view in the app — this
   // page was pulling every booking ever made with no date scoping at all,
   // which only gets worse as visit history piles up. "All" is one click away.
@@ -64,7 +65,19 @@ export default function DoctorAppointmentsPage() {
   });
   useClinicHubEvent("QueueUpdated", load);
 
-  const rows = bookings.filter((b) => `${b.patientName} ${b.status}`.toLowerCase().includes(search.toLowerCase()));
+  const STATUS_FILTERS: Record<typeof statusFilter, string[] | null> = {
+    all: null,
+    waiting: ["CheckedIn"],
+    "in-progress": ["InProgress"],
+    completed: ["Completed"],
+  };
+
+  const rows = bookings
+    .filter((b) => `${b.patientName} ${b.status}`.toLowerCase().includes(search.toLowerCase()))
+    .filter((b) => {
+      const allowed = STATUS_FILTERS[statusFilter];
+      return !allowed || allowed.includes(b.status);
+    });
 
   return (
     <AppShell role="doctor">
@@ -88,12 +101,24 @@ export default function DoctorAppointmentsPage() {
             </button>
           </div>
         </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search visits..."
-          className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
-        />
+        <div className="flex flex-wrap items-center gap-sm">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search visits..."
+            className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            className="rounded-lg border border-outline-variant px-md py-sm text-body-md text-on-surface"
+          >
+            <option value="all">All statuses</option>
+            <option value="waiting">Waiting (Checked in)</option>
+            <option value="in-progress">In progress</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
         <DataTable
           columns={[
             { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
@@ -107,7 +132,7 @@ export default function DoctorAppointmentsPage() {
               render: (r) =>
                 ["CheckedIn", "InProgress"].includes(r.status) ? (
                   <Link href={`/doctor/consultation/${r.id}`}>
-                    <Button>Start Consultation</Button>
+                    <Button>{r.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}</Button>
                   </Link>
                 ) : (
                   <Link href={`/doctor/appointments/${r.id}`}>
@@ -133,7 +158,7 @@ export default function DoctorAppointmentsPage() {
               <StatusPill status={r.paymentStatus} />
               {["CheckedIn", "InProgress"].includes(r.status) ? (
                 <Link href={`/doctor/consultation/${r.id}`} className="block">
-                  <Button className="w-full">Start Consultation</Button>
+                  <Button className="w-full">{r.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}</Button>
                 </Link>
               ) : (
                 <Link href={`/doctor/appointments/${r.id}`} className="block">
