@@ -64,6 +64,9 @@ export default function DoctorAppointmentsPage() {
     if (scope === "today") load();
   });
   useClinicHubEvent("QueueUpdated", load);
+  // Without this, a payment staff confirms elsewhere never updates this
+  // page's Payment column until the doctor manually refreshes.
+  useClinicHubEvent("PaymentUpdated", load);
 
   const STATUS_FILTERS: Record<typeof statusFilter, string[] | null> = {
     all: null,
