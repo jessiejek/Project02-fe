@@ -20,10 +20,24 @@ import { queryBookings } from "@/lib/data/bookings";
 import { queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
 import { printHtml, escapeHtml } from "@/lib/print";
 import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
+import { todayManila } from "@/lib/clock";
 import type { PrescriptionGroup, VitalFieldTemplate, BookingStatus } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
+
+function computeAge(dateOfBirth: string): number {
+  const [ty, tm, td] = todayManila().split("-").map(Number);
+  const [by, bm, bd] = dateOfBirth.split("-").map(Number);
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age--;
+  return age;
+}
+
+function initials(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
+}
 
 interface RealPatientHeader {
   id: string;
@@ -73,6 +87,9 @@ interface ChartVaccination {
   administeredDate: string | null;
   status: string;
 }
+
+// 44x44 minimum touch target for every icon-only action (WCAG 2.5.8).
+const ICON_BTN = "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-container-low";
 
 const TABS = [
   { id: "timeline", label: "Timeline" },
@@ -258,19 +275,49 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
 
   return (
     <AppShell role="doctor">
-      <div className="mx-auto max-w-[44rem] space-y-lg">
+      <div className="mx-auto max-w-6xl space-y-lg">
+        <Link
+          href="/doctor/patients"
+          className="inline-flex items-center gap-xs text-label-md text-on-surface-variant transition-colors hover:text-on-surface"
+        >
+          <Icon name="chevron_left" className="text-[14px]" />
+          Back to Patients
+        </Link>
+
         <Card>
-          <h1 className="text-headline-md text-on-surface">{patient.fullName}</h1>
-          <p className="text-label-md text-on-surface-variant">
-            {patient.patientCode} · {patient.sex} · {patient.dateOfBirth} · {patient.contactNumber}
-          </p>
+          <div className="flex flex-wrap items-center gap-md">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-body-lg font-semibold text-primary">
+              {initials(patient.fullName)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-sm">
+                <h1 className="text-headline-md text-on-surface">{patient.fullName}</h1>
+                <span className="text-label-md text-on-surface-variant">{patient.patientCode}</span>
+              </div>
+              <p className="mt-xs text-body-md text-on-surface-variant">
+                {patient.sex} · {computeAge(patient.dateOfBirth)} yrs · Born {patient.dateOfBirth}
+              </p>
+            </div>
+            {patient.contactNumber && (
+              <a
+                href={`tel:${patient.contactNumber}`}
+                className="inline-flex items-center gap-sm rounded-lg border border-outline-variant px-md py-sm text-label-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
+              >
+                <Icon name="call" className="text-[16px]" />
+                {patient.contactNumber}
+              </a>
+            )}
+          </div>
         </Card>
 
         <Card>
-          <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
-          <p className="mb-md inline-block rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
-            Read-only
-          </p>
+          <div className="mb-md flex flex-wrap items-center justify-between gap-md">
+            <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="flex-1" />
+            <span className="mb-md inline-flex shrink-0 items-center gap-xs rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
+              <Icon name="lock" className="text-[12px]" />
+              Read-only
+            </span>
+          </div>
 
           {tab === "timeline" && (
             <div className="space-y-sm">
@@ -278,9 +325,18 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                 <EmptyState icon="event" message="No appointments with you yet." />
               ) : (
                 patientBookings.map((b) => (
-                  <div key={b.id} className="flex items-center gap-md text-body-md text-on-surface-variant">
-                    <Icon name="event" className="text-[18px]" />
-                    {b.appointmentDate} — {b.serviceNames.join(", ") || "Consultation"} ({b.status})
+                  <div
+                    key={b.id}
+                    className="flex items-center gap-md rounded-xl border border-outline-variant p-md"
+                  >
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Icon name="event" className="text-[16px]" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-body-md text-on-surface">{b.serviceNames.join(", ") || "Consultation"}</p>
+                      <p className="text-label-sm text-on-surface-variant">{b.appointmentDate}</p>
+                    </div>
+                    <StatusPill status={b.status} />
                   </div>
                 ))
               )}
@@ -312,14 +368,28 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
             )
           )}
           {tab === "consultations" && (
-            <div className="space-y-sm">
+            <div className="space-y-md">
               {patientConsultations.length === 0 ? (
                 <EmptyState icon="clinical_notes" message="No consultations recorded yet." />
               ) : (
                 patientConsultations.map((c) => (
-                  <div key={c.id} className="rounded-lg border border-outline-variant p-md text-body-md text-on-surface-variant">
-                    <p><strong>{c.appointmentDate}</strong> — {c.chiefComplaint}</p>
-                    <p>{c.diagnosisDescriptions.join(", ")}</p>
+                  <div key={c.id} className="rounded-xl border border-outline-variant p-md">
+                    <div className="flex flex-wrap items-baseline justify-between gap-sm">
+                      <p className="text-body-md font-medium text-on-surface">{c.chiefComplaint || "Consultation"}</p>
+                      <p className="text-label-sm text-on-surface-variant">{c.appointmentDate}</p>
+                    </div>
+                    {c.diagnosisDescriptions.length > 0 && (
+                      <div className="mt-sm flex flex-wrap gap-xs">
+                        {c.diagnosisDescriptions.map((d, i) => (
+                          <span
+                            key={i}
+                            className="rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant"
+                          >
+                            {d}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -333,23 +403,27 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                     type="button"
                     onClick={() => setVitalsView("list")}
                     className={cn(
-                      "rounded-md px-sm py-xs text-label-sm transition-colors",
+                      "flex h-11 w-11 items-center justify-center rounded-md transition-colors",
                       vitalsView === "list" ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-low",
                     )}
+                    title="List view"
                     aria-label="List view"
+                    aria-pressed={vitalsView === "list"}
                   >
-                    <Icon name="view_list" className="text-[16px]" />
+                    <Icon name="view_list" className="text-[18px]" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setVitalsView("table")}
                     className={cn(
-                      "rounded-md px-sm py-xs text-label-sm transition-colors",
+                      "flex h-11 w-11 items-center justify-center rounded-md transition-colors",
                       vitalsView === "table" ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-low",
                     )}
+                    title="Table view"
                     aria-label="Table view"
+                    aria-pressed={vitalsView === "table"}
                   >
-                    <Icon name="table_rows" className="text-[16px]" />
+                    <Icon name="table_rows" className="text-[18px]" />
                   </button>
                 </div>
                 <div className="flex items-center gap-sm">
@@ -463,19 +537,30 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               </div>
 
               {patientPrescriptionGroups.length === 0 ? (
-                <EmptyState icon="prescriptions" message="No Record found!" />
+                <EmptyState icon="prescriptions" message="No prescriptions recorded yet." />
               ) : (
                 <div className="space-y-md">
                   {patientPrescriptionGroups.map((group) => (
                     <Card key={group.id}>
-                      <div className="flex items-center justify-between border-b border-outline-variant pb-sm">
-                        <p className="text-headline-sm text-on-surface">{group.createdAt}</p>
-                        <div className="flex items-center gap-md">
+                      <div className="flex items-start justify-between gap-md border-b border-outline-variant pb-md">
+                        <div className="flex items-center gap-sm">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Icon name="prescriptions" className="text-[18px]" />
+                          </div>
+                          <div>
+                            <p className="text-body-md font-medium text-on-surface">
+                              {group.items.length} {group.items.length === 1 ? "medicine" : "medicines"}
+                            </p>
+                            <p className="text-label-sm text-on-surface-variant">{group.createdAt}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-xs">
                           <button
                             type="button"
                             onClick={() => setPrintPreviewGroup(group)}
                             aria-label="Print prescription"
-                            className="text-primary"
+                            title="Print prescription"
+                            className={cn(ICON_BTN, "text-on-surface-variant hover:text-primary")}
                           >
                             <Icon name="print" className="text-[18px]" />
                           </button>
@@ -484,14 +569,16 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                               <Link
                                 href={`/doctor/patients/${patient.id}/prescriptions/${group.id}`}
                                 aria-label="Edit prescription"
-                                className="text-primary"
+                                title="Edit prescription"
+                                className={cn(ICON_BTN, "text-on-surface-variant hover:text-primary")}
                               >
                                 <Icon name="edit" className="text-[18px]" />
                               </Link>
                               <Link
                                 href={`/doctor/patients/${patient.id}/prescriptions/create?copyFrom=${group.id}&bookingId=${referredBookingId}`}
                                 aria-label="Copy prescription"
-                                className="text-primary"
+                                title="Copy prescription"
+                                className={cn(ICON_BTN, "text-on-surface-variant hover:text-primary")}
                               >
                                 <Icon name="copy" className="text-[18px]" />
                               </Link>
@@ -499,7 +586,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                                 type="button"
                                 onClick={() => setDeleteRxGroupId(group.id)}
                                 aria-label="Delete prescription"
-                                className="text-error"
+                                title="Delete prescription"
+                                className={cn(ICON_BTN, "text-error hover:bg-error-container")}
                               >
                                 <Icon name="delete" className="text-[18px]" />
                               </button>
@@ -508,7 +596,6 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                         </div>
                       </div>
                       <div className="mt-md space-y-sm">
-                        <Icon name="prescriptions" className="text-[24px] text-primary" />
                         {group.items.map((item, i) => (
                           <p key={item.id} className="text-body-md text-on-surface-variant">
                             <span className="text-on-surface">
@@ -529,11 +616,13 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
             patientLabResults.length === 0 ? (
               <EmptyState icon="science" message="No lab results yet." />
             ) : (
-              <div className="grid grid-cols-2 gap-md sm:grid-cols-3">
+              <div className="space-y-sm">
                 {patientLabResults.map((l) => (
-                  <div key={l.id} className="rounded-lg border border-outline-variant p-md text-center text-label-md text-on-surface-variant">
-                    <Icon name="science" className="mb-xs block text-[24px]" />
-                    {l.resultTitle}
+                  <div key={l.id} className="flex items-center gap-md rounded-xl border border-outline-variant p-md">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Icon name="science" className="text-[16px]" />
+                    </div>
+                    <p className="text-body-md text-on-surface">{l.resultTitle}</p>
                   </div>
                 ))}
               </div>
@@ -543,11 +632,13 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
             patientDocuments.length === 0 ? (
               <EmptyState icon="description" message="No documents yet." />
             ) : (
-              <div className="grid grid-cols-2 gap-md sm:grid-cols-3">
+              <div className="space-y-sm">
                 {patientDocuments.map((d) => (
-                  <div key={d.id} className="rounded-lg border border-outline-variant p-md text-center text-label-md text-on-surface-variant">
-                    <Icon name="description" className="mb-xs block text-[24px]" />
-                    {d.title}
+                  <div key={d.id} className="flex items-center gap-md rounded-xl border border-outline-variant p-md">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Icon name="description" className="text-[16px]" />
+                    </div>
+                    <p className="text-body-md text-on-surface">{d.title}</p>
                   </div>
                 ))}
               </div>
