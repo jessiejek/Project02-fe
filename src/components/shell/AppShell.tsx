@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { VersionFooter } from "./VersionFooter";
 import type { Role } from "@/lib/nav-config";
 
 export interface AppShellProps {
@@ -83,6 +84,7 @@ export function AppShell({ role, roleBadge, children }: AppShellProps) {
         <main className="flex-1 bg-background p-md sm:p-lg">
           <div className="mx-auto w-full max-w-content min-w-0">{children}</div>
         </main>
+        <VersionFooter />
       </div>
     </div>
   );

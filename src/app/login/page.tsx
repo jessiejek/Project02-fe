@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { VersionFooter } from "@/components/shell/VersionFooter";
 
 const ROLE_TO_SEGMENT: Record<string, string> = {
   Patient: "patient",
@@ -49,48 +50,51 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-container-low p-lg">
-      <div className="w-full max-w-[26rem] rounded-xl border border-outline-variant bg-surface-container-lowest p-xl shadow-sm">
-        <div className="mb-lg text-center">
-          <h1 className="text-headline-md text-primary">Dr. Grace Gavino Medical Clinic</h1>
-          <p className="mt-xs text-body-md text-on-surface-variant">Log in</p>
+    <div className="flex min-h-screen flex-col bg-surface-container-low">
+      <div className="flex flex-1 items-center justify-center p-lg">
+        <div className="w-full max-w-[26rem] rounded-xl border border-outline-variant bg-surface-container-lowest p-xl shadow-sm">
+          <div className="mb-lg text-center">
+            <h1 className="text-headline-md text-primary">Dr. Grace Gavino Medical Clinic</h1>
+            <p className="mt-xs text-body-md text-on-surface-variant">Log in</p>
+          </div>
+          <form className="space-y-md" onSubmit={handleSubmit}>
+            {error && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{error}</p>}
+            <div className="space-y-xs">
+              <label htmlFor="email" className="text-label-md text-on-surface-variant">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-lg border border-outline-variant px-md py-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div className="space-y-xs">
+              <label htmlFor="password" className="text-label-md text-on-surface-variant">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-lg border border-outline-variant px-md py-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              />
+              <Link href="/forgot-password" className="inline-block text-label-sm text-on-surface-variant hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+            <Button type="submit" className="w-full" loading={submitting}>
+              {submitting ? "Logging in…" : "Log in"}
+            </Button>
+          </form>
         </div>
-        <form className="space-y-md" onSubmit={handleSubmit}>
-          {error && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{error}</p>}
-          <div className="space-y-xs">
-            <label htmlFor="email" className="text-label-md text-on-surface-variant">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-outline-variant px-md py-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-          <div className="space-y-xs">
-            <label htmlFor="password" className="text-label-md text-on-surface-variant">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-outline-variant px-md py-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <Link href="/forgot-password" className="inline-block text-label-sm text-on-surface-variant hover:underline">
-              Forgot password?
-            </Link>
-          </div>
-          <Button type="submit" className="w-full" loading={submitting}>
-            {submitting ? "Logging in…" : "Log in"}
-          </Button>
-        </form>
       </div>
+      <VersionFooter />
     </div>
   );
 }
