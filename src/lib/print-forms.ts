@@ -48,7 +48,12 @@ function signature(doctor: PrintDoctor): string {
   return `<div class="sig">${lines.join("")}</div>`;
 }
 
+// Prescription / med cert / lab request are printed on a half sheet of short
+// bond paper fed crosswise (i.e. an 8.5x11 sheet cut in half and printed
+// landscape) — the standard pad size for these forms in a PH clinic, not a
+// full letter page. Width-before-height is what makes this landscape.
 const FORM_CSS = `
+  @page { size: 8.5in 5.5in; margin: 10mm; }
   .lh { text-align: center; border-bottom: 2px solid #0b1c30; padding-bottom: 10px; margin-bottom: 18px; }
   .lh-name { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; }
   .lh-sub { font-size: 11px; color: #3d4947; margin-top: 2px; }
