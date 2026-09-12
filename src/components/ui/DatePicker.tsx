@@ -116,7 +116,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
       </button>
 
       {open && (
-        <div className="absolute right-0 z-40 mt-xs w-[min(280px,calc(100vw-2rem))] rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-lg">
+        <div className="absolute left-0 z-40 mt-xs w-[min(280px,calc(100vw-2rem))] rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-lg">
           <div className="mb-sm flex items-center justify-between">
             <button
               type="button"

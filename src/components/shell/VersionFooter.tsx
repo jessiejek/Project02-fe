@@ -4,31 +4,30 @@ import { useEffect, useState } from "react";
 import { API_BASE_URL } from "@/lib/api/client";
 
 interface ApiVersion {
-  commit: string;
-  environment: string;
-  db_connected: boolean;
-  db_migration: string | null;
+  version: string;
+  pushed_at: string | null;
 }
 
-// "20260911131216_Phase95FixEarningsViewCollectedAmount" -> "Phase95FixEarningsViewCollectedAmount"
-// — the timestamp prefix is what makes it sortable, not what makes it readable.
-function migrationLabel(id: string): string {
-  const i = id.indexOf("_");
-  return i === -1 ? id : id.slice(i + 1);
+// "MM.DD.YYYY.h:mmAM/PM" in the viewer's own local time — matches how the
+// user reads a timestamp on their own clock, not a fixed timezone.
+function formatStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "unknown";
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hours24 = d.getHours();
+  const hours12 = hours24 % 12 || 12;
+  const mins = String(d.getMinutes()).padStart(2, "0");
+  const ampm = hours24 >= 12 ? "PM" : "AM";
+  return `${mm}.${dd}.${d.getFullYear()}.${hours12}:${mins}${ampm}`;
 }
 
-// Answers "did the deploy actually go out" without guessing — the frontend's
-// own commit short-SHA is baked in at build time (next.config.ts); the
-// backend + database side of that same question can only be answered by
-// asking the API right now (GET /api/version, anonymous, no DB write), so
-// that part loads in after mount instead of at build time.
+// FE (v{commit count})({when that commit was pushed}) | BE (same, from the
+// API's own version.txt). The version number only ever goes up — no
+// meaning to memorize, just "is this bigger than what I saw last time."
 export function VersionFooter() {
-  const feSha = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
-  const feEnv = process.env.NEXT_PUBLIC_APP_ENV ?? "development";
-  const builtAt = process.env.NEXT_PUBLIC_BUILD_TIME;
-  const built = builtAt
-    ? new Date(builtAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })
-    : "unknown";
+  const feVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "?";
+  const feTime = process.env.NEXT_PUBLIC_BUILD_TIME;
 
   const [api, setApi] = useState<ApiVersion | "unreachable" | null>(null);
 
@@ -49,22 +48,15 @@ export function VersionFooter() {
 
   return (
     <footer className="shrink-0 px-md py-sm text-center text-label-sm text-on-surface-variant/60">
-      web v{feSha}
-      {feEnv !== "production" && ` (${feEnv})`} · built {built}
-      {" · "}
-      {api === null && "api …"}
-      {api === "unreachable" && <span className="text-error/80">api unreachable</span>}
+      FE (v{feVersion})({feTime ? formatStamp(feTime) : "unknown"}) | BE (
+      {api === null && "…"}
+      {api === "unreachable" && "unreachable"}
       {api && api !== "unreachable" && (
         <>
-          api {api.commit === "unknown" ? "v?" : `v${api.commit}`}
-          {" · db "}
-          {api.db_connected ? (
-            <span>connected{api.db_migration && ` (${migrationLabel(api.db_migration)})`}</span>
-          ) : (
-            <span className="text-error/80">unreachable</span>
-          )}
+          v{api.version})({api.pushed_at ? formatStamp(api.pushed_at) : "unknown"}
         </>
       )}
+      )
     </footer>
   );
 }

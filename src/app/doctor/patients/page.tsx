@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
-import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DataTable } from "@/components/ui/DataTable";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctorBookings } from "@/lib/data/bookings";
 
@@ -72,33 +72,55 @@ export default function DoctorPatientsPage() {
           placeholder="Search patients..."
           className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
         />
-        <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
-          {filteredRows.map((p) => {
-            return (
-              <Card key={p.id}>
-                <h3 className="text-headline-sm text-on-surface">{p.fullName}</h3>
-                <p className="mb-md text-label-sm text-on-surface-variant">{p.patientCode}</p>
-                {p.latestVisitDate && (
-                  <p className="mb-md text-label-md text-on-surface-variant">
-                    Latest visit: {p.latestVisitDate}
-                  </p>
-                )}
-                <div className="flex flex-wrap gap-sm">
-                  <Link href={`/doctor/patients/${p.id}`} className="flex-1">
-                    <Button variant="secondary" className="w-full">
+        <DataTable
+          columns={[
+            { header: "Code", render: (p) => p.patientCode },
+            { header: "Full Name", render: (p) => p.fullName },
+            { header: "Latest Visit", render: (p) => p.latestVisitDate ?? "—" },
+            {
+              header: "Actions",
+              align: "right",
+              render: (p) => (
+                <div className="flex justify-end gap-sm">
+                  <Link href={`/doctor/patients/${p.id}`}>
+                    <Button variant="secondary" className="!px-sm !py-xs text-label-sm">
                       View Chart
                     </Button>
                   </Link>
                   {p.latestBookingId && (
-                    <Link href={`/doctor/appointments/${p.latestBookingId}`} className="flex-1">
-                      <Button className="w-full">Open Appointment</Button>
+                    <Link href={`/doctor/appointments/${p.latestBookingId}`}>
+                      <Button className="!px-sm !py-xs text-label-sm">Open Appointment</Button>
                     </Link>
                   )}
                 </div>
-              </Card>
-            );
-          })}
-        </div>
+              ),
+            },
+          ]}
+          rows={filteredRows}
+          rowKey={(p) => p.id}
+          emptyMessage="No patients yet."
+          renderMobileCard={(p) => (
+            <div className="space-y-xs">
+              <p className="text-body-md font-medium text-on-surface">{p.fullName}</p>
+              <p className="text-label-sm text-on-surface-variant">
+                {p.patientCode}
+                {p.latestVisitDate && ` · Latest visit: ${p.latestVisitDate}`}
+              </p>
+              <div className="flex gap-sm">
+                <Link href={`/doctor/patients/${p.id}`} className="flex-1">
+                  <Button variant="secondary" className="w-full">
+                    View Chart
+                  </Button>
+                </Link>
+                {p.latestBookingId && (
+                  <Link href={`/doctor/appointments/${p.latestBookingId}`} className="flex-1">
+                    <Button className="w-full">Open Appointment</Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+        />
       </div>
     </AppShell>
   );
