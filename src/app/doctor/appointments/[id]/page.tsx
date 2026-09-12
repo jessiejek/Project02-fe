@@ -48,7 +48,7 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
     <AppShell role="doctor">
       <div className="mx-auto max-w-[40rem] space-y-lg">
         <Link href="/doctor/appointments" className="text-label-md text-primary hover:underline">
-          ← Back to visits
+          ← Back to appointments
         </Link>
 
         {/* Doctor.md §3: "Hero shows patient/date/queue/status/payment/service
@@ -102,7 +102,7 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
           )}
           {isClosed && (
             <Button disabled className="w-full">
-              Visit Closed
+              Appointment Closed
             </Button>
           )}
         </Card>
@@ -116,7 +116,7 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
         )}
 
         {isClosed && (
-          <p className="text-body-md text-on-surface-variant">No consultation record for this visit.</p>
+          <p className="text-body-md text-on-surface-variant">No consultation record for this appointment.</p>
         )}
       </div>
     </AppShell>

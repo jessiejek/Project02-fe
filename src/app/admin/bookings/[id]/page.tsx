@@ -142,7 +142,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
         <Card>
           <div className="mb-md flex items-start justify-between">
             <div>
-              <h2 className="text-headline-sm text-on-surface">Visit</h2>
+              <h2 className="text-headline-sm text-on-surface">Appointment</h2>
             </div>
             <StatusPill status={booking.status} />
           </div>
@@ -219,8 +219,8 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                 variant="secondary"
                 onClick={() => {
                   printHtml(
-                    `Visit Summary ${booking.id}`,
-                    `<h1>Visit Summary</h1>
+                    `Appointment Summary ${booking.id}`,
+                    `<h1>Appointment Summary</h1>
                      <p class="meta">${escapeHtml(booking.appointmentDate)} · ${escapeHtml(booking.status)}</p>
                      <div class="card">
                        <p><strong>Patient:</strong> ${escapeHtml(booking.patientName)} (${escapeHtml(booking.patientCode)})</p>
@@ -231,7 +231,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                   );
                 }}
               >
-                Print Visit Summary
+                Print Appointment Summary
               </Button>
             </>
           )}

@@ -76,7 +76,7 @@ export default function DoctorPatientsPage() {
           columns={[
             { header: "Code", render: (p) => p.patientCode },
             { header: "Full Name", render: (p) => p.fullName },
-            { header: "Latest Visit", render: (p) => p.latestVisitDate ?? "—" },
+            { header: "Latest Appointment", render: (p) => p.latestVisitDate ?? "—" },
             {
               header: "Actions",
               align: "right",
@@ -104,7 +104,7 @@ export default function DoctorPatientsPage() {
               <p className="text-body-md font-medium text-on-surface">{p.fullName}</p>
               <p className="text-label-sm text-on-surface-variant">
                 {p.patientCode}
-                {p.latestVisitDate && ` · Latest visit: ${p.latestVisitDate}`}
+                {p.latestVisitDate && ` · Latest appointment: ${p.latestVisitDate}`}
               </p>
               <div className="flex gap-sm">
                 <Link href={`/doctor/patients/${p.id}`} className="flex-1">

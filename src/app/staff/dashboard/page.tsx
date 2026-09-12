@@ -113,7 +113,7 @@ export default function StaffDashboardPage() {
         <h2 className="text-headline-lg text-on-surface">Staff Dashboard</h2>
 
         <div className="grid grid-cols-1 gap-lg md:grid-cols-3">
-          <StatCard icon="event_note" value={todaysQueue.length} label="Today's Visits" />
+          <StatCard icon="event_note" value={todaysQueue.length} label="Today's Appointments" />
           <StatCard icon="payments" value={readyForPayment.length} label="Ready for Payment" href="/staff/payments" />
           <StatCard icon="groups" value={totalPatientsToday} label="Total Patients" href="/staff/queue" />
         </div>

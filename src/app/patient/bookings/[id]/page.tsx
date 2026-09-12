@@ -167,7 +167,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         {isCompleted && (
           <Card className="flex flex-wrap items-center justify-between gap-md">
             <div>
-              <h3 className="text-headline-sm text-on-surface">How was your visit?</h3>
+              <h3 className="text-headline-sm text-on-surface">How was your appointment?</h3>
               <p className="text-label-md text-on-surface-variant">Share your experience with {booking.doctorName}.</p>
             </div>
             <Link href={`/patient/reviews/${booking.id}`}>

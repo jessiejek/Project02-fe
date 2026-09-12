@@ -470,7 +470,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
 
             <div className="mb-lg space-y-lg">
               <div>
-                <p className="mb-sm text-label-md font-medium text-on-surface-variant">Visit type</p>
+                <p className="mb-sm text-label-md font-medium text-on-surface-variant">Appointment type</p>
                 <div className="inline-flex rounded-full border border-outline-variant bg-surface-container-lowest p-[3px]">
                   {(["New", "FollowUp"] as const).map((vt) => (
                     <button

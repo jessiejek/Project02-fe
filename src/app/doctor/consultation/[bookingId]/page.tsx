@@ -1483,7 +1483,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                       : "border-outline-variant text-on-surface-variant",
                   )}
                 >
-                  {vt === "New" ? "New Visit" : "Follow-up Visit"}
+                  {vt === "New" ? "New Appointment" : "Follow-up Appointment"}
                 </button>
               ))}
               {staffVisitType && visitType !== staffVisitType && (
@@ -1596,7 +1596,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                             onClick={() => setLastVisitOpen(true)}
                             className="text-label-md text-primary hover:underline"
                           >
-                            View Last Visit SOAP
+                            View Last Appointment SOAP
                           </button>
                         )}
                         <div className="ml-auto flex items-center gap-md">
@@ -1678,7 +1678,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                     <div className="mt-md space-y-md">
                       {lastVisitVitalReadings.length > 0 && (
                         <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-sm text-on-surface-variant">
-                          Last visit ({lastVisitSoap!.appointmentDate}):{" "}
+                          Last appointment ({lastVisitSoap!.appointmentDate}):{" "}
                           {defaultVitalTemplates
                             .map((t) => `${t.description} ${lastVisitVitalReadings.find((r) => r.templateId === t.id)?.value ?? "—"}${t.unit ? ` ${t.unit}` : ""}`)
                             .join(" · ")}
@@ -1993,7 +1993,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                       {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
                       <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
                         <div className="flex flex-wrap items-center gap-sm">
-                          <span className="text-label-md text-on-surface-variant">Visit type</span>
+                          <span className="text-label-md text-on-surface-variant">Appointment type</span>
                           {(["New", "FollowUp"] as const).map((vt) => (
                             <button
                               key={vt}
@@ -2431,7 +2431,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         </div>
       </Drawer>
 
-      <Modal isOpen={lastVisitOpen} onClose={() => setLastVisitOpen(false)} title="Last Visit SOAP" footer={<Button onClick={() => setLastVisitOpen(false)}>Close</Button>}>
+      <Modal isOpen={lastVisitOpen} onClose={() => setLastVisitOpen(false)} title="Last Appointment SOAP" footer={<Button onClick={() => setLastVisitOpen(false)}>Close</Button>}>
         {lastVisitSoap && (
           <div className="space-y-sm text-body-md text-on-surface-variant">
             <p><strong>Date:</strong> {lastVisitSoap.appointmentDate}</p>

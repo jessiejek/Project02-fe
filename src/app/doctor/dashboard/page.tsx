@@ -238,7 +238,7 @@ export default function DoctorDashboardPage() {
           </div>
           <Link href="/doctor/appointments">
             <Button>
-              Go to My Visits
+              Go to My Appointments
               <Icon name="chevron_right" className="text-[18px]" />
             </Button>
           </Link>
@@ -369,7 +369,7 @@ export default function DoctorDashboardPage() {
             <div className="grid grid-cols-1 gap-lg sm:grid-cols-3">
               <div>
                 <p className="text-headline-lg text-on-surface">{totals.completed_visits}</p>
-                <p className="text-label-md text-on-surface-variant">Visits</p>
+                <p className="text-label-md text-on-surface-variant">Appointments</p>
               </div>
               <div>
                 <p className="text-headline-lg text-on-surface">{peso(totals.collected)}</p>
@@ -392,7 +392,7 @@ export default function DoctorDashboardPage() {
           )}
 
           {range !== "custom" && earnings.length === 0 && (
-            <p className="mt-md text-body-md text-on-surface-variant">No completed visits yet.</p>
+            <p className="mt-md text-body-md text-on-surface-variant">No completed appointments yet.</p>
           )}
 
           {range !== "custom" && earnings.length > 1 && (
@@ -402,7 +402,7 @@ export default function DoctorDashboardPage() {
                 <thead>
                   <tr className="text-left text-label-md text-on-surface-variant">
                     <th className="py-xs pr-md">Month</th>
-                    <th className="py-xs pr-md text-right">Visits</th>
+                    <th className="py-xs pr-md text-right">Appointments</th>
                     <th className="py-xs text-right">Collected</th>
                   </tr>
                 </thead>

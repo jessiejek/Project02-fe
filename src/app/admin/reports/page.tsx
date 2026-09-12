@@ -126,8 +126,8 @@ export default function AdminReportsPage() {
     const line = (cells: Array<string | number | null | undefined>) => cells.map(escapeCell).join(",");
 
     const chunks: string[] = [];
-    chunks.push("Unpaid Completed Visits");
-    chunks.push(line(["Visit Date", "Patient", "Doctor", "Amount Due", "Booking ID"]));
+    chunks.push("Unpaid Completed Appointments");
+    chunks.push(line(["Appointment Date", "Patient", "Doctor", "Amount Due", "Booking ID"]));
     for (const b of unpaidCompleted) {
       chunks.push(line([b.visitDate, b.patientName, b.doctorName, b.amountDue, b.bookingId]));
     }
@@ -181,9 +181,9 @@ export default function AdminReportsPage() {
         </Card>
 
         <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Unpaid Completed Visits</h3>
+          <h3 className="mb-md text-headline-sm text-on-surface">Unpaid Completed Appointments</h3>
           {unpaidCompleted.length === 0 ? (
-            <p className="text-body-md text-on-surface-variant">No unpaid completed visits in this range.</p>
+            <p className="text-body-md text-on-surface-variant">No unpaid completed appointments in this range.</p>
           ) : (
             <>
               <div className="space-y-sm sm:hidden">
@@ -206,7 +206,7 @@ export default function AdminReportsPage() {
                 <table className="w-full text-body-md">
                   <thead>
                     <tr className="text-left text-label-md text-on-surface-variant">
-                      <th className="py-sm">Patient</th><th className="py-sm">Doctor</th><th className="py-sm">Visit Date</th><th className="py-sm text-right">Amount Due</th><th className="py-sm text-right">Action</th>
+                      <th className="py-sm">Patient</th><th className="py-sm">Doctor</th><th className="py-sm">Appointment Date</th><th className="py-sm text-right">Amount Due</th><th className="py-sm text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>

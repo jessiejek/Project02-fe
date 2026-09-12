@@ -80,7 +80,7 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
     const owned = await queryBookingById(null as never, booking.id);
     if (!owned || owned.patient_id !== patientId) {
       setSubmitting(false);
-      setSubmitError("You can only review your own visits.");
+      setSubmitError("You can only review your own appointments.");
       return;
     }
     try {
@@ -111,10 +111,10 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
         <h2 className="mb-xs text-headline-md text-on-surface">{booking.doctorName}</h2>
 
         {alreadyReviewed ? (
-          <p className="text-body-md text-on-surface-variant">You&apos;ve already submitted a review for this visit.</p>
+          <p className="text-body-md text-on-surface-variant">You&apos;ve already submitted a review for this appointment.</p>
         ) : (
           <>
-            <p className="mb-lg text-body-md text-on-surface-variant">How was your visit?</p>
+            <p className="mb-lg text-body-md text-on-surface-variant">How was your appointment?</p>
             {submitError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{submitError}</p>}
             <div className="mb-lg flex justify-center gap-xs">
               {[1, 2, 3, 4, 5].map((star) => (

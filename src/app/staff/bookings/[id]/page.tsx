@@ -158,7 +158,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
         <Card>
           <div className="mb-md flex items-start justify-between">
             <div>
-              <h2 className="text-headline-sm text-on-surface">Visit</h2>
+              <h2 className="text-headline-sm text-on-surface">Appointment</h2>
             </div>
             <StatusPill status={booking.status} />
           </div>

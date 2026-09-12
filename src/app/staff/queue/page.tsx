@@ -87,7 +87,7 @@ export default function StaffQueuePage() {
                   <tr className="bg-surface-container-low text-left text-label-md text-on-surface-variant">
                     <th className="px-lg py-sm text-center">#</th>
                     <th className="px-lg py-sm">Patient</th>
-                    <th className="px-lg py-sm">Visit</th>
+                    <th className="px-lg py-sm">Appointment</th>
                     <th className="px-lg py-sm text-right">Amount Due</th>
                     <th className="px-lg py-sm">Status</th>
                     <th className="px-lg py-sm">Actions</th>

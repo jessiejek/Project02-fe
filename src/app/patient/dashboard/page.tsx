@@ -189,9 +189,9 @@ export default function PatientDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
-          <StatCard icon="calendar_today" value={upcoming.length} label="Active Visits" eyebrow="Today" href="/patient/bookings" />
+          <StatCard icon="calendar_today" value={upcoming.length} label="Active Appointments" eyebrow="Today" href="/patient/bookings" />
           <StatCard icon="receipt_long" value={paymentDue.length} label="Payment Due" eyebrow="Pending" href="/patient/bookings" />
-          <StatCard icon="check_circle" value={completed.length} label="Completed Visits" eyebrow="History" href="/patient/bookings" />
+          <StatCard icon="check_circle" value={completed.length} label="Completed Appointments" eyebrow="History" href="/patient/bookings" />
           <StatCard icon="medication" value={prescriptionCount} label="Current Prescriptions" eyebrow="Active" href="/patient/prescriptions" />
         </div>
 
@@ -301,7 +301,7 @@ export default function PatientDashboardPage() {
           <div className="space-y-lg lg:col-span-4">
             {nextBooking && (
               <div className="relative overflow-hidden rounded-xl bg-primary p-lg text-on-primary shadow-lg">
-                <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Your Visit Today</h3>
+                <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Your Appointment Today</h3>
                 <h4 className="text-headline-md">{nextBooking.doctorName}</h4>
                 <div className="mb-lg flex items-center justify-between rounded-lg bg-on-primary/10 p-md">
                   <div className="flex items-center gap-sm">

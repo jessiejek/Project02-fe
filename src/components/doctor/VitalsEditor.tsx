@@ -205,7 +205,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
           </>
         }
       >
-        <p className="text-body-md text-on-surface-variant">Save these vital sign readings for this visit?</p>
+        <p className="text-body-md text-on-surface-variant">Save these vital sign readings for this appointment?</p>
       </Modal>
     </div>
   );

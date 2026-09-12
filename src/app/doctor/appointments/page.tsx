@@ -93,7 +93,7 @@ export default function DoctorAppointmentsPage() {
     <AppShell role="doctor">
       <div className="space-y-lg">
         <div className="flex flex-wrap items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">My Visits</h2>
+          <h2 className="text-headline-lg text-on-surface">My Appointments</h2>
           <div className="flex overflow-hidden rounded-lg border border-outline-variant text-label-md">
             <button
               type="button"
@@ -115,7 +115,7 @@ export default function DoctorAppointmentsPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search visits..."
+            placeholder="Search appointments..."
             className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
           />
           <select
