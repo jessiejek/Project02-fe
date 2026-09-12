@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { StepIndicator } from "@/components/ui/StepIndicator";
-import { StatusPill } from "@/components/ui/StatusPill";
 import { Icon } from "@/components/ui/Icon";
 import { queryPatients, createPatient } from "@/lib/data/patients";
 import { clientPage } from "@/lib/data/paging";
@@ -255,7 +254,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
 
   return (
     <AppShell role={role}>
-      <div className="mx-auto max-w-[40rem] pb-28">
+      <div className={cn("pb-28", step === 1 ? "w-full" : "mx-auto max-w-[40rem]")}>
         <StepIndicator steps={STEPS} currentStep={step === "done" ? STEPS.length : step} />
 
         {step === 1 && (
@@ -272,18 +271,18 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 <p className="px-md py-lg text-center text-label-md text-on-surface-variant">No matching patients.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
+                  <table className="w-full min-w-[42rem] border-collapse text-label-sm">
                     <thead>
                       <tr className="border-b border-outline-variant bg-surface-container-low">
-                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Patient</th>
-                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Contact</th>
+                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Patient</th>
+                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Contact</th>
                         {/* Staff.md ask: name alone doesn't identify a patient — two
                             "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do
                             (the MF-code did too, but staff don't work off it). */}
-                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Sex</th>
-                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Age</th>
-                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Date of Birth</th>
-                        <th className="px-md py-sm text-left text-label-md text-on-surface-variant">Account</th>
+                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Sex</th>
+                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Age</th>
+                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Date of Birth</th>
+                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Account</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant/30">
@@ -296,13 +295,24 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                             patientId === p.id ? "bg-primary/10" : "hover:bg-surface-container-low",
                           )}
                         >
-                          <td className="px-md py-sm text-body-md text-on-surface">{p.fullName}</td>
-                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{p.contactNumber}</td>
-                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{p.sex}</td>
-                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{computeAge(p.dateOfBirth)}</td>
-                          <td className="px-md py-sm text-label-sm text-on-surface-variant">{p.dateOfBirth}</td>
-                          <td className="px-md py-sm">
-                            <StatusPill status={p.accountStatus} />
+                          <td className="whitespace-nowrap px-md py-xs text-on-surface">{p.fullName}</td>
+                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{p.contactNumber}</td>
+                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{p.sex}</td>
+                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{computeAge(p.dateOfBirth)}</td>
+                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{p.dateOfBirth}</td>
+                          <td
+                            className={cn(
+                              "whitespace-nowrap px-md py-xs font-medium",
+                              p.accountStatus === "LinkedAccount" && "text-green-700",
+                              p.accountStatus === "NoAccount" && "text-on-surface-variant",
+                              p.accountStatus === "AccountUnknown" && "text-amber-700",
+                            )}
+                          >
+                            {p.accountStatus === "LinkedAccount"
+                              ? "Linked account"
+                              : p.accountStatus === "NoAccount"
+                                ? "No account"
+                                : "Account unknown"}
                           </td>
                         </tr>
                       ))}
@@ -346,7 +356,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
             scroll past the whole list + pagination to find it. */}
         {step === 1 && (
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-outline-variant bg-surface-container-lowest p-md md:left-sidebar">
-            <div className="mx-auto max-w-[40rem]">
+            <div className="w-full">
               <Button disabled={!patientId} onClick={() => setStep(2)} className="w-full">
                 Continue
               </Button>
