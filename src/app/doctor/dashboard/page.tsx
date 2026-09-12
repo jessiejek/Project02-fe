@@ -89,7 +89,14 @@ export default function DoctorDashboardPage() {
     loadQueue();
     loadAttention();
   });
-  useClinicHubEvent("PaymentUpdated", loadAttention);
+  // PaymentUpdated changes amount_due on the queue board (the "unpaid"
+  // card below reads board.items), not just the attention lists — missing
+  // loadQueue here meant a doctor staring at this page while staff collects
+  // payment would keep seeing "Unpaid" until something else refreshed it.
+  useClinicHubEvent("PaymentUpdated", () => {
+    loadQueue();
+    loadAttention();
+  });
 
   // Real-time is the primary trigger; this poll is the fallback for a
   // dropped/blocked SignalR connection (same pattern as /staff/queue), so a
