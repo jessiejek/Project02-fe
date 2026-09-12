@@ -9,6 +9,7 @@ import { Toast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { queryStaffBookings, updateBookingStatus } from "@/lib/data/bookings";
+import { queryQueue, type QueueBoard } from "@/lib/data/queue";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 interface QueueRow {
@@ -23,28 +24,14 @@ interface QueueRow {
 // Stitch staff_dashboard. Was reading mockBookings regardless of what's
 // actually scheduled today — fixed to a real query scoped to today's date,
 // matching the pattern already used by doctor/dashboard.
+const EMPTY_BOARD: QueueBoard = { date: "", summary: { waiting: 0, in_progress: 0, completed: 0, no_show: 0, total: 0 }, items: [] };
+
 export default function StaffDashboardPage() {
   const [loaded, setLoaded] = useState(false);
   const [bookings, setBookings] = useState<QueueRow[]>([]);
+  const [board, setBoard] = useState<QueueBoard>(EMPTY_BOARD);
 
-  useEffect(() => {
-    async function load() {
-      const data = await queryStaffBookings(null as never, "today");
-      const rows: QueueRow[] = data.map((b) => ({
-        id: b.booking_id,
-        patientName: b.patients ? `${b.patients.first_name ?? ""} ${b.patients.last_name ?? ""}`.trim() : "",
-        slotStartTime: b.slot_start_time.slice(0, 5),
-        queueNumber: b.queue_number,
-        status: b.status,
-        paymentStatus: b.payments?.status ?? "Unpaid",
-      }));
-      setBookings(rows);
-      setLoaded(true);
-    }
-    load();
-  }, []);
-
-  async function reload() {
+  const loadBookings = async () => {
     const data = await queryStaffBookings(null as never, "today");
     setBookings(
       data.map((b) => ({
@@ -56,13 +43,41 @@ export default function StaffDashboardPage() {
         paymentStatus: b.payments?.status ?? "Unpaid",
       })),
     );
-  }
-  useClinicHubEvent("PatientCheckedIn", reload);
-  useClinicHubEvent("QueueUpdated", reload);
-  useClinicHubEvent("PaymentUpdated", reload);
+  };
+
+  // "Ready for Payment" reads the walk-in queue board, not the separate
+  // staff/today bookings list above — the two have disagreed on a booking's
+  // status before (a booking marked Completed in the queue that the bookings
+  // list still showed as something else), which meant a patient who'd
+  // already been seen never showed up here for staff to collect from. The
+  // queue board is the same source the Staff Queue page and the doctor's own
+  // dashboard already trust, so this keeps one definition of "done" instead
+  // of two that can drift apart.
+  const loadQueue = async () => {
+    try {
+      setBoard(await queryQueue(null as never));
+    } catch {
+      setBoard(EMPTY_BOARD);
+    }
+  };
+
+  useEffect(() => {
+    async function init() {
+      await Promise.all([loadBookings(), loadQueue()]);
+      setLoaded(true);
+    }
+    init();
+  }, []);
+
+  useClinicHubEvent("PatientCheckedIn", loadBookings);
+  useClinicHubEvent("QueueUpdated", () => {
+    loadBookings();
+    loadQueue();
+  });
+  useClinicHubEvent("PaymentUpdated", loadQueue);
 
   const todaysQueue = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status));
-  const readyForPayment = bookings.filter((b) => b.status === "Completed" && b.paymentStatus === "Unpaid");
+  const readyForPayment = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
   // Staff sees headcount, not money — revenue belongs on the doctor's own
   // dashboard, not the front desk's.
   const totalPatientsToday = bookings.length;
