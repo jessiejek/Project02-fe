@@ -209,7 +209,7 @@ export default function DoctorDashboardPage() {
 
   return (
     <AppShell role="doctor" roleBadge={<StatusPill status={dayStatus} />}>
-      <div className="space-y-xl">
+      <div className="space-y-lg">
         <div className="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-headline-lg text-on-surface">Good morning, {name}</h2>
@@ -223,10 +223,10 @@ export default function DoctorDashboardPage() {
           </Link>
         </div>
 
-        <Card>
-          <div className="mb-md flex flex-wrap items-center justify-between gap-md">
-            <h3 className="text-headline-sm text-on-surface">Right now</h3>
-            <div className="flex flex-wrap gap-md text-label-md text-on-surface-variant">
+        <Card className="!p-md">
+          <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
+            <h3 className="text-label-lg font-semibold text-on-surface">Right now</h3>
+            <div className="flex flex-wrap gap-sm text-label-sm text-on-surface-variant">
               <span>{board.summary.waiting} waiting</span>
               <span>{board.summary.in_progress} in progress</span>
               <span>{board.summary.completed} completed today</span>
@@ -234,18 +234,18 @@ export default function DoctorDashboardPage() {
           </div>
 
           {upNext.length === 0 ? (
-            <p className="text-body-md text-on-surface-variant">
+            <p className="text-body-sm text-on-surface-variant">
               {board.summary.total === 0 ? "No one's checked in yet today." : `Queue's clear — ${board.summary.completed} seen today.`}
             </p>
           ) : (
-            <div className="space-y-sm">
+            <div className="space-y-xs">
               {upNext.map((e) => (
                 <div
                   key={e.booking_id}
-                  className="flex flex-wrap items-center justify-between gap-md rounded-lg border border-outline-variant p-md"
+                  className="flex flex-wrap items-center justify-between gap-sm rounded-lg border border-outline-variant px-sm py-xs"
                 >
                   <div>
-                    <p className="text-body-md font-medium text-on-surface">
+                    <p className="text-body-sm font-medium text-on-surface">
                       Q#{e.queue_number} · {e.patient_name}
                     </p>
                     <p className="text-label-sm text-on-surface-variant">
@@ -254,54 +254,54 @@ export default function DoctorDashboardPage() {
                     </p>
                   </div>
                   <Link href={`/doctor/consultation/${e.booking_id}`}>
-                    <Button>{e.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}</Button>
+                    <Button className="!px-sm !py-xs text-label-sm">
+                      {e.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}
+                    </Button>
                   </Link>
                 </div>
               ))}
             </div>
           )}
-        </Card>
 
-        {(unpaidCompleted.length > 0 || consultationsToday.length > 0 || followUpsDueToday.length > 0) && (
-          <Card>
-            <h3 className="mb-md text-headline-sm text-on-surface">Needs attention</h3>
-            <div className="space-y-sm">
+          {(unpaidCompleted.length > 0 || consultationsToday.length > 0 || followUpsDueToday.length > 0) && (
+            <div className="mt-sm space-y-xs border-t border-outline-variant/30 pt-sm">
+              <p className="text-label-sm font-semibold text-on-surface-variant">Needs attention</p>
               {unpaidCompleted.slice(0, 5).map((e) => (
                 <Link
                   key={`unpaid-${e.booking_id}`}
                   href="/staff/payments"
-                  className="flex items-center justify-between rounded-lg border border-outline-variant p-md hover:bg-surface-container-low"
+                  className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
-                  <span className="text-body-md text-on-surface">{e.patient_name} — completed, unpaid</span>
-                  <span className="text-label-md text-on-surface-variant">₱{e.amount_due} due</span>
+                  <span className="text-body-sm text-on-surface">{e.patient_name} — completed, unpaid</span>
+                  <span className="text-label-sm text-on-surface-variant">₱{e.amount_due} due</span>
                 </Link>
               ))}
               {consultationsToday.slice(0, 5).map((c) => (
                 <Link
                   key={`incomplete-${c.consultation_id}`}
                   href={`/doctor/consultation/${c.booking_id}?mode=amend`}
-                  className="flex items-center justify-between rounded-lg border border-outline-variant p-md hover:bg-surface-container-low"
+                  className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
-                  <span className="text-body-md text-on-surface">Chart missing Assessment/Plan</span>
-                  <span className="text-label-md text-on-surface-variant">Finish chart</span>
+                  <span className="text-body-sm text-on-surface">Chart missing Assessment/Plan</span>
+                  <span className="text-label-sm text-on-surface-variant">Finish chart</span>
                 </Link>
               ))}
               {followUpsDueToday.slice(0, 5).map((c) => (
                 <Link
                   key={`followup-${c.consultation_id}`}
                   href={`/doctor/consultation/${c.booking_id}?mode=view`}
-                  className="flex items-center justify-between rounded-lg border border-outline-variant p-md hover:bg-surface-container-low"
+                  className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
-                  <span className="text-body-md text-on-surface">Follow-up due today</span>
-                  <span className="text-label-md text-on-surface-variant">View chart</span>
+                  <span className="text-body-sm text-on-surface">Follow-up due today</span>
+                  <span className="text-label-sm text-on-surface-variant">View chart</span>
                 </Link>
               ))}
             </div>
-          </Card>
-        )}
+          )}
+        </Card>
 
-        <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Availability</h3>
+        <Card className="!p-md">
+          <h3 className="mb-sm text-label-lg font-semibold text-on-surface">Availability</h3>
           <p className="mb-sm text-label-md text-on-surface-variant">
             {board.summary.waiting > 0
               ? `${board.summary.waiting} waiting${
