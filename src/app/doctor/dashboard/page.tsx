@@ -8,14 +8,16 @@ import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctorEarnings, type DoctorEarningsRow } from "@/lib/data/admin";
+import { queryBookings } from "@/lib/data/bookings";
 import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/scheduling";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
 
 type DayStatus = "Available" | "RunningLate" | "UnavailableToday";
-type Range = "month" | "year";
+type Range = "month" | "year" | "custom";
 
 const EMPTY_TOTALS = { completed_visits: 0, gross_billed: 0, collected: 0, waived: 0 };
 
@@ -33,6 +35,10 @@ export default function DoctorDashboardPage() {
   const [dayStatus, setDayStatus] = useState<DayStatus>("Available");
   const [earnings, setEarnings] = useState<DoctorEarningsRow[]>([]);
   const [range, setRange] = useState<Range>("month");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [customTotals, setCustomTotals] = useState<typeof EMPTY_TOTALS | null>(null);
+  const [loadingCustom, setLoadingCustom] = useState(false);
 
   useEffect(() => {
     if (!meDoctorId) return;
@@ -74,8 +80,48 @@ export default function DoctorDashboardPage() {
         ),
     [earnings, currentYear],
   );
-  const totals = range === "month" ? monthTotals : yearTotals;
-  const rangeLabel = range === "month" ? new Date(`${currentMonth}-01`).toLocaleDateString("en-PH", { month: "long", year: "numeric" }) : currentYear;
+  // Month/Year read from the pre-aggregated earnings view; Custom needs
+  // per-visit data the view doesn't have, so it queries bookings directly
+  // for exactly the picked range and sums them client-side.
+  useEffect(() => {
+    if (range !== "custom" || !meDoctorId || !customFrom || !customTo) return;
+    let cancelled = false;
+    async function load() {
+      setLoadingCustom(true);
+      try {
+        const supabase = null as never;
+        const rows = await queryBookings(supabase, { doctorId: meDoctorId, from: customFrom, to: customTo, status: "Completed" });
+        if (cancelled) return;
+        setCustomTotals(
+          rows.reduce(
+            (acc, b) => ({
+              completed_visits: acc.completed_visits + 1,
+              gross_billed: acc.gross_billed + Number(b.total_fee),
+              collected: acc.collected + (b.payments?.status === "Paid" ? Number(b.payments.amount ?? 0) : 0),
+              waived: acc.waived + (b.payments?.status === "Waived" ? Number(b.payments.amount ?? 0) : 0),
+            }),
+            EMPTY_TOTALS,
+          ),
+        );
+      } finally {
+        if (!cancelled) setLoadingCustom(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [range, meDoctorId, customFrom, customTo]);
+
+  const totals = range === "month" ? monthTotals : range === "year" ? yearTotals : (customTotals ?? EMPTY_TOTALS);
+  const rangeLabel =
+    range === "month"
+      ? new Date(`${currentMonth}-01`).toLocaleDateString("en-PH", { month: "long", year: "numeric" })
+      : range === "year"
+        ? currentYear
+        : customFrom && customTo
+          ? `${customFrom} to ${customTo}`
+          : "Custom range";
 
   async function setStatus(status: DayStatus) {
     const supabase = null as never;
@@ -119,33 +165,46 @@ export default function DoctorDashboardPage() {
               <Button variant={range === "year" ? "primary" : "secondary"} onClick={() => setRange("year")}>
                 This Year
               </Button>
+              <Button variant={range === "custom" ? "primary" : "secondary"} onClick={() => setRange("custom")}>
+                Custom Range
+              </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-lg sm:grid-cols-4">
-            <div>
-              <p className="text-headline-lg text-on-surface">{totals.completed_visits}</p>
-              <p className="text-label-md text-on-surface-variant">Visits</p>
+          {range === "custom" && (
+            <div className="mb-md flex flex-wrap items-center gap-sm">
+              <DatePicker value={customFrom} onChange={setCustomFrom} placeholder="From" />
+              <span className="text-label-md text-on-surface-variant">to</span>
+              <DatePicker value={customTo} onChange={setCustomTo} placeholder="To" minDate={customFrom || undefined} />
             </div>
-            <div>
-              <p className="text-headline-lg text-on-surface">{peso(totals.gross_billed)}</p>
-              <p className="text-label-md text-on-surface-variant">Billed</p>
-            </div>
-            <div>
-              <p className="text-headline-lg text-on-surface">{peso(totals.collected)}</p>
-              <p className="text-label-md text-on-surface-variant">Collected</p>
-            </div>
-            <div>
-              <p className="text-headline-lg text-on-surface">{peso(totals.waived)}</p>
-              <p className="text-label-md text-on-surface-variant">Waived</p>
-            </div>
-          </div>
+          )}
 
-          {earnings.length === 0 && (
+          {range === "custom" && (!customFrom || !customTo) ? (
+            <p className="text-body-md text-on-surface-variant">Pick a start and end date to see totals for that range.</p>
+          ) : range === "custom" && loadingCustom ? (
+            <p className="text-body-md text-on-surface-variant">Loading…</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-lg sm:grid-cols-3">
+              <div>
+                <p className="text-headline-lg text-on-surface">{totals.completed_visits}</p>
+                <p className="text-label-md text-on-surface-variant">Visits</p>
+              </div>
+              <div>
+                <p className="text-headline-lg text-on-surface">{peso(totals.collected)}</p>
+                <p className="text-label-md text-on-surface-variant">Collected</p>
+              </div>
+              <div>
+                <p className="text-headline-lg text-on-surface">{peso(totals.waived)}</p>
+                <p className="text-label-md text-on-surface-variant">Waived</p>
+              </div>
+            </div>
+          )}
+
+          {range !== "custom" && earnings.length === 0 && (
             <p className="mt-md text-body-md text-on-surface-variant">No completed visits yet.</p>
           )}
 
-          {earnings.length > 1 && (
+          {range !== "custom" && earnings.length > 1 && (
             <div className="mt-lg overflow-x-auto border-t border-outline-variant/30 pt-md">
               <p className="mb-sm text-label-md uppercase tracking-wide text-on-surface-variant">Monthly trend</p>
               <table className="w-full text-body-sm">
@@ -153,7 +212,6 @@ export default function DoctorDashboardPage() {
                   <tr className="text-left text-label-md text-on-surface-variant">
                     <th className="py-xs pr-md">Month</th>
                     <th className="py-xs pr-md text-right">Visits</th>
-                    <th className="py-xs pr-md text-right">Billed</th>
                     <th className="py-xs text-right">Collected</th>
                   </tr>
                 </thead>
@@ -162,7 +220,6 @@ export default function DoctorDashboardPage() {
                     <tr key={e.period}>
                       <td className="py-xs pr-md">{e.period}</td>
                       <td className="py-xs pr-md text-right">{e.completed_visits}</td>
-                      <td className="py-xs pr-md text-right">{peso(e.gross_billed)}</td>
                       <td className="py-xs text-right">{peso(e.collected)}</td>
                     </tr>
                   ))}
