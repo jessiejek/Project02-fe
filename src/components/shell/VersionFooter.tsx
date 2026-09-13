@@ -30,6 +30,22 @@ export function VersionFooter() {
   const feTime = process.env.NEXT_PUBLIC_BUILD_TIME;
 
   const [api, setApi] = useState<ApiVersion | "unreachable" | null>(null);
+  // formatStamp reads local-time getters (getHours/getDate/...), so its
+  // output depends on the machine running it — the Vercel server (UTC) and
+  // the viewer's own browser (e.g. Manila, UTC+8) format the same ISO string
+  // differently. Computing it during render made the server-rendered HTML
+  // never match React's first client render (hydration error #418), on
+  // every single page since this footer sits in AppShell + /login. Deferred
+  // to a client-only effect instead — same "unknown until mounted" shape as
+  // the `api` fetch right below it.
+  const [feStamp, setFeStamp] = useState<string | null>(null);
+
+  useEffect(() => {
+    function applyStamp() {
+      setFeStamp(feTime ? formatStamp(feTime) : "unknown");
+    }
+    applyStamp();
+  }, [feTime]);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,7 +64,7 @@ export function VersionFooter() {
 
   return (
     <footer className="shrink-0 px-md py-sm text-center text-label-sm text-on-surface-variant/60">
-      FE (v{feVersion})({feTime ? formatStamp(feTime) : "unknown"}) | BE (
+      FE (v{feVersion})({feStamp ?? "…"}) | BE (
       {api === null && "…"}
       {api === "unreachable" && "unreachable"}
       {api && api !== "unreachable" && (
