@@ -2,6 +2,7 @@
 
 import { type ReactNode, useEffect } from "react";
 import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/cn";
 
 export interface ModalProps {
   isOpen: boolean;
@@ -9,10 +10,19 @@ export interface ModalProps {
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** Dialog max-width — "md" (default, 32rem) for simple forms/confirmations,
+   *  "lg" (48rem) for content with its own tab bar or wide tables (e.g.
+   *  Patient History) that would otherwise wrap and scroll awkwardly. */
+  size?: "md" | "lg";
 }
 
+const SIZE_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
+  md: "max-w-[32rem]",
+  lg: "max-w-[48rem]",
+};
+
 /** Modal/dialog shell (header/body/footer) — per Stitch-00 Sheet 2. Closes on Escape or backdrop click. */
-export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, footer, size = "md" }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
     function handleKey(e: KeyboardEvent) {
@@ -37,7 +47,7 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="animate-surface-in relative z-10 flex max-h-[90vh] w-full max-w-[32rem] flex-col rounded-xl bg-surface-container-lowest shadow-lg"
+        className={cn("animate-surface-in relative z-10 flex max-h-[90vh] w-full flex-col rounded-xl bg-surface-container-lowest shadow-lg", SIZE_CLASS[size])}
       >
         <div className="flex items-center justify-between border-b border-outline-variant px-lg py-md">
           <h2 className="text-headline-sm text-on-surface">{title}</h2>

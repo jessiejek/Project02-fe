@@ -184,7 +184,7 @@ export function PatientHistoryModal({
   const vitalDates = Array.from(new Set(vitalReadings.map((r) => r.appointmentDate))).sort((a, b) => b.localeCompare(a));
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Patient History">
+    <Modal isOpen={isOpen} onClose={onClose} title="Patient History" size="lg">
       <div className="space-y-lg">
         {!loaded ? (
           <div className="space-y-md">
