@@ -4,13 +4,14 @@ import Link from "next/link";
 import { todayManila } from "@/lib/clock";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
-import { Card } from "@/components/ui/Card";
+import { Card, StatCard } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { DataTable } from "@/components/ui/DataTable";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryDoctorEarnings, type DoctorEarningsRow } from "@/lib/data/admin";
+import { queryDoctorEarnings, queryReport, type DoctorEarningsRow } from "@/lib/data/admin";
 import { queryBookings } from "@/lib/data/bookings";
 import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/scheduling";
 import { queryQueue, type QueueBoard } from "@/lib/data/queue";
@@ -24,6 +25,14 @@ type Range = "month" | "year" | "custom";
 
 const EMPTY_TOTALS = { completed_visits: 0, gross_billed: 0, collected: 0, waived: 0 };
 const EMPTY_BOARD: QueueBoard = { date: "", summary: { waiting: 0, in_progress: 0, completed: 0, no_show: 0, total: 0 }, items: [] };
+
+interface ClinicBookingRow {
+  id: string;
+  patientName: string;
+  slotStartTime: string;
+  queueNumber: string | null;
+  status: string;
+}
 
 function elapsedMinutes(iso: string): number {
   const ms = Date.now() - new Date(iso).getTime();
@@ -54,6 +63,72 @@ export default function DoctorDashboardPage() {
   const [board, setBoard] = useState<QueueBoard>(EMPTY_BOARD);
   const [consultationsToday, setConsultationsToday] = useState<ConsultationRow[]>([]);
   const [followUpsDueToday, setFollowUpsDueToday] = useState<ConsultationRow[]>([]);
+
+  // Clinic Overview — the same admin-dashboard stats (Admin Dashboard's
+  // v_daily_booking_summary/v_unpaid_completed_visits/v_pending_follow_ups
+  // reads, ReportsController's StaffReports role already covers "Doctor"),
+  // scoped to this doctor's own bookings so a single-doctor clinic doesn't
+  // need to switch to an admin login just to see the practice's own numbers.
+  const [revenueToday, setRevenueToday] = useState(0);
+  const [pendingVerifications, setPendingVerifications] = useState(0);
+  const [onHoldThisMonth, setOnHoldThisMonth] = useState(0);
+  const [unpaidCompletedMonth, setUnpaidCompletedMonth] = useState(0);
+  const [noShowsToday, setNoShowsToday] = useState(0);
+  const [followUpsDue7Days, setFollowUpsDue7Days] = useState(0);
+  const [recentBookings, setRecentBookings] = useState<ClinicBookingRow[]>([]);
+
+  const loadClinicOverview = useCallback(async () => {
+    if (!meDoctorId) return;
+    const supabase = null as never;
+    const today = todayManila();
+    const monthStart = `${today.slice(0, 7)}-01`;
+    const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    try {
+      const [dailySummary, unpaidRes, followUpsRes, monthBookings, recent] = await Promise.all([
+        queryReport<Record<string, unknown>>(supabase, "v_daily_booking_summary"),
+        queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits").then((rows) =>
+          rows.filter((r) => (r.doctor_id as string) === meDoctorId && (r.appointment_date as string) >= monthStart),
+        ),
+        queryReport<Record<string, unknown>>(supabase, "v_pending_follow_ups").then((rows) =>
+          rows.filter(
+            (r) =>
+              (r.doctor_id as string) === meDoctorId &&
+              (r.follow_up_date as string) >= today &&
+              (r.follow_up_date as string) <= in7Days,
+          ),
+        ),
+        queryBookings(supabase, { doctorId: meDoctorId, from: monthStart, to: today }),
+        queryBookings(supabase, { doctorId: meDoctorId }),
+      ]);
+
+      // v_daily_booking_summary has no doctor_id (clinic-wide per day) — fine
+      // for a single-doctor clinic, where "the clinic's day" and "this
+      // doctor's day" are the same thing.
+      const todaySummary = dailySummary.find((r) => r.appointment_date === today) ?? null;
+      setRevenueToday(Number(todaySummary?.revenue ?? 0));
+      setNoShowsToday(Number(todaySummary?.no_show_count ?? 0));
+      setPendingVerifications(monthBookings.filter((b) => b.status === "ProofSubmitted").length);
+      setOnHoldThisMonth(monthBookings.filter((b) => b.status === "OnHold").length);
+      setUnpaidCompletedMonth(unpaidRes.length);
+      setFollowUpsDue7Days(followUpsRes.length);
+
+      setRecentBookings(
+        [...recent]
+          .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+          .slice(0, 20)
+          .map((b) => ({
+            id: b.booking_id,
+            patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
+            slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+            queueNumber: b.queue_number,
+            status: b.status,
+          })),
+      );
+    } catch {
+      // Non-critical widget — leave whatever was last loaded rather than
+      // blanking the rest of the dashboard over a report-endpoint hiccup.
+    }
+  }, [meDoctorId]);
 
   const loadQueue = useCallback(async () => {
     const supabase = null as never;
@@ -96,7 +171,9 @@ export default function DoctorDashboardPage() {
   useClinicHubEvent("PaymentUpdated", () => {
     loadQueue();
     loadAttention();
+    loadClinicOverview();
   });
+  useClinicHubEvent("PatientCheckedIn", loadClinicOverview);
 
   // Real-time is the primary trigger; this poll is the fallback for a
   // dropped/blocked SignalR connection (same pattern as /staff/queue), so a
@@ -108,9 +185,10 @@ export default function DoctorDashboardPage() {
     const t = setInterval(() => {
       loadQueue();
       loadAttention();
+      loadClinicOverview();
     }, 60_000);
     return () => clearInterval(t);
-  }, [loadQueue, loadAttention]);
+  }, [loadQueue, loadAttention, loadClinicOverview]);
 
   useEffect(() => {
     if (!meDoctorId) return;
@@ -125,11 +203,11 @@ export default function DoctorDashboardPage() {
       } catch {
         setEarnings([]);
       }
-      await Promise.all([loadQueue(), loadAttention()]);
+      await Promise.all([loadQueue(), loadAttention(), loadClinicOverview()]);
       setLoaded(true);
     }
     load();
-  }, [meDoctorId, loadQueue, loadAttention, session?.displayName]);
+  }, [meDoctorId, loadQueue, loadAttention, loadClinicOverview, session?.displayName]);
 
   const currentMonth = todayManila().slice(0, 7); // "YYYY-MM"
   const currentYear = todayManila().slice(0, 4); // "YYYY"
@@ -334,6 +412,48 @@ export default function DoctorDashboardPage() {
             <Button variant={dayStatus === "Available" ? "primary" : "secondary"} onClick={() => setStatus("Available")}>Available</Button>
             <Button variant={dayStatus === "RunningLate" ? "primary" : "secondary"} onClick={() => setStatus("RunningLate")}>Running Late</Button>
             <Button variant={dayStatus === "UnavailableToday" ? "primary" : "secondary"} onClick={() => setStatus("UnavailableToday")}>Unavailable Today</Button>
+          </div>
+        </Card>
+
+        {/* Clinic Overview — the Admin Dashboard's own stat cards + recent
+            bookings, surfaced here too so a solo doctor running the clinic
+            doesn't need a separate admin login just to see these. */}
+        <Card>
+          <h3 className="mb-md text-headline-sm text-on-surface">Clinic Overview</h3>
+          <div className="grid grid-cols-1 gap-lg sm:grid-cols-2 md:grid-cols-3">
+            <StatCard icon="payments" value={peso(revenueToday)} label="Revenue Today" />
+            <StatCard icon="event_busy" value={noShowsToday} label="No Shows Today" />
+            <StatCard icon="pending_actions" value={pendingVerifications} label="Pending Verifications (month)" />
+            <StatCard icon="hourglass_top" value={onHoldThisMonth} label="On Hold (month)" />
+            <StatCard icon="receipt_long" value={unpaidCompletedMonth} label="Unpaid Completed (month)" />
+            <StatCard icon="follow_the_signs" value={followUpsDue7Days} label="Follow-Ups Due in 7 Days" />
+          </div>
+
+          <div className="mt-lg border-t border-outline-variant/30 pt-lg">
+            <h4 className="mb-sm text-label-lg font-semibold text-on-surface">Recent Bookings</h4>
+            <DataTable
+              columns={[
+                { header: "Patient", render: (r) => r.patientName },
+                { header: "Time", render: (r) => r.slotStartTime },
+                { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
+                { header: "Status", render: (r) => <StatusPill status={r.status} /> },
+              ]}
+              rows={recentBookings}
+              rowKey={(r) => r.id}
+              rowHref={(r) => `/doctor/appointments/${r.id}`}
+              emptyMessage="No bookings yet."
+              renderMobileCard={(r) => (
+                <div className="space-y-xs">
+                  <div className="flex items-center justify-between gap-md">
+                    <p className="text-body-md font-medium text-on-surface">{r.patientName}</p>
+                    <StatusPill status={r.status} />
+                  </div>
+                  <p className="text-label-sm text-on-surface-variant">
+                    {r.slotStartTime} · Q#{r.queueNumber ?? "—"}
+                  </p>
+                </div>
+              )}
+            />
           </div>
         </Card>
 
