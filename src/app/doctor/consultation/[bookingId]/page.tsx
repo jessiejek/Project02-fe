@@ -2436,17 +2436,28 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           scrolling all the way back up. Grouped bottom-right (not bottom-left,
           which collides with AppShell's fixed sidebar footer) so they never
           fight the sidebar for the same corner. */}
-      <div className="fixed bottom-lg right-lg z-40 flex items-center gap-sm">
-        <Button variant="secondary" onClick={() => setHistoryOpen(true)} className="shadow-lg">
+      <div className="fixed bottom-md right-md z-40 flex items-center gap-xs sm:bottom-lg sm:right-lg sm:gap-sm">
+        <Button
+          variant="secondary"
+          onClick={() => setHistoryOpen(true)}
+          aria-label="Show History"
+          className="whitespace-nowrap px-sm shadow-lg sm:px-lg"
+        >
           <Icon name="history" className="text-[18px]" />
-          Show History
+          <span className="hidden sm:inline">Show History</span>
         </Button>
         {mode === "complete" && (
-          <Button disabled={!canComplete} onClick={() => setChecklistOpen(true)} className="shadow-lg">
+          <Button
+            disabled={!canComplete}
+            onClick={() => setChecklistOpen(true)}
+            aria-label="Complete Consultation"
+            className="whitespace-nowrap px-sm shadow-lg sm:px-lg"
+          >
             <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
               {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
             </span>
-            Complete Consultation
+            <span className="sm:hidden">Complete</span>
+            <span className="hidden sm:inline">Complete Consultation</span>
           </Button>
         )}
       </div>
