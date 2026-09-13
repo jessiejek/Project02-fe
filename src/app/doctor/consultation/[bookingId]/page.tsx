@@ -14,6 +14,7 @@ import { Toast } from "@/components/ui/Toast";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Icon } from "@/components/ui/Icon";
 import { VitalsEditor } from "@/components/doctor/VitalsEditor";
+import { PatientHistoryModal } from "@/components/doctor/PatientHistoryModal";
 import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
 import { cn } from "@/lib/cn";
@@ -98,12 +99,6 @@ interface ConsultationBooking {
   visitType: "New" | "FollowUp";
   discountCategory: "Senior" | "PWD" | "";
   medCertRequested: boolean;
-}
-
-interface PatientHistoryEntry {
-  id: string;
-  appointmentDate: string;
-  chiefComplaint: string;
 }
 
 function toDiagnosisType(d: Diagnosis) {
@@ -193,7 +188,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // matched on patientId so a different patient's record can never surface).
   const [lastVisitSoap, setLastVisitSoap] = useState<Consultation | undefined>(undefined);
   const [lastVisitVitalReadings, setLastVisitVitalReadings] = useState<{ templateId: string; value: string }[]>([]);
-  const [patientHistory, setPatientHistory] = useState<PatientHistoryEntry[]>([]);
   const [vitalTemplates, setVitalTemplates] = useState<VitalFieldTemplate[]>([]);
   const [vitalReadings, setVitalReadings] = useState<{ templateId: string; value: string }[]>([]);
 
@@ -661,8 +655,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         })
         .filter((c) => c.appointmentDate)
         .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate));
-      setPatientHistory(patientConsults.map((c) => ({ id: c.consultationId, appointmentDate: c.appointmentDate, chiefComplaint: c.chiefComplaint })));
-
       const prior = patientConsults[0];
       if (prior) {
         const [priorRes, priorReadingsRes] = await Promise.all([
@@ -2420,16 +2412,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         </ul>
       </Modal>
 
-      <Drawer isOpen={historyOpen} onClose={() => setHistoryOpen(false)} title="Patient History">
-        <div className="space-y-md">
-          {patientHistory.map((c) => (
-            <div key={c.id} className="rounded-lg border border-outline-variant p-md text-body-md text-on-surface-variant">
-              <p><strong>{c.appointmentDate}</strong> — {booking.doctorName}</p>
-              <p>{c.chiefComplaint}</p>
-            </div>
-          ))}
-        </div>
-      </Drawer>
+      <PatientHistoryModal
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        patientId={booking.patientId}
+        doctorId={booking.doctorId}
+      />
 
       <Modal isOpen={lastVisitOpen} onClose={() => setLastVisitOpen(false)} title="Last Appointment SOAP" footer={<Button onClick={() => setLastVisitOpen(false)}>Close</Button>}>
         {lastVisitSoap && (
@@ -2443,22 +2431,25 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         )}
       </Modal>
 
-      {/* Floating counterpart to the header's Complete Consultation button —
-          this is a long, scrolling form; without it, finishing means
-          scrolling all the way back up. Shrink-to-content pill, not a panel,
-          so it costs no more space than any other FAB. */}
-      {mode === "complete" && (
-        <Button
-          disabled={!canComplete}
-          onClick={() => setChecklistOpen(true)}
-          className="fixed bottom-lg right-lg z-40 shadow-lg"
-        >
-          <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
-            {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
-          </span>
-          Complete Consultation
+      {/* Floating counterparts to the header's own buttons — this is a long,
+          scrolling form; without these, checking history or finishing means
+          scrolling all the way back up. Grouped bottom-right (not bottom-left,
+          which collides with AppShell's fixed sidebar footer) so they never
+          fight the sidebar for the same corner. */}
+      <div className="fixed bottom-lg right-lg z-40 flex items-center gap-sm">
+        <Button variant="secondary" onClick={() => setHistoryOpen(true)} className="shadow-lg">
+          <Icon name="history" className="text-[18px]" />
+          Show History
         </Button>
-      )}
+        {mode === "complete" && (
+          <Button disabled={!canComplete} onClick={() => setChecklistOpen(true)} className="shadow-lg">
+            <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
+              {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
+            </span>
+            Complete Consultation
+          </Button>
+        )}
+      </div>
     </AppShell>
   );
 }
