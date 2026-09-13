@@ -43,6 +43,10 @@ interface ConsultationEntry {
   id: string;
   appointmentDate: string;
   chiefComplaint: string;
+  subjective: string;
+  objective: string;
+  assessment: string;
+  plan: string;
   diagnosisDescriptions: string[];
 }
 
@@ -92,6 +96,7 @@ export function PatientHistoryModal({
   const [documents, setDocuments] = useState<{ id: string; title: string }[]>([]);
   const [vaccinations, setVaccinations] = useState<{ id: string; vaccineName: string; doseNumber: number | null; administeredDate: string | null; status: string }[]>([]);
   const [tab, setTab] = useState("consultations");
+  const [expandedConsultationId, setExpandedConsultationId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !patientId) return;
@@ -128,6 +133,10 @@ export function PatientHistoryModal({
             id: c.consultation_id,
             appointmentDate: c.bookings?.appointment_date ?? "",
             chiefComplaint: c.chief_complaint ?? "",
+            subjective: c.subjective ?? "",
+            objective: c.objective ?? "",
+            assessment: c.assessment ?? "",
+            plan: c.plan ?? "",
             diagnosisDescriptions: (c.consultation_diagnoses ?? []).map((d) => d.custom_description ?? "").filter(Boolean),
           }))
           .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate)),
@@ -218,23 +227,49 @@ export function PatientHistoryModal({
                 {consultations.length === 0 ? (
                   <EmptyState icon="clinical_notes" message="No consultations recorded yet." />
                 ) : (
-                  consultations.map((c) => (
-                    <div key={c.id} className="rounded-xl border border-outline-variant p-md">
-                      <div className="flex flex-wrap items-baseline justify-between gap-sm">
-                        <p className="text-body-md font-medium text-on-surface">{c.chiefComplaint || "Consultation"}</p>
-                        <p className="text-label-sm text-on-surface-variant">{c.appointmentDate}</p>
+                  consultations.map((c) => {
+                    const expanded = expandedConsultationId === c.id;
+                    const hasSoap = [c.subjective, c.objective, c.assessment, c.plan].some((f) => f.trim() !== "");
+                    return (
+                      <div key={c.id} className="rounded-xl border border-outline-variant p-md">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedConsultationId(expanded ? null : c.id)}
+                          className="flex w-full flex-wrap items-baseline justify-between gap-sm text-left"
+                          aria-expanded={expanded}
+                        >
+                          <span className="flex items-center gap-xs">
+                            <Icon name={expanded ? "expand_less" : "expand_more"} className="text-[18px] text-on-surface-variant" />
+                            <span className="text-body-md font-medium text-on-surface">{c.chiefComplaint || "Consultation"}</span>
+                          </span>
+                          <span className="text-label-sm text-on-surface-variant">{c.appointmentDate}</span>
+                        </button>
+                        {c.diagnosisDescriptions.length > 0 && (
+                          <div className="mt-sm flex flex-wrap gap-xs">
+                            {c.diagnosisDescriptions.map((d, i) => (
+                              <span key={i} className="rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
+                                {d}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {expanded && (
+                          <div className="mt-md space-y-sm border-t border-outline-variant pt-md text-body-md text-on-surface-variant">
+                            {hasSoap ? (
+                              <>
+                                <p><strong className="text-on-surface">Subjective:</strong> {c.subjective || "Not recorded."}</p>
+                                <p><strong className="text-on-surface">Objective:</strong> {c.objective || "Not recorded."}</p>
+                                <p><strong className="text-on-surface">Assessment:</strong> {c.assessment || "Not recorded."}</p>
+                                <p><strong className="text-on-surface">Plan:</strong> {c.plan || "Not recorded."}</p>
+                              </>
+                            ) : (
+                              <p>No SOAP notes recorded for this visit.</p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      {c.diagnosisDescriptions.length > 0 && (
-                        <div className="mt-sm flex flex-wrap gap-xs">
-                          {c.diagnosisDescriptions.map((d, i) => (
-                            <span key={i} className="rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
-                              {d}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             )}
