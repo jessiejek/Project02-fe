@@ -6,8 +6,10 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { Modal } from "@/components/ui/Modal";
 import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
-import { queryQueue, updateQueueEntry, type QueueBoard } from "@/lib/data/queue";
+import { queryQueue, updateQueueEntry, cancelQueueEntry, type QueueBoard, type QueueEntry } from "@/lib/data/queue";
+import { ApiError } from "@/lib/api/client";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 // §16.3 — today's walk-in FCFS queue board.
@@ -15,6 +17,10 @@ export default function StaffQueuePage() {
   const [board, setBoard] = useState<QueueBoard | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<QueueEntry | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   const refresh = useCallback(async () => {
     const supabase = null as never;
@@ -46,6 +52,33 @@ export default function StaffQueuePage() {
       await refresh();
     } finally {
       setBusyId(null);
+    }
+  }
+
+  function closeCancel() {
+    if (cancelling) return;
+    setCancelTarget(null);
+    setCancelReason("");
+    setCancelError("");
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    if (!cancelReason.trim()) {
+      setCancelError("Please enter a reason.");
+      return;
+    }
+    setCancelError("");
+    setCancelling(true);
+    try {
+      await cancelQueueEntry(cancelTarget.booking_id, cancelReason.trim());
+      await refresh();
+      setCancelTarget(null);
+      setCancelReason("");
+    } catch (err) {
+      setCancelError(err instanceof ApiError ? String((err.body as { message?: string })?.message ?? err.message) : "Could not cancel the booking. Please try again.");
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -136,6 +169,11 @@ export default function StaffQueuePage() {
                               </Button>
                             </>
                           )}
+                          {(e.status === "CheckedIn" || e.status === "OnHold") && (
+                            <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" disabled={busyId === e.booking_id} onClick={() => setCancelTarget(e)}>
+                              Cancel
+                            </Button>
+                          )}
                           {(e.status === "CheckedIn" || e.status === "OnHold" || e.status === "InProgress") && (
                             <>
                               <Button variant="ghost" className="!px-sm !py-xs text-label-sm" disabled={busyId === e.booking_id} onClick={() => act(e.booking_id, "hold")}>
@@ -156,6 +194,43 @@ export default function StaffQueuePage() {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={cancelTarget !== null}
+        onClose={closeCancel}
+        title="Cancel booking"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeCancel} disabled={cancelling}>
+              Keep booking
+            </Button>
+            <Button variant="danger" onClick={confirmCancel} loading={cancelling}>
+              {cancelling ? "Cancelling…" : "Cancel booking"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-md text-body-md text-on-surface">
+          {cancelError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{cancelError}</p>}
+          <p>
+            Cancel <span className="font-medium">{cancelTarget?.queue_number}</span> for{" "}
+            <span className="font-medium">{cancelTarget?.patient_name}</span>? They will be removed from today&apos;s queue.
+          </p>
+          <div className="space-y-xs">
+            <label htmlFor="cancelReason" className="text-label-md text-on-surface-variant">
+              Reason
+            </label>
+            <textarea
+              id="cancelReason"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g. Patient left, changed their mind, duplicate entry"
+              rows={3}
+              className="w-full rounded-lg border border-outline-variant p-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        </div>
+      </Modal>
     </AppShell>
   );
 }

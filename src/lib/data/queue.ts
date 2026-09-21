@@ -74,3 +74,8 @@ export async function updateQueueEntry(
 ): Promise<void> {
   await api.put(`/api/queue/${bookingId}/${action}`, {});
 }
+
+/** Staff cancels a not-yet-seen booking (Pending / CheckedIn / OnHold); a reason is required. */
+export async function cancelQueueEntry(bookingId: string, reason: string): Promise<void> {
+  await api.put(`/api/queue/${bookingId}/cancel`, { reason });
+}
