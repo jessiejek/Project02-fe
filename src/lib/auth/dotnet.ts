@@ -59,6 +59,9 @@ export interface RegisterPayload {
   lastName: string;
   email: string;
   password: string;
+  dateOfBirth: string; // yyyy-MM-dd
+  sex: "Male" | "Female";
+  contactNumber?: string;
 }
 
 export const dotnetAuth = {

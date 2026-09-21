@@ -198,8 +198,14 @@ export default function PatientDashboardPage() {
         <div className="hide-scrollbar overflow-x-auto pb-sm">
           <h3 className="mb-md text-headline-sm text-on-surface">Quick Actions</h3>
           <div className="flex min-w-max gap-md">
-            <Link href="/patient/doctors">
+            <Link href="/patient/bookings">
               <Button>
+                <Icon name="add_circle" className="text-[20px]" />
+                Book a Visit
+              </Button>
+            </Link>
+            <Link href="/patient/doctors">
+              <Button variant="secondary">
                 <Icon name="medical_services" className="text-[20px]" />
                 Find a Doctor
               </Button>

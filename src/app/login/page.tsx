@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { VersionFooter } from "@/components/shell/VersionFooter";
+import { safeNext } from "@/lib/auth/next";
 
 const ROLE_TO_SEGMENT: Record<string, string> = {
   Patient: "patient",
@@ -14,8 +15,9 @@ const ROLE_TO_SEGMENT: Record<string, string> = {
 };
 
 // Stitch screen_1_login — shared entry point before any portal.
-export default function LoginPage() {
+function LoginPageForm() {
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -33,7 +35,7 @@ export default function LoginPage() {
       setSubmitting(false);
       return;
     }
-    router.push(`/${segment}/dashboard`);
+    router.push(segment === "patient" && next ? next : `/${segment}/dashboard`);
     router.refresh();
   }
 
@@ -93,7 +95,7 @@ export default function LoginPage() {
             </Button>
             <p className="text-center text-label-sm text-on-surface-variant">
               New patient?{" "}
-              <Link href="/register" className="text-primary hover:underline">
+              <Link href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"} className="text-primary hover:underline">
                 Create an account
               </Link>
             </p>
@@ -102,5 +104,13 @@ export default function LoginPage() {
       </div>
       <VersionFooter />
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginPageForm />
+    </Suspense>
   );
 }
