@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryPatientDocuments, uploadPatientDocument } from "@/lib/data/patientFiles";
+import { openPatientFile, queryPatientDocuments, uploadPatientDocument } from "@/lib/data/patientFiles";
 import { queryMyBookings } from "@/lib/data/bookings";
 
 interface BookingOption {
@@ -215,9 +215,19 @@ export default function DocumentsPage() {
                   <p className="truncate text-body-md text-on-surface">{doc.title ?? doc.fileName}</p>
                   <p className="text-label-sm text-on-surface-variant">{doc.uploadedAt}</p>
                 </div>
-                <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="text-on-surface-variant">
+                <button
+                  type="button"
+                  aria-label={`Open ${doc.title ?? doc.fileName}`}
+                  className="text-on-surface-variant"
+                  onClick={() => {
+                    setError("");
+                    openPatientFile("document", doc.id).catch((e) =>
+                      setError(e instanceof Error ? e.message : "Could not open the file."),
+                    );
+                  }}
+                >
                   <Icon name="download" />
-                </a>
+                </button>
               </Card>
             ))}
           </div>

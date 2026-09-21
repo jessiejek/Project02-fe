@@ -2,7 +2,7 @@
  * Patient files, vaccinations, reviews (INTEGRATION_ROADMAP.md Phase 6).
  * File uploads go to Project02-be local disk (multipart) instead of Supabase Storage.
  */
-import { api, API_BASE_URL } from "@/lib/api/client";
+import { api, API_BASE_URL, clearCachedToken, getAccessToken } from "@/lib/api/client";
 
 // The leading `_supabase` parameter on the query fns is a migration vestige
 // (callers pass `null as never`); everything is served by the .NET API now.
@@ -35,9 +35,44 @@ export interface PatientLabResultRow extends BookingDoctorEmbed {
   uploaded_at: string;
 }
 
-/** Absolute URL for a stored file_url (the .NET value is a `/uploads/...` path). */
-export function fileUrl(stored: string): string {
-  return stored.startsWith("http") ? stored : `${API_BASE_URL}${stored}`;
+/**
+ * Opens a stored patient document / lab result in a new tab.
+ *
+ * Files are PHI and are no longer served from a public `/uploads/...` URL — the API only
+ * returns the bytes to the owning patient or clinic staff, on `GET .../{id}/file` with a bearer
+ * token. A plain `<a href>` can't send that header, so fetch the blob and open an object URL.
+ * The tab is opened synchronously (inside the click) so popup blockers allow it.
+ */
+export async function openPatientFile(kind: "document" | "lab-result", id: string): Promise<void> {
+  const path =
+    kind === "document" ? `/api/patient-documents/${id}/file` : `/api/patient-lab-results/${id}/file`;
+  const tab = window.open("", "_blank");
+
+  const get = async () => {
+    const token = await getAccessToken();
+    return fetch(`${API_BASE_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: "no-store",
+    });
+  };
+
+  try {
+    let res = await get();
+    if (res.status === 401) {
+      clearCachedToken(); // stale cached browser token → refetch once
+      res = await get();
+    }
+    if (!res.ok) {
+      throw new Error(res.status === 404 ? "This file is no longer available." : "Could not open the file.");
+    }
+    const url = URL.createObjectURL(await res.blob());
+    if (tab) tab.location.href = url;
+    else window.location.assign(url);
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (e) {
+    tab?.close();
+    throw e;
+  }
 }
 
 export async function queryPatientDocuments(
