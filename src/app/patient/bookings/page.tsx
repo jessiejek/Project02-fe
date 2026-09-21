@@ -7,7 +7,7 @@ import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryMyBookings, createOnlineBooking } from "@/lib/data/bookings";
+import { queryMyBookings, createOnlineBooking, cancelMyBooking } from "@/lib/data/bookings";
 import { ApiError } from "@/lib/api/client";
 
 const TABS = [
@@ -51,6 +51,7 @@ export default function MyBookingsPage() {
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [bookError, setBookError] = useState("");
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   const [bookDate, setBookDate] = useState(todayStr);
 
@@ -80,6 +81,21 @@ export default function MyBookingsPage() {
     if (!session?.patientId) return;
     loadBookings(session.patientId);
   }, [session?.patientId]);
+
+  async function handleCancel(id: string) {
+    if (!session?.patientId) return;
+    if (!window.confirm("Cancel this booking? You'll lose your place in the queue.")) return;
+    setBookError("");
+    setCancellingId(id);
+    try {
+      await cancelMyBooking(id);
+      await loadBookings(session.patientId);
+    } catch (err) {
+      setBookError(err instanceof ApiError ? String((err.body as { message?: string })?.message ?? err.message) : "Could not cancel the booking. Please try again.");
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   async function handleBookToday() {
     if (!session?.patientId) return;
@@ -133,6 +149,15 @@ export default function MyBookingsPage() {
             { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
             { header: "Status", render: (r) => <StatusPill status={r.status} /> },
             { header: "Payment", render: (r) => <StatusPill status={r.paymentStatus} /> },
+            {
+              header: "",
+              render: (r) =>
+                r.status === "Pending" ? (
+                  <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" loading={cancellingId === r.id} onClick={(e) => { e.stopPropagation(); handleCancel(r.id); }}>
+                    Cancel
+                  </Button>
+                ) : null,
+            },
           ]}
           rows={rows}
           rowKey={(r) => r.id}
@@ -149,6 +174,11 @@ export default function MyBookingsPage() {
                 <span>{r.appointmentDate}</span>
                 <StatusPill status={r.paymentStatus} />
               </div>
+              {r.status === "Pending" && (
+                <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" loading={cancellingId === r.id} onClick={(e) => { e.stopPropagation(); handleCancel(r.id); }}>
+                  Cancel booking
+                </Button>
+              )}
             </div>
           )}
         />

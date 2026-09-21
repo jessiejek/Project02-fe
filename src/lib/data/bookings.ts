@@ -199,6 +199,11 @@ export async function queryMyBookings(_supabase: unknown, _patientId: string): P
   return unwrap(res).map(projectBooking);
 }
 
+/** Patient cancels their own not-yet-checked-in booking. .NET: PUT /api/bookings/{id}/cancel. */
+export async function cancelMyBooking(bookingId: string, reason?: string): Promise<void> {
+  await api.put(`/api/bookings/${bookingId}/cancel`, { reason: reason ?? null });
+}
+
 /**
  * Online self-booking: the logged-in patient joins the day's FCFS queue
  * without visiting the clinic first. .NET: POST /api/bookings/book
