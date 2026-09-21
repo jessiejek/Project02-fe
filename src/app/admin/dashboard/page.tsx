@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { todayManila } from "@/lib/clock";
+import { addDaysToDate, todayManila } from "@/lib/clock";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
@@ -50,7 +50,7 @@ export default function AdminDashboardPage() {
       const supabase = null as never;
       const today = todayManila();
       const monthStart = `${today.slice(0, 7)}-01`;
-      const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+      const in7Days = addDaysToDate(today, 7);
 
       const [dailySummary, unpaidRes, followUpsRes, doctorsRes, allBookings] = await Promise.all([
         queryReport<Record<string, any>>(supabase, "v_daily_booking_summary"),

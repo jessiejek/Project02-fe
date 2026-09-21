@@ -44,6 +44,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
   const [booking, setBooking] = useState<BookingView | null | undefined>(undefined);
   const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false);
   const [waiveOpen, setWaiveOpen] = useState(false);
+  const [waiveError, setWaiveError] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("Cash");
@@ -260,19 +261,25 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
 
       <Modal
         isOpen={waiveOpen}
-        onClose={() => { setWaiveOpen(false); setReasonText(""); }}
+        onClose={() => { setWaiveOpen(false); setReasonText(""); setWaiveError(""); }}
         title="Waive Professional Fee"
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setWaiveOpen(false); setReasonText(""); }}>
+            <Button variant="secondary" onClick={() => { setWaiveOpen(false); setReasonText(""); setWaiveError(""); }}>
               Cancel
             </Button>
             <Button
               disabled={reasonText.trim().length < 5}
               onClick={async () => {
-                await updatePayment({ status: "Waived", waivedReason: reasonText, withOrNumber: true });
-                setWaiveOpen(false);
-                setReasonText("");
+                setWaiveError("");
+                try {
+                  await updatePayment({ status: "Waived", waivedReason: reasonText, withOrNumber: true });
+                  setWaiveOpen(false);
+                  setReasonText("");
+                } catch (e) {
+                  // The API only lets front desk record a waiver the doctor already decided (403 otherwise).
+                  setWaiveError(e instanceof Error ? e.message : "Could not waive the fee.");
+                }
               }}
             >
               Confirm Waiver
@@ -287,6 +294,11 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
           className="w-full rounded-lg border border-outline-variant p-md"
           rows={3}
         />
+        {waiveError && (
+          <p role="alert" className="mt-sm rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">
+            {waiveError}
+          </p>
+        )}
       </Modal>
 
       <Modal

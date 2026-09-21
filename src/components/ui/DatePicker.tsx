@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
+import { manilaTodayAsLocalDate } from "@/lib/clock";
 import { Icon } from "@/components/ui/Icon";
 
 export interface DatePickerProps {
@@ -95,7 +96,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
   }
 
   const minD = minDate ? parseISO(minDate) : null;
-  const today = new Date();
+  const today = manilaTodayAsLocalDate(); // the clinic's "today", not the visitor's
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>

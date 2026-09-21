@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { todayManila } from "@/lib/clock";
+import { addDaysToDate, previousMonth, todayManila } from "@/lib/clock";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card, StatCard } from "@/components/ui/Card";
@@ -82,7 +82,7 @@ export default function DoctorDashboardPage() {
     const supabase = null as never;
     const today = todayManila();
     const monthStart = `${today.slice(0, 7)}-01`;
-    const in7Days = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const in7Days = addDaysToDate(today, 7);
     try {
       const [dailySummary, unpaidRes, followUpsRes, monthBookings, recent] = await Promise.all([
         queryReport<Record<string, unknown>>(supabase, "v_daily_booking_summary"),
@@ -290,9 +290,7 @@ export default function DoctorDashboardPage() {
     .slice(0, 3);
   const unpaidCompleted = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
 
-  const prevMonth = new Date(`${currentMonth}-01`);
-  prevMonth.setMonth(prevMonth.getMonth() - 1);
-  const prevMonthEntry = earnings.find((e) => e.period === prevMonth.toISOString().slice(0, 7));
+  const prevMonthEntry = earnings.find((e) => e.period === previousMonth(currentMonth));
   const collectedDelta =
     range === "month" && prevMonthEntry && prevMonthEntry.collected > 0
       ? Math.round(((monthTotals.collected - prevMonthEntry.collected) / prevMonthEntry.collected) * 100)

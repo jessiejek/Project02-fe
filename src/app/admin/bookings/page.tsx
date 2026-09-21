@@ -9,6 +9,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Tabs } from "@/components/ui/Tabs";
+import { manilaTodayAsLocalDate } from "@/lib/clock";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryStaffBookings, queryBookings } from "@/lib/data/bookings";
 import type { BookingStatus } from "@/data/types";
@@ -210,7 +211,7 @@ function BookingsWeek() {
   const [activeDoctors, setActiveDoctors] = useState<DoctorOption[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  const weekStart = useMemo(() => addDays(mondayOf(new Date()), weekOffset * 7), [weekOffset]);
+  const weekStart = useMemo(() => addDays(mondayOf(manilaTodayAsLocalDate()), weekOffset * 7), [weekOffset]);
   const weekDates = useMemo(() => DAYS.map((_, i) => addDays(weekStart, i)), [weekStart]);
   const weekEnd = weekDates[6];
   const weekStartIso = toISODate(weekStart);

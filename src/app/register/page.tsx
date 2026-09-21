@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { VersionFooter } from "@/components/shell/VersionFooter";
 import { safeNext } from "@/lib/auth/next";
+import { todayManila } from "@/lib/clock";
 
 // Public self-registration — creates a Patient-role account directly (no staff
 // intake needed) and logs the patient straight into their portal.
@@ -115,7 +116,7 @@ function RegisterPageForm() {
                   id="dateOfBirth"
                   type="date"
                   required
-                  max={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })}
+                  max={todayManila()}
                   value={dateOfBirth}
                   onChange={(e) => setDateOfBirth(e.target.value)}
                   className="w-full rounded-lg border border-outline-variant px-md py-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"

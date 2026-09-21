@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryPatientLabResults, uploadPatientLabResult } from "@/lib/data/patientFiles";
+import { openPatientFile, queryPatientLabResults, uploadPatientLabResult } from "@/lib/data/patientFiles";
 import { queryMyBookings } from "@/lib/data/bookings";
 
 interface BookingOption {
@@ -189,9 +189,19 @@ export default function LabResultsPage() {
                   <p className="truncate text-body-md text-on-surface">{lab.resultTitle ?? lab.fileName}</p>
                   <p className="text-label-sm text-on-surface-variant">{lab.uploadedAt}</p>
                 </div>
-                <a href={lab.fileUrl} target="_blank" rel="noreferrer" className="text-on-surface-variant">
+                <button
+                  type="button"
+                  aria-label={`Open ${lab.resultTitle ?? lab.fileName}`}
+                  className="text-on-surface-variant"
+                  onClick={() => {
+                    setError("");
+                    openPatientFile("lab-result", lab.id).catch((e) =>
+                      setError(e instanceof Error ? e.message : "Could not open the file."),
+                    );
+                  }}
+                >
                   <Icon name="download" />
-                </a>
+                </button>
               </Card>
             ))}
           </div>
