@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryMyBookings, createOnlineBooking, cancelMyBooking } from "@/lib/data/bookings";
 import { ApiError } from "@/lib/api/client";
+import { showPaymentStatus } from "@/lib/paymentDisplay";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -148,7 +149,7 @@ export default function MyBookingsPage() {
             { header: "Date", render: (r) => r.appointmentDate },
             { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
             { header: "Status", render: (r) => <StatusPill status={r.status} /> },
-            { header: "Payment", render: (r) => <StatusPill status={r.paymentStatus} /> },
+            { header: "Payment", render: (r) => (showPaymentStatus(r.status, r.paymentStatus) ? <StatusPill status={r.paymentStatus} /> : <span className="text-on-surface-variant">—</span>) },
             {
               header: "",
               render: (r) =>
@@ -172,7 +173,7 @@ export default function MyBookingsPage() {
               </div>
               <div className="flex items-center justify-between text-label-sm text-on-surface-variant">
                 <span>{r.appointmentDate}</span>
-                <StatusPill status={r.paymentStatus} />
+                {showPaymentStatus(r.status, r.paymentStatus) && <StatusPill status={r.paymentStatus} />}
               </div>
               {r.status === "Pending" && (
                 <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" loading={cancellingId === r.id} onClick={(e) => { e.stopPropagation(); handleCancel(r.id); }}>

@@ -11,6 +11,7 @@ import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
+import { showPaymentStatus, isVoidBooking } from "@/lib/paymentDisplay";
 
 const TIMELINE = ["Pending", "Confirmed", "CheckedIn", "Completed"];
 
@@ -130,7 +131,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           </div>
           <div className="mb-md flex flex-wrap gap-md text-label-md text-on-surface-variant">
             <span>{booking.appointmentDate}</span>
-            <span>{booking.slotStartTime} - {booking.slotEndTime}</span>
+            {booking.slotStartTime !== "00:00" && <span>{booking.slotStartTime} - {booking.slotEndTime}</span>}
             {booking.queueNumber && <span>Queue #{booking.queueNumber}</span>}
           </div>
 
@@ -140,15 +141,24 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
             </div>
           )}
 
-          <div className="mb-md flex flex-wrap items-center gap-sm text-body-md">
-            <span className="font-bold">Amount Due:</span> ₱{booking.amountDue}
-            <StatusPill status={booking.paymentStatus} />
-            {booking.paymentStatus === "Waived" && booking.waivedReason && (
-              <span className="text-label-sm text-on-surface-variant">
-                (PF waived: {booking.waivedReason})
-              </span>
-            )}
-          </div>
+          {showPaymentStatus(booking.status, booking.paymentStatus) ? (
+            <div className="mb-md flex flex-wrap items-center gap-sm text-body-md">
+              <span className="font-bold">Amount Due:</span> ₱{booking.amountDue}
+              <StatusPill status={booking.paymentStatus} />
+              {booking.paymentStatus === "Waived" && booking.waivedReason && (
+                <span className="text-label-sm text-on-surface-variant">
+                  (PF waived: {booking.waivedReason})
+                </span>
+              )}
+            </div>
+          ) : (
+            !isVoidBooking(booking.status) && (
+              <div className="mb-md flex flex-wrap items-center gap-sm text-body-md">
+                <span className="font-bold">Estimated fee:</span> ₱{booking.amountDue}
+                <span className="text-label-sm text-on-surface-variant">Paid at the clinic after your visit</span>
+              </div>
+            )
+          )}
           <div className="flex flex-wrap gap-md text-label-sm text-on-surface-variant">
             <span>Payment mode: {booking.paymentMode === "PayAtClinic" ? "Pay at Clinic" : "Online"}</span>
             <span>Created: {booking.createdAt}</span>
