@@ -91,6 +91,12 @@ export default function LoginPage() {
             <Button type="submit" className="w-full" loading={submitting}>
               {submitting ? "Logging in…" : "Log in"}
             </Button>
+            <p className="text-center text-label-sm text-on-surface-variant">
+              New patient?{" "}
+              <Link href="/register" className="text-primary hover:underline">
+                Create an account
+              </Link>
+            </p>
           </form>
         </div>
       </div>

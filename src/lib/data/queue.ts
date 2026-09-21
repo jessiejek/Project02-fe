@@ -33,11 +33,13 @@ export interface QueueEntry {
   visit_type: "New" | "FollowUp";
   amount_due: number;
   checked_in_at: string;
+  is_walk_in: boolean;
 }
 
 export interface QueueBoard {
   date: string;
   summary: {
+    booked: number;
     waiting: number;
     in_progress: number;
     completed: number;
@@ -63,7 +65,7 @@ export async function queryQueue(_supabase: unknown, date?: string): Promise<Que
   return api.get<QueueBoard>("/api/queue", { query: date ? { date } : undefined });
 }
 
-type QueueAction = "call" | "hold" | "complete" | "no-show";
+type QueueAction = "check-in" | "call" | "hold" | "complete" | "no-show";
 
 export async function updateQueueEntry(
   _supabase: unknown,

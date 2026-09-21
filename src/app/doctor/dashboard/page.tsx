@@ -24,7 +24,7 @@ type DayStatus = "Available" | "RunningLate" | "UnavailableToday";
 type Range = "month" | "year" | "custom";
 
 const EMPTY_TOTALS = { completed_visits: 0, gross_billed: 0, collected: 0, waived: 0 };
-const EMPTY_BOARD: QueueBoard = { date: "", summary: { waiting: 0, in_progress: 0, completed: 0, no_show: 0, total: 0 }, items: [] };
+const EMPTY_BOARD: QueueBoard = { date: "", summary: { booked: 0, waiting: 0, in_progress: 0, completed: 0, no_show: 0, total: 0 }, items: [] };
 
 interface ClinicBookingRow {
   id: string;

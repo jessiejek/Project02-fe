@@ -199,6 +199,26 @@ export async function queryMyBookings(_supabase: unknown, _patientId: string): P
   return unwrap(res).map(projectBooking);
 }
 
+/**
+ * Online self-booking: the logged-in patient joins the day's FCFS queue
+ * without visiting the clinic first. .NET: POST /api/bookings/book
+ * `{ appointmentDate?, visitType?, notes? }` — no slot/time picker, no
+ * capacity cap, since the clinic runs a walk-in queue, not appointment slots.
+ * Throws ApiError on failure (e.g. past date) — callers should catch it.
+ */
+export async function createOnlineBooking(opts: {
+  appointmentDate?: string; // yyyy-MM-dd; defaults to today server-side
+  visitType?: "New" | "FollowUp";
+  notes?: string;
+}): Promise<BookingRow> {
+  const raw = await api.post<Raw>("/api/bookings/book", {
+    appointmentDate: opts.appointmentDate ?? null,
+    visitType: opts.visitType ?? null,
+    notes: opts.notes ?? null,
+  });
+  return projectBooking(raw);
+}
+
 /** Staff/admin list: all, today, or unpaid-for-payment. */
 export async function queryStaffBookings(
   _supabase: unknown,

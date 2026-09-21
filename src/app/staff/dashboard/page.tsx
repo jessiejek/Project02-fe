@@ -24,7 +24,7 @@ interface QueueRow {
 // Stitch staff_dashboard. Was reading mockBookings regardless of what's
 // actually scheduled today — fixed to a real query scoped to today's date,
 // matching the pattern already used by doctor/dashboard.
-const EMPTY_BOARD: QueueBoard = { date: "", summary: { waiting: 0, in_progress: 0, completed: 0, no_show: 0, total: 0 }, items: [] };
+const EMPTY_BOARD: QueueBoard = { date: "", summary: { booked: 0, waiting: 0, in_progress: 0, completed: 0, no_show: 0, total: 0 }, items: [] };
 
 export default function StaffDashboardPage() {
   const [loaded, setLoaded] = useState(false);

@@ -19,6 +19,7 @@ function isPublicPath(pathname: string) {
   return (
     pathname === "/" ||
     pathname === "/login" ||
+    pathname === "/register" ||
     pathname === "/forgot-password"
   );
 }
@@ -37,7 +38,7 @@ function gate(request: NextRequest, role: string | undefined, response: NextResp
   if (ROLE_SEGMENTS.has(firstSegment) && firstSegment !== ownSegment) {
     return NextResponse.redirect(new URL(`/${ownSegment}/dashboard`, request.url));
   }
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/register") {
     return NextResponse.redirect(new URL(`/${ownSegment}/dashboard`, request.url));
   }
   return response;

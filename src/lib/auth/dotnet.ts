@@ -53,8 +53,17 @@ function safeParse(t: string): unknown {
   }
 }
 
+export interface RegisterPayload {
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  email: string;
+  password: string;
+}
+
 export const dotnetAuth = {
   login: (email: string, password: string) => post<DotnetSession>("/api/auth/login", { email, password }),
+  register: (payload: RegisterPayload) => post<DotnetSession>("/api/auth/register", payload),
   refresh: (refreshToken: string) =>
     post<{ accessToken: string; refreshToken: string }>("/api/auth/refresh-token", { refreshToken }),
   logout: (refreshToken: string) => post<unknown>("/api/auth/logout", { refreshToken }),

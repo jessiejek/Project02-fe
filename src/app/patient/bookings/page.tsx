@@ -5,8 +5,10 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Tabs } from "@/components/ui/Tabs";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
+import { Button } from "@/components/ui/Button";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryMyBookings } from "@/lib/data/bookings";
+import { queryMyBookings, createOnlineBooking } from "@/lib/data/bookings";
+import { ApiError } from "@/lib/api/client";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -29,7 +31,7 @@ interface BookingRow {
 function matchesTab(booking: BookingRow, tab: string) {
   switch (tab) {
     case "upcoming":
-      return ["Confirmed", "CheckedIn"].includes(booking.status);
+      return ["Pending", "Confirmed", "CheckedIn"].includes(booking.status);
     case "forPayment":
       return booking.status === "Completed" && booking.paymentStatus === "Unpaid";
     case "completed":
@@ -47,33 +49,51 @@ export default function MyBookingsPage() {
   const [tab, setTab] = useState("all");
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [bookingsLoading, setBookingsLoading] = useState(true);
+  const [booking, setBooking] = useState(false);
+  const [bookError, setBookError] = useState("");
+  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  const [bookDate, setBookDate] = useState(todayStr);
+
+  function project(rows: import("@/lib/data/bookings").BookingRow[]) {
+    return rows.map((b) => ({
+      id: b.booking_id,
+      doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+      appointmentDate: b.appointment_date,
+      slotStartTime: b.slot_start_time.slice(0, 5),
+      status: b.status,
+      queueNumber: b.queue_number,
+      paymentStatus: b.payments?.status ?? "Unpaid",
+    }));
+  }
+
+  async function loadBookings(patientId: string) {
+    const supabase = null as never;
+    try {
+      const rows = await queryMyBookings(supabase, patientId);
+      setBookings(project(rows));
+    } finally {
+      setBookingsLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (!session?.patientId) return;
-    const patientId = session.patientId;
-
-    async function loadBookings() {
-      const supabase = null as never;
-      try {
-        const rows = await queryMyBookings(supabase, patientId);
-        setBookings(
-          rows.map((b) => ({
-            id: b.booking_id,
-            doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-            appointmentDate: b.appointment_date,
-            slotStartTime: b.slot_start_time.slice(0, 5),
-            status: b.status,
-            queueNumber: b.queue_number,
-            paymentStatus: b.payments?.status ?? "Unpaid",
-          })),
-        );
-      } finally {
-        setBookingsLoading(false);
-      }
-    }
-
-    loadBookings();
+    loadBookings(session.patientId);
   }, [session?.patientId]);
+
+  async function handleBookToday() {
+    if (!session?.patientId) return;
+    setBookError("");
+    setBooking(true);
+    try {
+      await createOnlineBooking({ appointmentDate: bookDate });
+      await loadBookings(session.patientId);
+    } catch (err) {
+      setBookError(err instanceof ApiError ? String((err.body as { message?: string })?.message ?? err.message) : "Could not join the queue. Please try again.");
+    } finally {
+      setBooking(false);
+    }
+  }
 
   if (loading || !session?.patientId) {
     return (
@@ -88,12 +108,28 @@ export default function MyBookingsPage() {
   return (
     <AppShell role="patient">
       <div className="space-y-lg">
-        <h2 className="text-headline-lg text-on-surface">My Bookings</h2>
+        <div className="flex items-center justify-between gap-md">
+          <h2 className="text-headline-lg text-on-surface">My Bookings</h2>
+          <div className="flex items-center gap-sm">
+            <input
+              type="date"
+              aria-label="Visit date"
+              value={bookDate}
+              min={todayStr}
+              onChange={(e) => setBookDate(e.target.value || todayStr)}
+              className="rounded-lg border border-outline-variant px-md py-sm text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            <Button onClick={handleBookToday} loading={booking}>
+              {booking ? "Booking…" : bookDate === todayStr ? "Join today's queue" : "Book this day"}
+            </Button>
+          </div>
+        </div>
+        {bookError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{bookError}</p>}
         <Tabs tabs={TABS} activeId={tab} onChange={setTab} />
         <DataTable
           columns={[
             { header: "Doctor", render: (r) => r.doctorName },
-            { header: "Date / Time", render: (r) => `${r.appointmentDate} · ${r.slotStartTime}` },
+            { header: "Date", render: (r) => r.appointmentDate },
             { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
             { header: "Status", render: (r) => <StatusPill status={r.status} /> },
             { header: "Payment", render: (r) => <StatusPill status={r.paymentStatus} /> },
@@ -110,7 +146,7 @@ export default function MyBookingsPage() {
                 <StatusPill status={r.status} />
               </div>
               <div className="flex items-center justify-between text-label-sm text-on-surface-variant">
-                <span>{r.appointmentDate} · {r.slotStartTime}</span>
+                <span>{r.appointmentDate}</span>
                 <StatusPill status={r.paymentStatus} />
               </div>
             </div>

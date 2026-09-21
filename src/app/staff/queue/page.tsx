@@ -38,7 +38,7 @@ export default function StaffQueuePage() {
   // Amount Due drops to 0 once paid — without this it sits stale here.
   useClinicHubEvent("PaymentUpdated", refresh);
 
-  async function act(bookingId: string, action: "call" | "hold" | "complete" | "no-show") {
+  async function act(bookingId: string, action: "check-in" | "call" | "hold" | "complete" | "no-show") {
     setBusyId(bookingId);
     const supabase = null as never;
     try {
@@ -61,10 +61,11 @@ export default function StaffQueuePage() {
           </Link>
         </div>
 
-        {loading && <SkeletonStats count={5} />}
+        {loading && <SkeletonStats count={6} />}
 
         {s && (
-          <div className="grid grid-cols-2 gap-md sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-md sm:grid-cols-6">
+            <Card><p className="text-headline-lg text-on-surface">{s.booked}</p><p className="text-label-md text-on-surface-variant">Booked (not arrived)</p></Card>
             <Card><p className="text-headline-lg text-on-surface">{s.waiting}</p><p className="text-label-md text-on-surface-variant">Waiting</p></Card>
             <Card><p className="text-headline-lg text-on-surface">{s.in_progress}</p><p className="text-label-md text-on-surface-variant">In Progress</p></Card>
             <Card><p className="text-headline-lg text-on-surface">{s.completed}</p><p className="text-label-md text-on-surface-variant">Completed</p></Card>
@@ -101,13 +102,25 @@ export default function StaffQueuePage() {
                         <Link href={`/staff/bookings/${e.booking_id}`} className="text-primary hover:underline">
                           {e.patient_name}
                         </Link>
-                        <span className="block text-label-sm text-on-surface-variant">{e.patient_code}</span>
+                        <span className="block text-label-sm text-on-surface-variant">
+                          {e.patient_code} · {e.is_walk_in ? "Walk-in" : "Booked online"}
+                        </span>
                       </td>
                       <td className="px-lg py-md">{e.visit_type === "FollowUp" ? "Follow-up" : "New"}</td>
                       <td className="px-lg py-md text-right">₱{e.amount_due}</td>
                       <td className="px-lg py-md"><StatusPill status={e.status} /></td>
                       <td className="px-lg py-md">
                         <div className="flex flex-wrap gap-xs">
+                          {e.status === "Pending" && (
+                            <>
+                              <Button className="!px-sm !py-xs text-label-sm" disabled={busyId === e.booking_id} onClick={() => act(e.booking_id, "check-in")}>
+                                Check in
+                              </Button>
+                              <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" disabled={busyId === e.booking_id} onClick={() => act(e.booking_id, "no-show")}>
+                                No-show
+                              </Button>
+                            </>
+                          )}
                           {(e.status === "CheckedIn" || e.status === "OnHold") && (
                             <Button variant="secondary" className="!px-sm !py-xs text-label-sm" disabled={busyId === e.booking_id} onClick={() => act(e.booking_id, "call")}>
                               Call
