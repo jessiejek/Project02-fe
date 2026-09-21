@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryMyBookings, createOnlineBooking, cancelMyBooking } from "@/lib/data/bookings";
 import { ApiError } from "@/lib/api/client";
+import { todayManila } from "@/lib/clock";
 import { showPaymentStatus } from "@/lib/paymentDisplay";
 
 const TABS = [
@@ -56,7 +57,7 @@ export default function MyBookingsPage() {
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState("");
   const [cancelling, setCancelling] = useState(false);
-  const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  const todayStr = todayManila();
   const [bookDate, setBookDate] = useState(todayStr);
 
   function project(rows: import("@/lib/data/bookings").BookingRow[]) {

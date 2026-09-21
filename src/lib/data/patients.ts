@@ -41,6 +41,13 @@ export type { PagedResult, PageOpts } from "./paging";
 /** @deprecated use PageOpts from ./paging */
 export type PatientsPageOpts = PageOpts;
 
+// Staff typing on a walk-in queue don't reliably hit shift/caps-lock right —
+// title-case names on save so "rubina QUiajda" comes out "Rubina Quiajda".
+// Splits on spaces/hyphens/apostrophes so "dela cruz" and "o'brien" still work.
+export function toTitleCase(name: string): string {
+  return name.replace(/[^\s'-]+/g, (word) => word[0].toUpperCase() + word.slice(1).toLowerCase());
+}
+
 /** §16.2 — server-side paged + searched patient list. */
 export async function queryPatientsPaged(
   _supabase: unknown,
@@ -86,15 +93,14 @@ export async function createPatient(
     contact_number?: string | null;
     address?: string | null;
     email?: string;
-    patient_code?: string;
   },
 ): Promise<PatientRow> {
-  const patient_code = fields.patient_code ?? `MF-${Math.floor(1000 + Math.random() * 9000)}`;
+  // §17.1 #1 — patient_code is issued by the API (`MF-000123`); the client never
+  // generates one. Read it off the returned row.
   const row = {
-    patient_code,
-    first_name: fields.first_name.trim(),
-    middle_name: fields.middle_name?.trim() || null,
-    last_name: fields.last_name.trim(),
+    first_name: toTitleCase(fields.first_name.trim()),
+    middle_name: fields.middle_name?.trim() ? toTitleCase(fields.middle_name.trim()) : null,
+    last_name: toTitleCase(fields.last_name.trim()),
     date_of_birth: fields.date_of_birth,
     sex: fields.sex,
     contact_number: fields.contact_number || null,

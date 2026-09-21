@@ -30,7 +30,7 @@ export interface PrintPatient {
 
 const e = (v: string | null | undefined) => escapeHtml(v ?? "");
 const fmtDate = (d: string | null | undefined) =>
-  d ? new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" }) : "";
+  d ? new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }) : "";
 
 function letterhead(clinic: PrintClinic): string {
   return `<div class="lh">
