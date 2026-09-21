@@ -6,6 +6,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { DataTable } from "@/components/ui/DataTable";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryMyBookings, createOnlineBooking, cancelMyBooking } from "@/lib/data/bookings";
 import { ApiError } from "@/lib/api/client";
@@ -52,7 +53,9 @@ export default function MyBookingsPage() {
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [booking, setBooking] = useState(false);
   const [bookError, setBookError] = useState("");
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [cancelId, setCancelId] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
   const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   const [bookDate, setBookDate] = useState(todayStr);
 
@@ -83,18 +86,24 @@ export default function MyBookingsPage() {
     loadBookings(session.patientId);
   }, [session?.patientId]);
 
-  async function handleCancel(id: string) {
-    if (!session?.patientId) return;
-    if (!window.confirm("Cancel this booking? You'll lose your place in the queue.")) return;
-    setBookError("");
-    setCancellingId(id);
+  function closeCancel() {
+    if (cancelling) return;
+    setCancelId(null);
+    setCancelError("");
+  }
+
+  async function confirmCancel() {
+    if (!session?.patientId || !cancelId) return;
+    setCancelError("");
+    setCancelling(true);
     try {
-      await cancelMyBooking(id);
+      await cancelMyBooking(cancelId);
       await loadBookings(session.patientId);
+      setCancelId(null);
     } catch (err) {
-      setBookError(err instanceof ApiError ? String((err.body as { message?: string })?.message ?? err.message) : "Could not cancel the booking. Please try again.");
+      setCancelError(err instanceof ApiError ? String((err.body as { message?: string })?.message ?? err.message) : "Could not cancel the booking. Please try again.");
     } finally {
-      setCancellingId(null);
+      setCancelling(false);
     }
   }
 
@@ -154,7 +163,7 @@ export default function MyBookingsPage() {
               header: "",
               render: (r) =>
                 r.status === "Pending" ? (
-                  <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" loading={cancellingId === r.id} onClick={(e) => { e.stopPropagation(); handleCancel(r.id); }}>
+                  <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" onClick={(e) => { e.stopPropagation(); setCancelId(r.id); }}>
                     Cancel
                   </Button>
                 ) : null,
@@ -176,7 +185,7 @@ export default function MyBookingsPage() {
                 {showPaymentStatus(r.status, r.paymentStatus) && <StatusPill status={r.paymentStatus} />}
               </div>
               {r.status === "Pending" && (
-                <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" loading={cancellingId === r.id} onClick={(e) => { e.stopPropagation(); handleCancel(r.id); }}>
+                <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" onClick={(e) => { e.stopPropagation(); setCancelId(r.id); }}>
                   Cancel booking
                 </Button>
               )}
@@ -184,6 +193,32 @@ export default function MyBookingsPage() {
           )}
         />
       </div>
+
+      <Modal
+        isOpen={cancelId !== null}
+        onClose={closeCancel}
+        title="Cancel booking"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeCancel} disabled={cancelling}>
+              Keep booking
+            </Button>
+            <Button variant="danger" onClick={confirmCancel} loading={cancelling}>
+              {cancelling ? "Cancelling…" : "Cancel booking"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-sm text-body-md text-on-surface">
+          {cancelError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{cancelError}</p>}
+          <p>
+            Cancel your booking{(() => {
+              const b = bookings.find((x) => x.id === cancelId);
+              return b ? ` for ${b.appointmentDate} (queue ${b.queueNumber ?? "—"})` : "";
+            })()}? You&apos;ll lose your place in the queue.
+          </p>
+        </div>
+      </Modal>
     </AppShell>
   );
 }
