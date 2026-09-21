@@ -35,14 +35,28 @@ async function post<T>(path: string, body: unknown): Promise<{ ok: true; data: T
   const text = await res.text();
   const json = text ? safeParse(text) : undefined;
   if (!res.ok) {
-    let message = "Authentication failed.";
-    if (json && typeof json === "object" && "message" in json) {
-      const m = (json as Record<string, unknown>).message;
-      if (typeof m === "string" && m) message = m;
-    }
-    return { ok: false, status: res.status, message };
+    return { ok: false, status: res.status, message: errorMessage(json, res.status) };
   }
   return { ok: true, data: json as T };
+}
+
+/** Backend `{ message }`, ASP.NET ProblemDetails (`detail` / first validation error), else a
+ *  status-specific fallback — a bare status-less "failed" hides whether the API is down,
+ *  something else is answering on the port, or the request was rejected. */
+function errorMessage(json: unknown, status: number): string {
+  if (json && typeof json === "object") {
+    const j = json as Record<string, unknown>;
+    if (typeof j.message === "string" && j.message) return j.message;
+    if (j.errors && typeof j.errors === "object") {
+      const first = Object.values(j.errors as Record<string, unknown>).flat()[0];
+      if (typeof first === "string" && first) return first;
+    }
+    if (typeof j.detail === "string" && j.detail) return j.detail;
+    if (typeof j.title === "string" && j.title) return j.title;
+  }
+  if (status === 403 || status === 404 || status === 502 || status === 503)
+    return `The server did not respond correctly (HTTP ${status}). Check that the clinic backend is running.`;
+  return `Request failed (HTTP ${status}).`;
 }
 
 function safeParse(t: string): unknown {
