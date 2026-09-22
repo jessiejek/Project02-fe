@@ -567,7 +567,8 @@ export async function deleteFavoriteMedicine(_supabase: unknown, id: string): Pr
 // ── audit_logs write ──────────────────────────────────────────────────────
 export async function writeAuditLog(
   _supabase: unknown,
-  entry: { entity_type: string; entity_id: string; action: string; details?: string | null },
+  _entry: { entity_type: string; entity_id: string; action: string; details?: string | null },
 ): Promise<void> {
-  await api.post("/api/audit-logs", entry);
+  // Audit rows are written by the .NET API on real mutations (AuditLogWriter).
+  // Client POST /api/audit-logs is gone (410); keep this stub so call sites compile.
 }
