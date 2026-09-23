@@ -44,3 +44,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AI agent / Intent skill packs (local tooling — do not commit)
+.agents/
+agent/
+.claude/skills/
+skills-lock.json
