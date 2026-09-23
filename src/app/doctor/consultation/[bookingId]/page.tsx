@@ -44,7 +44,6 @@ import {
   queryMedicalCertificateByConsultation,
   queryRxGroups,
   queryVitalReadings,
-  writeAuditLog,
   type RxGroupRow,
   queryMedicalCertificateTemplates,
   createMedicalCertificateTemplate,
@@ -1197,17 +1196,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     try {
       const savedId = await persistConsultation("Amended");
       if (!savedId) throw new Error("Could not save your changes. Check your connection and try again.");
-      const supabase = null as never;
-      const details = "Consultation record";
-      await writeAuditLog(supabase, {
-        entity_type: "Consultation",
-        entity_id: savedId,
-        action: "Amended",
-        details,
-      });
+      // The server writes the audit_logs row itself (with a real diff of what
+      // changed) as part of the PUT above — this just reflects that locally so
+      // the history list updates without waiting on a refetch.
       setSavedConsultation(buildConsultationRecord());
       setAmendmentHistory((prev) => [
-        { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: details },
+        { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: "Consultation amended" },
         ...prev,
       ]);
       setAmendSnapshot(null);

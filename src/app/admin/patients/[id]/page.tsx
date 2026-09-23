@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/Modal";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Toast } from "@/components/ui/Toast";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
-import { queryPatientById, updatePatient } from "@/lib/data/patients";
+import { queryPatientById, updatePatient, toTitleCase } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
 
 const TABS = [
@@ -141,8 +141,8 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
     const supabase = null as never;
     try {
       await updatePatient(supabase, patient!.id, {
-        first_name: editForm.firstName.trim(),
-        last_name: editForm.lastName.trim(),
+        first_name: toTitleCase(editForm.firstName.trim()),
+        last_name: toTitleCase(editForm.lastName.trim()),
         date_of_birth: editForm.dateOfBirth,
         sex: editForm.sex,
         contact_number: editForm.contactNumber.trim() || null,
@@ -157,8 +157,8 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
 
     setPatient({
       ...patient!,
-      firstName: editForm.firstName.trim(),
-      lastName: editForm.lastName.trim(),
+      firstName: toTitleCase(editForm.firstName.trim()),
+      lastName: toTitleCase(editForm.lastName.trim()),
       dateOfBirth: editForm.dateOfBirth,
       sex: editForm.sex,
       contactNumber: editForm.contactNumber.trim(),
