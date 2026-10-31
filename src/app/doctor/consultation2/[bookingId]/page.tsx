@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, use, useEffect, useRef, useState } from "react";
+import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import { todayManila } from "@/lib/clock";
 import Link from "next/link";
 import { useSearchParams, notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { StatusPill } from "@/components/ui/StatusPill";
+import { StatusPill, type PillTone } from "@/components/ui/StatusPill";
 import { Modal } from "@/components/ui/Modal";
 import { Drawer } from "@/components/ui/Drawer";
 import { Toast } from "@/components/ui/Toast";
@@ -18,20 +18,39 @@ import { PatientHistoryModal } from "@/components/doctor/PatientHistoryModal";
 import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
 //JJQR - AI (Oct 31, 2026)
-import { ConsultPatientBanner } from "@/components/doctor/ConsultPatientBanner";
+import {
+  ConsultPatientBanner,
+  allergiesNeedPrescriptionReview,
+} from "@/components/doctor/ConsultPatientBanner";
 import { ConsultMobileSectionStepper } from "@/components/doctor/ConsultMobileSectionStepper";
 import { Icd10DiagnosisField } from "@/components/doctor/Icd10DiagnosisField";
+import { GrowthChart } from "@/components/doctor/GrowthChart";
 import {
   queryPatientAllergies,
   replacePatientAllergies,
   type PatientAllergyRow,
+  type PatientRow,
 } from "@/lib/data/patients";
+import { queryPatientLabValues, type PatientLabValueRow } from "@/lib/data/clinical";
+import { ANC_PRESETS, matchLabTests, type AncPresetId } from "@/lib/clinical/anc-labs";
+import { estimatePercentile } from "@/lib/clinical/growth";
+import {
+  computeNipStatus,
+  inferDoseNumberFromLabel,
+  nipDueForAgeMonths,
+} from "@/lib/clinical/nip-schedule";
+import {
+  defaultSpecialtyFromDoctor,
+  matchesSpecialtyFilter,
+  SPECIALTY_CHIP_LABELS,
+  type Specialty,
+} from "@/lib/clinical/template-specialty";
 //JJQR - END
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
 import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
-import { queryVaccinationsByConsultation, replaceVaccinationsByConsultation } from "@/lib/data/patientFiles";
+import { queryVaccinationsByConsultation, queryVaccinations, replaceVaccinationsByConsultation, type VaccinationRow } from "@/lib/data/patientFiles";
 import { updateQueueEntry } from "@/lib/data/queue";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { queryAuditLogs, queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
@@ -68,7 +87,14 @@ import {
   printPrescriptionForBooking,
 } from "@/lib/consult-print";
 import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
-import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFieldTemplate } from "@/data/types";
+import type {
+  Consultation,
+  Diagnosis,
+  SoapTemplate,
+  PrescriptionGroup,
+  PrescriptionLineItem,
+  VitalFieldTemplate,
+} from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
@@ -141,9 +167,9 @@ const SECTIONS = [
 // contradicted that explicit section).
 /** Consult2 / Grace clinic: always chart Rx + follow-up as well as SOAP/vitals/Dx. */
 const REQUIRED_SECTIONS = [0, 1, 2, 3, 6];
-/** Labs / med-cert / PF — still available, not in the default stack (vaccinations stay visible). */
-const OCCASIONAL_SECTIONS = [4, 7, 8] as const;
-const SECTION_ORDER = [0, 1, 2, 3, 6, 4, 5, 7, 8] as const;
+/** Vaccinations + PF — hidden until "Show more" (Labs + Med cert in default stack). */
+const OCCASIONAL_SECTIONS = [5, 8] as const;
+const SECTION_ORDER = [0, 1, 2, 3, 4, 6, 7, 5, 8] as const;
 
 type SectionStatus = "complete" | "warning" | "partial" | "empty";
 
@@ -219,11 +245,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // matched on patientId so a different patient's record can never surface).
   const [lastVisitSoap, setLastVisitSoap] = useState<Consultation | undefined>(undefined);
   const [lastVisitVitalReadings, setLastVisitVitalReadings] = useState<{ templateId: string; value: string }[]>([]);
+  //JJQR - AI (Oct 31, 2026) — prior visit Rx lines for PrescriptionForm
+  const [priorRxItems, setPriorRxItems] = useState<PrescriptionLineItem[]>([]);
+  const [patientDetail, setPatientDetail] = useState<PatientRow | null>(null);
+  const [patientLabValues, setPatientLabValues] = useState<PatientLabValueRow[]>([]);
+  const [patientVaxHistory, setPatientVaxHistory] = useState<VaccinationRow[]>([]);
+  const [soapSpecialtyFilter, setSoapSpecialtyFilter] = useState<Specialty | "All">("All");
+  //JJQR - END
   const [vitalTemplates, setVitalTemplates] = useState<VitalFieldTemplate[]>([]);
   const [vitalReadings, setVitalReadings] = useState<{ templateId: string; value: string }[]>([]);
 
   const [mode, setMode] = useState(initialMode);
   const [checklistOpen, setChecklistOpen] = useState(false);
+  //JJQR - AI (Oct 31, 2026)
+  const [needHintExpanded, setNeedHintExpanded] = useState(false);
+  //JJQR - END
   const [historyOpen, setHistoryOpen] = useState(false);
   const [amendHistoryOpen, setAmendHistoryOpen] = useState(false);
   const [lastVisitOpen, setLastVisitOpen] = useState(false);
@@ -237,7 +273,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [labsConfirmPrint, setLabsConfirmPrint] = useState<boolean | null>(null);
   const [certConfirmPrint, setCertConfirmPrint] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
+  const [savingPostCompletePf, setSavingPostCompletePf] = useState(false);
   const [openSection, setOpenSection] = useState(0);
+  //JJQR - AI (Oct 31, 2026)
+  const [allergyReviewed, setAllergyReviewed] = useState(false);
+  //JJQR - END
   //JJQR - AI (Oct 31, 2026) — complete mode shows all sections; no occasional toggle
   /** Consult2: occasional sections hidden until the doctor asks for them (not in complete mode). */
   const [showOccasional, setShowOccasional] = useState(false);
@@ -431,6 +471,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const saved = await replacePatientAllergies(null as never, booking.patientId, payload);
     setPatientAllergies(saved);
     setNkda(saved.some((a) => a.is_nkda));
+    setAllergyReviewed(false);
     formDirtyRef.current = true;
   }
   //JJQR - END
@@ -483,6 +524,24 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const at = prev.findIndex((l) => l.labTestId === t.lab_test_id);
       if (at >= 0) return prev.filter((_, i) => i !== at);
       return [...prev, { labTestId: t.lab_test_id, testName: t.name, reason: "", specimenType: "", notes: "" }];
+    });
+  }
+  function applyAncPreset(presetId: AncPresetId) {
+    const { catalogMatches, missingNames } = matchLabTests(labCatalog, presetId);
+    setLabOrders((prev) => {
+      let next = [...prev];
+      for (const t of catalogMatches) {
+        if (!next.some((l) => l.labTestId === t.lab_test_id)) {
+          next = [...next, { labTestId: t.lab_test_id, testName: t.name, reason: "", specimenType: "", notes: "" }];
+        }
+      }
+      for (const name of missingNames) {
+        const key = name.toLowerCase();
+        if (!next.some((l) => l.testName.trim().toLowerCase() === key)) {
+          next = [...next, { labTestId: null, testName: name, reason: "", specimenType: "", notes: "" }];
+        }
+      }
+      return next;
     });
   }
 
@@ -613,6 +672,14 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   function removeVaccination(index: number) {
     setVaccinations((prev) => prev.filter((_, i) => i !== index));
   }
+  function giveNipVaccineToday(label: string) {
+    const dose = inferDoseNumberFromLabel(label);
+    setVaccinations((prev) => {
+      const norm = label.toLowerCase();
+      if (prev.some((v) => v.vaccineName.trim().toLowerCase() === norm)) return prev;
+      return [...prev, { ...BLANK_VAX, vaccineName: label, doseNumber: dose }];
+    });
+  }
 
   // Section 7: Follow-up — seeded from the existing record. follow_ups is a
   // real table (1:1 with consultations), wired for real in this phase.
@@ -620,6 +687,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [followUpReason, setFollowUpReason] = useState("");
   const [followUpInstructions, setFollowUpInstructions] = useState("");
   const [followUpReminder, setFollowUpReminder] = useState(true);
+  //JJQR - AI (Oct 31, 2026)
+  const [followUpMode, setFollowUpMode] = useState<"dated" | "prn" | "none">("dated");
+  const [noFollowUpConfirmed, setNoFollowUpConfirmed] = useState(false);
+  //JJQR - END
   // Tracks whether a follow-up row existed on load, so persistConsultation can
   // skip the DELETE call entirely when there was never one to delete — the
   // API 404s either way, but a consultation with no follow-up hits this on
@@ -674,6 +745,118 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (!dob) return "";
     return new Date(`${dob}T00:00:00`).toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric" });
   }
+  function patientAgeMonths(dob: string): number | null {
+    const years = patientAge(dob);
+    if (years == null || !dob) return null;
+    const [ty, tm, td] = todayManila().split("-").map(Number);
+    const [by, bm, bd] = dob.split("-").map(Number);
+    if (!by) return null;
+    let months = (ty - by) * 12 + (tm - bm);
+    if (td < bd) months--;
+    return Math.max(0, months);
+  }
+  function vitalFormValue(filled: Record<string, string>, ...keys: string[]): string {
+    for (const k of keys) {
+      const v = filled[k]?.trim();
+      if (v) return v;
+    }
+    for (const [k, v] of Object.entries(filled)) {
+      if (keys.some((part) => k.includes(part)) && v.trim()) return v.trim();
+    }
+    return "";
+  }
+  function renalCueText(): string | null {
+    const lab = patientLabValues.find((l) => l.creatinine_mg_dl != null || l.egfr != null);
+    if (lab) {
+      const parts = [
+        lab.creatinine_mg_dl != null ? `Cr ${lab.creatinine_mg_dl} mg/dL` : null,
+        lab.egfr != null ? `eGFR ${lab.egfr}` : null,
+        lab.collected_at ? `(${lab.collected_at.slice(0, 10)})` : null,
+      ].filter(Boolean);
+      if (parts.length) return `Renal labs: ${parts.join(", ")}`;
+    }
+    if (patientDetail?.last_creatinine_mg_dl != null || patientDetail?.last_egfr != null) {
+      return `Last renal: Cr ${patientDetail.last_creatinine_mg_dl ?? "—"} mg/dL, eGFR ${patientDetail.last_egfr ?? "—"}${
+        patientDetail.last_renal_labs_date ? ` (${patientDetail.last_renal_labs_date.slice(0, 10)})` : ""
+      }`;
+    }
+    return null;
+  }
+  function pedsVitalRangeNote(ageYears: number | null): string | null {
+    if (ageYears == null || ageYears >= 18) return null;
+    if (ageYears < 1) return "Pediatric normals (approx): HR 100–160 / RR 30–60";
+    if (ageYears < 3) return "Pediatric normals (approx): HR 90–150 / RR 24–40";
+    if (ageYears < 6) return "Pediatric normals (approx): HR 80–140 / RR 22–34";
+    if (ageYears < 12) return "Pediatric normals (approx): HR 70–120 / RR 18–30";
+    return "Pediatric normals (approx): HR 60–100 / RR 12–20";
+  }
+  function growthPercentileNotes(): string[] {
+    if (!booking) return [];
+    const ageMo = patientAgeMonths(booking.patientDob);
+    if (ageMo == null || ageMo > 60) return [];
+    const notes: string[] = [];
+    const w = Number.parseFloat(vitalFormValue(filledVitals, "weight"));
+    const h = Number.parseFloat(vitalFormValue(filledVitals, "height"));
+    const hc = Number.parseFloat(vitalFormValue(filledVitals, "head", "hc"));
+    if (Number.isFinite(w)) {
+      const p = estimatePercentile(booking.patientSex, ageMo, "weight", w);
+      if (p != null) notes.push(`Weight ≈ ${p}th %ile`);
+    }
+    if (Number.isFinite(h)) {
+      const p = estimatePercentile(booking.patientSex, ageMo, "height", h);
+      if (p != null) notes.push(`Height ≈ ${p}th %ile`);
+    }
+    if (Number.isFinite(hc)) {
+      const p = estimatePercentile(booking.patientSex, ageMo, "hc", hc);
+      if (p != null) notes.push(`HC ≈ ${p}th %ile`);
+    }
+    return notes;
+  }
+  const patientAgeYears = booking ? patientAge(booking.patientDob) : null;
+  const clinicalBannerProps = {
+    isPregnant: !!patientDetail?.is_pregnant,
+    lmpDate: patientDetail?.lmp_date ?? null,
+    gravida: patientDetail?.gravida ?? null,
+    para: patientDetail?.para ?? null,
+    rhFactor: patientDetail?.rh_factor ?? null,
+    guardianName: patientDetail?.guardian_name ?? null,
+    guardianRelationship: patientDetail?.guardian_relationship ?? null,
+    ageYears: patientAgeYears,
+  };
+  const renalCue = renalCueText();
+  const weightKgFromVitals = (() => {
+    const n = Number.parseFloat(vitalFormValue(filledVitals, "weight"));
+    return Number.isFinite(n) ? n : null;
+  })();
+  const nipDueRows = patientAgeMonths(booking?.patientDob ?? "") != null
+    ? nipDueForAgeMonths(patientAgeMonths(booking!.patientDob)!)
+    : [];
+  const patientAgeMo = booking ? patientAgeMonths(booking.patientDob) : null;
+  const nipStatusRows =
+    patientAgeMo != null
+      ? computeNipStatus(
+          patientAgeMo,
+          [
+            ...patientVaxHistory.map((v) => v.vaccine_name),
+            ...vaccinations.map((v) => v.vaccineName),
+          ],
+        )
+      : [];
+  const filteredSoapTemplates = useMemo(
+    () => soapTemplates.filter((t) => matchesSpecialtyFilter("soap", t.title, soapSpecialtyFilter)),
+    [soapTemplates, soapSpecialtyFilter],
+  );
+  const growthChartPoint = (() => {
+    if (patientAgeMo == null) return [];
+    const w = Number.parseFloat(vitalFormValue(filledVitals, "weight"));
+    const h = Number.parseFloat(vitalFormValue(filledVitals, "height"));
+    const hc = Number.parseFloat(vitalFormValue(filledVitals, "head", "hc"));
+    const pt: { ageMonths: number; weight?: number; height?: number; hc?: number } = { ageMonths: patientAgeMo };
+    if (Number.isFinite(w)) pt.weight = w;
+    if (Number.isFinite(h)) pt.height = h;
+    if (Number.isFinite(hc)) pt.hc = hc;
+    return [pt];
+  })();
   function patientIdentifierLine(b: ConsultationBooking): string {
     const age = patientAge(b.patientDob);
     return [
@@ -727,9 +910,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       }
       //JJQR - AI (Oct 31, 2026)
       const allergyRows = await queryPatientAllergies(supabase, bookingRow.patient_id).catch(() => [] as PatientAllergyRow[]);
+      const [patientRow, labVals, vaxHistory, doctorRow] = await Promise.all([
+        queryPatientById(supabase, bookingRow.patient_id).catch(() => null),
+        queryPatientLabValues(supabase, bookingRow.patient_id),
+        queryVaccinations(supabase, bookingRow.patient_id).catch(() => [] as VaccinationRow[]),
+        queryDoctorById(supabase, bookingRow.doctor_id).catch(() => null),
+      ]);
       if (!cancelled) {
         setPatientAllergies(allergyRows);
         setNkda(allergyRows.some((a) => a.is_nkda));
+        setPatientDetail(patientRow);
+        setPatientLabValues(labVals);
+        setPatientVaxHistory(vaxHistory);
+        if (doctorRow?.specialization) {
+          setSoapSpecialtyFilter(defaultSpecialtyFromDoctor(doctorRow.specialization));
+        }
       }
       //JJQR - END
       const realBooking: ConsultationBooking = {
@@ -805,9 +1000,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate));
       const prior = patientConsults[0];
       if (prior) {
-        const [priorRes, priorReadingsRes] = await Promise.all([
+        const [priorRes, priorReadingsRes, priorRxRes] = await Promise.all([
           queryConsultationById(supabase, prior.consultationId).then((data) => ({ data })),
           queryVitalReadings(supabase, { bookingId: prior.bookingId }).then((data) => ({ data })),
+          queryRxGroups(supabase, { bookingId: prior.bookingId }).then((rows) => ({ data: rows[0] ?? null })),
         ]);
         if (priorRes.data) {
           setLastVisitSoap({
@@ -823,8 +1019,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             plan: priorRes.data.plan ?? "",
             diagnoses: [],
           });
+          //JJQR - AI (Oct 31, 2026)
+          setPriorRxItems(priorRxRes.data ? mapRxGroup(priorRxRes.data).items : []);
+          //JJQR - END
         }
         setLastVisitVitalReadings((priorReadingsRes.data ?? []).map((r) => ({ templateId: r.template_id, value: r.value })));
+      } else {
+        //JJQR - AI (Oct 31, 2026)
+        setPriorRxItems([]);
+        //JJQR - END
       }
 
       let loadedConsultation: Consultation | undefined;
@@ -927,6 +1130,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         setFollowUpInstructions(loadedConsultation.followUpInstructions ?? "");
         setFollowUpReminder(loadedConsultation.followUpReminder ?? true);
         followUpExisted.current = Boolean(loadedConsultation.followUpDate);
+        if ((loadedConsultation.followUpReason ?? "").includes("PRN")) {
+          setFollowUpMode("prn");
+        } else if (!loadedConsultation.followUpDate && !loadedConsultation.followUpReason) {
+          setFollowUpMode("dated");
+        } else {
+          setFollowUpMode("dated");
+        }
         setVaccinations(toVaxDraft(loadedConsultation.vaccinationsAdministered));
         const fd = loadedConsultation.feeDecision;
         setPfDecision(fd ? (fd.type === "Charge" ? "charge" : "waive") : null);
@@ -986,6 +1196,47 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     };
   }, [bookingId, loadAttempt]);
 
+  function applyFollowUpMode(mode: "dated" | "prn" | "none") {
+    setFollowUpMode(mode);
+    if (mode === "prn") {
+      setFollowUpDate(todayManila());
+      setFollowUpReason("PRN / return if needed");
+      if (!followUpInstructions.trim()) {
+        setFollowUpInstructions("PRN — return if symptoms recur");
+      }
+      setNoFollowUpConfirmed(false);
+    } else if (mode === "none") {
+      setFollowUpDate("");
+      setFollowUpReason("");
+      setFollowUpInstructions("");
+      setFollowUpReminder(false);
+    } else {
+      setNoFollowUpConfirmed(false);
+    }
+    formDirtyRef.current = true;
+  }
+
+  function renderMissingRequiredHint(className?: string) {
+    if (canComplete || missingRequiredSections.length === 0) return null;
+    return (
+      <p className={cn("max-w-[20rem] text-right text-label-sm text-amber-900", className)}>
+        Need:{" "}
+        {missingRequiredSections.map((secIdx, idx) => (
+          <span key={secIdx}>
+            {idx > 0 ? ", " : ""}
+            <button
+              type="button"
+              className="font-medium text-primary underline"
+              onClick={() => setOpenSection(secIdx)}
+            >
+              {SECTIONS[secIdx]}
+            </button>
+          </span>
+        ))}
+      </p>
+    );
+  }
+
   // Doctor.md requires BP + HR when those templates exist; never read hardcoded
   // Record keys that may be missing before templates load (or if form_key differs).
   const requiredVitalTemplates = defaultVitalTemplates.filter(
@@ -1003,10 +1254,26 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     (prescriptionGroup?.items.length ?? 0) > 0,
     labOrders.length > 0,
     vaccinations.length > 0,
-    followUpDate.trim() !== "",
+    false,
     certExists,
     pfDecision !== null && (pfDecision === "charge" ? pfAmount.trim() !== "" : pfWaiveReason.trim().length >= 5),
   ];
+  const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
+  const followUpSatisfied =
+    followUpMode === "dated"
+      ? followUpDate.trim() !== ""
+      : followUpMode === "prn"
+        ? true
+        : noFollowUpConfirmed;
+  sectionSatisfied[6] = followUpSatisfied;
+
+  function isRequiredSectionDone(i: number): boolean {
+    if (i === 3) return rxSatisfied;
+    if (i === 6) return followUpSatisfied;
+    return sectionSatisfied[i];
+  }
+  const doneRequired = REQUIRED_SECTIONS.filter((i) => isRequiredSectionDone(i)).length;
+  const missingRequiredSections = REQUIRED_SECTIONS.filter((i) => !isRequiredSectionDone(i));
   const sectionHasDraft = [
     false,
     false,
@@ -1014,14 +1281,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     false,
     newLab.testName.trim() !== "",
     newVax.vaccineName.trim() !== "",
-    followUpReason.trim() !== "" || followUpInstructions.trim() !== "",
+    followUpReason.trim() !== "" || followUpInstructions.trim() !== "" || followUpMode !== "dated",
     mcDiagnosis.trim() !== "" || mcRecommendations.trim() !== "" || mcAddress.trim() !== "",
     pfDecision !== null,
   ];
-  const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
-  const followUpSatisfied = sectionSatisfied[6];
+  const allergyAckRequired = allergiesNeedPrescriptionReview(nkda, patientAllergies);
   function sectionStatus(i: number): SectionStatus {
-    const satisfied = i === 3 ? rxSatisfied : sectionSatisfied[i];
+    const satisfied = i === 3 ? rxSatisfied : i === 6 ? followUpSatisfied : sectionSatisfied[i];
     if (satisfied) return "complete";
     if (REQUIRED_SECTIONS.includes(i)) return "warning";
     return sectionHasDraft[i] ? "partial" : "empty";
@@ -1034,7 +1300,14 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const FRACTION_FIELDS: Partial<Record<number, string[]>> = {
     0: [chiefComplaint, subjective, objective, assessment, plan],
     1: defaultVitalTemplates.map((t) => filledVitals[t.formKey] ?? ""),
-    6: [followUpDate, followUpReason, followUpInstructions],
+    6:
+      followUpMode === "dated"
+        ? [followUpDate, followUpReason, followUpInstructions]
+        : followUpMode === "prn"
+          ? [followUpReason, followUpInstructions]
+          : noFollowUpConfirmed
+            ? ["confirmed"]
+            : [],
   };
 
   function renderSectionIndicator(i: number, className: string) {
@@ -1179,22 +1452,33 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       })),
     );
 
-    if (followUpDate) {
-      await upsertFollowUpByConsultation(supabase, savedId, {
-        patient_id: booking.patientId,
-        doctor_id: booking.doctorId,
-        follow_up_date: followUpDate,
-        reason: followUpReason || null,
-        instructions: followUpInstructions || null,
-        reminder_enabled: followUpReminder,
-        status: "Pending",
-      });
-      followUpExisted.current = true;
-    } else if (followUpExisted.current) {
-      // Only call DELETE when a follow-up actually existed at some point —
-      // otherwise this is a guaranteed 404 on every single save.
-      await deleteFollowUpByConsultation(supabase, savedId);
-      followUpExisted.current = false;
+    if (followUpMode === "none" && noFollowUpConfirmed) {
+      if (followUpExisted.current) {
+        await deleteFollowUpByConsultation(supabase, savedId);
+        followUpExisted.current = false;
+      }
+    } else {
+      const effectiveDate =
+        followUpMode === "prn" ? followUpDate.trim() || todayManila() : followUpDate.trim();
+      if (effectiveDate) {
+        await upsertFollowUpByConsultation(supabase, savedId, {
+          patient_id: booking.patientId,
+          doctor_id: booking.doctorId,
+          follow_up_date: effectiveDate,
+          reason: followUpReason || (followUpMode === "prn" ? "PRN / return if needed" : null),
+          instructions:
+            followUpInstructions ||
+            (followUpMode === "prn" ? "PRN — return if symptoms recur" : null),
+          reminder_enabled: followUpMode === "prn" ? false : followUpReminder,
+          status: "Pending",
+        });
+        followUpExisted.current = true;
+      } else if (followUpExisted.current) {
+        // Only call DELETE when a follow-up actually existed at some point —
+        // otherwise this is a guaranteed 404 on every single save.
+        await deleteFollowUpByConsultation(supabase, savedId);
+        followUpExisted.current = false;
+      }
     }
 
     // §16.8 Form 3 — replace-all lab orders for this consultation.
@@ -1269,6 +1553,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setJustCompleted(true);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not complete the consultation. Try again.");
+    }
+  }
+
+  async function handleSavePostCompletePf() {
+    setSavingPostCompletePf(true);
+    try {
+      await persistConsultation("Completed");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save fee decision.");
+    } finally {
+      setSavingPostCompletePf(false);
     }
   }
 
@@ -1500,6 +1795,16 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   if (!booking) notFound();
 
   if (justCompleted) {
+    const labCount = labOrders.filter((l) => l.testName.trim()).length;
+    const rxCount = prescriptionGroup?.items.length ?? 0;
+    const followUpSummary =
+      followUpMode === "none" && noFollowUpConfirmed
+        ? "No follow-up"
+        : followUpMode === "prn"
+          ? `PRN — ${followUpReason || "return if needed"}`
+          : followUpDate
+            ? `${followUpDate}${followUpReason ? ` — ${followUpReason}` : ""}`
+            : "Not set";
     return (
       <AppShell role="doctor">
         <div className="mx-auto max-w-[40rem] space-y-lg">
@@ -1511,10 +1816,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             <div className="flex flex-col gap-sm sm:flex-row sm:items-center">
               {consultPrintButtons("flex flex-col gap-sm sm:flex-row")}
               <Link href="/doctor/dashboard">
-                <Button variant="secondary" className="w-full sm:w-auto">Back to Queue</Button>
+                <Button variant="secondary" className="min-h-[44px] w-full sm:w-auto">Back to Queue</Button>
               </Link>
               <Link href="/doctor/dashboard">
-                <Button className="w-full sm:w-auto">Next Patient →</Button>
+                <Button className="min-h-[44px] w-full sm:w-auto">Next Patient →</Button>
               </Link>
             </div>
           </div>
@@ -1523,12 +1828,69 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               <strong>Patient:</strong> {booking.patientName || "—"}
               {patientIdentifierLine(booking) ? ` · ${patientIdentifierLine(booking)}` : ""}
             </p>
-            <p><strong>Chief Complaint:</strong> {chiefComplaint}</p>
-            <p><strong>Diagnoses:</strong> {diagnoses.map((d) => d.description).join(", ")}</p>
-            <p>
-              <strong>Professional Fee:</strong>{" "}
-              {pfDecision === "waive" ? `Waived (${pfWaiveReason})` : pfDecision === "charge" ? `₱${pfAmount}` : "Not yet decided"}
-            </p>
+            <p><strong>Chief Complaint:</strong> {chiefComplaint || "—"}</p>
+            <p><strong>Diagnoses:</strong> {diagnoses.length ? diagnoses.map((d) => d.description).join(", ") : "—"}</p>
+            <p><strong>Prescriptions:</strong> {rxCount} line{rxCount === 1 ? "" : "s"}</p>
+            <p><strong>Lab orders:</strong> {labCount}</p>
+            <p><strong>Follow-up:</strong> {followUpSummary}</p>
+          </Card>
+          <Card className="space-y-md">
+            <h4 className="text-headline-sm text-on-surface">Professional fee</h4>
+            <div className="flex flex-wrap gap-sm border-b border-outline-variant">
+              <button
+                type="button"
+                onClick={() => setPfDecision("charge")}
+                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
+              >
+                Charge
+              </button>
+              <button
+                type="button"
+                onClick={() => setPfDecision("waive")}
+                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === "waive" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
+              >
+                Waive
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setPfDecision(null);
+                  setPfAmount("");
+                  setPfWaiveReason("");
+                }}
+                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === null ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
+              >
+                Decide at desk
+              </button>
+            </div>
+            {pfDecision === "charge" && (
+              <input
+                placeholder="Amount*"
+                value={pfAmount}
+                onChange={(e) => setPfAmount(e.target.value)}
+                className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
+              />
+            )}
+            {pfDecision === "waive" && (
+              <textarea
+                placeholder="Reason (minimum 5 characters)*"
+                value={pfWaiveReason}
+                onChange={(e) => setPfWaiveReason(e.target.value)}
+                className="w-full rounded-lg border border-outline-variant p-md"
+                rows={3}
+              />
+            )}
+            {pfDecision === null && (
+              <p className="text-label-md text-on-surface-variant">Front desk can collect or waive later.</p>
+            )}
+            <Button
+              className="min-h-[44px]"
+              loading={savingPostCompletePf}
+              disabled={pfDecision === "charge" ? !pfAmount.trim() : pfDecision === "waive" ? pfWaiveReason.trim().length < 5 : false}
+              onClick={() => void handleSavePostCompletePf()}
+            >
+              Save fee decision
+            </Button>
           </Card>
         </div>
       </AppShell>
@@ -1577,6 +1939,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             setPatientAllergies(next);
             void persistAllergies(next, false);
           }}
+          {...clinicalBannerProps}
         />
         <div className="mx-auto max-w-[40rem] space-y-lg">
           <div className="flex flex-wrap items-center justify-between gap-md">
@@ -1744,9 +2107,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           setPatientAllergies(next);
           void persistAllergies(next, false);
         }}
+        {...clinicalBannerProps}
       />
       {/* JJQR - END */}
-      <div className="min-w-0 space-y-lg overflow-x-hidden">
+      <div className="min-w-0 space-y-lg overflow-x-clip">
         {mode === "amend" && (
           <Toast variant="info" message="Manual save only — autosave is off in amend mode." dismissible={false} />
         )}
@@ -1798,11 +2162,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 onClick={() => setProgressOpen((v) => !v)}
                 aria-expanded={progressOpen}
                 aria-haspopup="true"
-                title={`${sectionSatisfied.filter(Boolean).length} of ${SECTIONS.length} sections complete`}
-                aria-label={`Progress: ${sectionSatisfied.filter(Boolean).length} of ${SECTIONS.length} sections complete`}
+                title={`${doneRequired} of ${REQUIRED_SECTIONS.length} required sections complete`}
+                aria-label={`Progress: ${doneRequired} of ${REQUIRED_SECTIONS.length} required sections complete`}
               >
                 <Icon name="monitoring" className="text-[18px]" />
-                {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
+                {doneRequired}/{REQUIRED_SECTIONS.length}
                 <Icon name={progressOpen ? "expand_less" : "expand_more"} className="text-[16px]" />
               </Button>
               {progressOpen && (
@@ -1850,10 +2214,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             {consultPrintButtons()}
             {mode === "complete" ? (
               <>
-                <Button variant="secondary" loading={savingDraft} onClick={handleSaveDraft}>Save Draft</Button>
-                <Button disabled={!canComplete} onClick={() => setChecklistOpen(true)}>
-                  Complete Consultation
+                <Button variant="secondary" loading={savingDraft} className="min-h-[44px]" onClick={handleSaveDraft}>
+                  Save Draft
                 </Button>
+                {renderMissingRequiredHint("hidden lg:block max-w-none text-left")}
               </>
             ) : (
               <>
@@ -1866,12 +2230,37 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           </div>
         </div>
 
-        <div className="space-y-md pb-28 pb-[max(7rem,env(safe-area-inset-bottom))]">
+        {/* JJQR - AI (Oct 31, 2026) — in-flow sections rail (no viewport-fixed overlap with AppShell sidebar) */}
+        <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-lg">
+          <nav
+            aria-label="Consultation sections"
+            className="sticky top-[7.375rem] z-10 hidden max-h-[70vh] flex-col gap-xs self-start overflow-y-auto rounded-xl border border-outline-variant bg-surface-container-lowest p-sm shadow-lg lg:flex"
+          >
+            <p className="px-xs pb-xs text-label-sm text-on-surface-variant">Sections</p>
+            {visibleSectionOrder.map((i, displayIdx) => (
+              <button
+                key={SECTIONS[i]}
+                type="button"
+                onClick={() => setOpenSection(i)}
+                className={cn(
+                  "flex items-start gap-sm rounded-lg px-sm py-sm text-left text-label-md transition-colors",
+                  openSection === i ? "bg-primary/10 text-on-surface" : "text-on-surface-variant hover:bg-surface-container-low",
+                )}
+              >
+                {renderSectionIndicator(i, "mt-0.5 shrink-0 text-[16px]")}
+                <span className="min-w-0 flex-1 whitespace-normal leading-snug">
+                  {displayIdx + 1}. {SECTIONS[i]}
+                </span>
+              </button>
+            ))}
+          </nav>
+
+        <div className="min-w-0 space-y-md pb-[max(14rem,env(safe-area-inset-bottom))] lg:pb-28 lg:pb-[max(7rem,env(safe-area-inset-bottom))]">
             {/* JJQR - AI (Oct 31, 2026) — F-026 */}
             {mode !== "complete" && (
             <p className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
-              Optional sections — labs, medical certificate, and professional fee — appear when you choose
-              &ldquo;Show occasional sections&rdquo;. Vaccinations stay in the main flow.
+              Optional sections — vaccinations and professional fee — appear when you choose
+              &ldquo;Show occasional sections&rdquo;. Labs and medical certificate stay in the main flow.
             </p>
             )}
             {/* JJQR - END */}
@@ -1882,6 +2271,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               sectionStatus={visibleSectionOrder.map((i) => sectionStatus(i))}
               openSection={openSection}
               onSelect={setOpenSection}
+              renderIndicator={(i, cls) => renderSectionIndicator(i, cls)}
             />
             {/* JJQR - END */}
             {visibleSectionOrder.map((i, displayIdx) => {
@@ -1909,51 +2299,89 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                       {draftSavedAt && mode === "complete" && (
                         <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
                       )}
-                      <div className="flex flex-wrap items-center justify-between gap-sm">
+                      <div className="flex w-full flex-col gap-md">
                         {lastVisitSoap && (
                           <button
                             type="button"
                             onClick={() => setLastVisitOpen(true)}
-                            className="text-label-md text-primary hover:underline"
+                            className="text-left text-label-md text-primary hover:underline"
                           >
                             View Last Appointment SOAP
                           </button>
                         )}
-                        <div className="ml-auto flex items-center gap-md">
-                          {soapTemplates.length > 0 && (
-                            <select
-                              value=""
-                              onChange={(e) => {
-                                const t = soapTemplates.find((x) => x.id === e.target.value);
-                                if (t) applyTemplate(t);
-                              }}
-                              aria-label="Use SOAP template"
-                              className="rounded-lg border border-outline-variant px-sm py-xs text-label-sm"
+                        {/* JJQR - AI (Oct 31, 2026) — SOAP toolbar stacks on phone */}
+                        <div className="flex w-full flex-col gap-sm lg:ml-auto lg:max-w-none lg:items-end">
+                          <div className="flex w-full gap-xs overflow-x-auto pb-xs [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:justify-end">
+                            {SPECIALTY_CHIP_LABELS.map(({ id, label }) => (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() => setSoapSpecialtyFilter(id)}
+                                className={cn(
+                                  "shrink-0 rounded-full border px-sm py-xs text-label-sm",
+                                  soapSpecialtyFilter === id
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-outline-variant text-on-surface-variant hover:bg-surface-container-high",
+                                )}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              const t = filteredSoapTemplates.find((x) => x.id === e.target.value);
+                              if (t) applyTemplate(t);
+                            }}
+                            aria-label="Use SOAP template"
+                            className="min-h-[44px] w-full rounded-lg border border-outline-variant px-sm py-xs text-label-sm lg:w-auto"
+                          >
+                            <option value="">Use Template…</option>
+                            {filteredSoapTemplates.length === 0 && soapTemplates.length > 0 && (
+                              <option value="__empty" disabled>
+                                No templates for this specialty
+                              </option>
+                            )}
+                            {soapTemplates.length === 0 && (
+                              <option value="__empty" disabled>
+                                No templates yet
+                              </option>
+                            )}
+                            {filteredSoapTemplates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.title}
+                                {t.isSystemTemplate ? " (system)" : ""}
+                              </option>
+                            ))}
+                          </select>
+                          {soapTemplates.length === 0 && (
+                            <Link
+                              href="/doctor/templates"
+                              className="text-label-sm text-on-surface-variant hover:underline"
                             >
-                              <option value="">Use Template…</option>
-                              {soapTemplates.map((t) => (
-                                <option key={t.id} value={t.id}>
-                                  {t.title}
-                                  {t.isSystemTemplate ? " (system)" : ""}
-                                </option>
-                              ))}
-                            </select>
+                              Manage templates
+                            </Link>
                           )}
-                          <button
-                            type="button"
-                            onClick={() => setSaveTemplateOpen(true)}
-                            className="text-label-sm text-primary hover:underline"
-                          >
-                            Save as Template
-                          </button>
-                          <Button
-                            disabled={mode === "amend" && !canComplete}
-                            loading={mode === "complete" ? savingDraft : savingChanges}
-                            onClick={() => setReviewSection(0)}
-                          >
-                            Save
-                          </Button>
+                          <div className="flex w-full flex-wrap items-center gap-sm sm:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => setSaveTemplateOpen(true)}
+                              className="min-h-[44px] text-label-sm text-primary hover:underline"
+                            >
+                              Save as Template
+                            </button>
+                            <Button
+                              className="min-h-[44px] flex-1 sm:flex-none"
+                              disabled={mode === "amend" && !canComplete}
+                              loading={mode === "complete" ? savingDraft : savingChanges}
+                              onClick={() => setReviewSection(0)}
+                            >
+                              Save
+                            </Button>
+                          </div>
                         </div>
+                        {/* JJQR - END */}
                       </div>
 
                       <div>
@@ -2003,6 +2431,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                             .map((t) => `${t.description} ${lastVisitVitalReadings.find((r) => r.templateId === t.id)?.value ?? "—"}${t.unit ? ` ${t.unit}` : ""}`)
                             .join(" · ")}
                         </p>
+                      )}
+                      {pedsVitalRangeNote(patientAgeYears) && (
+                        <p className="text-label-sm text-on-surface-variant">{pedsVitalRangeNote(patientAgeYears)}</p>
+                      )}
+                      {growthPercentileNotes().length > 0 && (
+                        <p className="text-label-sm text-primary">{growthPercentileNotes().join(" · ")}</p>
+                      )}
+                      {patientAgeYears != null && patientAgeYears < 18 && patientAgeMo != null && booking && (
+                        <GrowthChart sex={booking.patientSex} ageMonths={patientAgeMo} points={growthChartPoint} />
                       )}
                       <VitalsEditor bookingId={bookingId} patientId={booking.patientId} onSaved={reloadVitalReadings} />
                     </div>
@@ -2058,6 +2495,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                             setNewDiagnosisText(description);
                             setNewDiagnosisIcd(icd10Code);
                           }}
+                          onEnterSubmit={addDiagnosis}
                         />
                         <Button variant="secondary" className="min-h-[44px]" onClick={addDiagnosis}>Add</Button>
                       </div>
@@ -2093,6 +2531,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                           </span>
                         </span>
                       </label>
+                      {allergyAckRequired && !allergyReviewed && (
+                        <div className="flex flex-col gap-sm rounded-lg border border-amber-400 bg-amber-50 px-md py-sm sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-label-md text-amber-900">
+                            Review allergies (NKDA or add) before prescribing.
+                          </p>
+                          <Button variant="secondary" className="min-h-[44px] shrink-0" onClick={() => setAllergyReviewed(true)}>
+                            Acknowledge
+                          </Button>
+                        </div>
+                      )}
+                      {renalCue && (
+                        <p className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-sm text-on-surface-variant">
+                          {renalCue}
+                        </p>
+                      )}
                       <PrescriptionForm
                         key={rxVersion}
                         mode={prescriptionGroup ? "edit" : "create"}
@@ -2101,7 +2554,16 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         bookingId={bookingId}
                         group={prescriptionGroup}
                         embedded
-                        patientAllergies={patientAllergies.filter((a) => !a.is_nkda)}
+                        patientAllergies={patientAllergies.filter((a) => !a.is_nkda).map((a) => a.allergen)}
+                        allergyAckRequired={allergyAckRequired}
+                        allergyAcked={allergyReviewed}
+                        //JJQR - AI (Oct 31, 2026) — soft banner above; do not auto-ack or jump sections
+                        onNeedAllergyAck={() => {}}
+                        priorRxItems={priorRxItems}
+                        patientPregnant={!!patientDetail?.is_pregnant}
+                        patientAgeYears={patientAgeYears}
+                        weightKg={weightKgFromVitals}
+                        //JJQR - END
                         onSaved={async () => {
                           const supabase = null as never;
                           const rows = await queryRxGroups(supabase, { bookingId });
@@ -2116,6 +2578,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   {isOpen && i === 4 && (
                     <div className="mt-md space-y-md">
                       {labsSavedAt && <Toast key={labsSavedAt} variant="success" message={`Lab request saved at ${labsSavedAt}.`} />}
+
+                      {renalCue && (
+                        <p className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-sm text-on-surface-variant">
+                          {renalCue}
+                        </p>
+                      )}
 
                       {labOrders.length > 0 && (
                         <div className="flex flex-wrap items-center justify-end gap-sm">
@@ -2133,6 +2601,18 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                       )}
 
                       {/* §16.8 Form 3 — the pre-printed panel as checkboxes */}
+                      {!!patientDetail?.is_pregnant && labCatalog.length > 0 && (
+                        <div className="space-y-sm">
+                          <p className="text-label-sm text-on-surface-variant">ANC lab presets</p>
+                          <div className="flex flex-wrap gap-sm">
+                            {ANC_PRESETS.map((p) => (
+                              <Button key={p.id} variant="secondary" type="button" onClick={() => applyAncPreset(p.id)}>
+                                {p.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {labCatalog.length > 0 && (
                         <div>
                           <p className="mb-xs text-label-sm text-on-surface-variant">Standard panel</p>
@@ -2194,6 +2674,54 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   {isOpen && i === 5 && (
                     <div className="mt-md space-y-md">
                       {renderSectionSaveHeader(5)}
+                      {nipStatusRows.length > 0 && (
+                        <div className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm">
+                          <p className="mb-sm text-label-md font-medium text-on-surface">NIP / EPI schedule</p>
+                          <ul className="space-y-sm">
+                            {nipStatusRows.map((row) => {
+                              const tone: PillTone =
+                                row.status === "given"
+                                  ? "success"
+                                  : row.status === "due"
+                                    ? "info"
+                                    : row.status === "upcoming"
+                                      ? "neutral"
+                                      : "warning";
+                              const canGive = row.status === "due" || row.status === "overdue" || row.status === "catch-up";
+                              return (
+                                <li key={`${row.key}-${row.label}`} className="flex flex-wrap items-center justify-between gap-sm">
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-label-sm text-on-surface">{row.label}</span>
+                                    <span className="ml-sm text-label-sm text-on-surface-variant">
+                                      (due ~{row.ageMonthsDue} mo)
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-sm">
+                                    <StatusPill tone={tone} label={row.status} />
+                                    {canGive && (
+                                      <Button variant="secondary" type="button" onClick={() => giveNipVaccineToday(row.label)}>
+                                        Give today
+                                      </Button>
+                                    )}
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                      {nipDueRows.length > 0 && nipStatusRows.length === 0 && (
+                        <div className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm">
+                          <p className="mb-sm text-label-md font-medium text-on-surface">NIP / EPI due by age (checklist)</p>
+                          <ul className="space-y-xs text-label-sm text-on-surface-variant">
+                            {nipDueRows.map((row) => (
+                              <li key={row.ageLabel}>
+                                <span className="font-medium text-on-surface">{row.ageLabel}:</span> {row.vaccines.join("; ")}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       <div className="space-y-sm">
                         {vaccinations.map((v, idx) => (
                           <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
@@ -2224,13 +2752,72 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   {isOpen && i === 6 && (
                     <div className="mt-md space-y-md">
                       {renderSectionSaveHeader(6)}
-                      <DatePicker value={followUpDate} onChange={setFollowUpDate} />
-                      <input placeholder="Reason" value={followUpReason} onChange={(e) => setFollowUpReason(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-                      <textarea placeholder="Instructions" value={followUpInstructions} onChange={(e) => setFollowUpInstructions(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
-                      <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
-                        <input type="checkbox" checked={followUpReminder} onChange={(e) => setFollowUpReminder(e.target.checked)} className="h-5 w-5" />
-                        Send reminder
-                      </label>
+                      <div className="flex flex-col gap-sm sm:flex-row">
+                        {(
+                          [
+                            ["dated", "Schedule date"],
+                            ["prn", "PRN / return if needed"],
+                            ["none", "No follow-up"],
+                          ] as const
+                        ).map(([value, label]) => (
+                          <label
+                            key={value}
+                            className={cn(
+                              "flex min-h-[44px] cursor-pointer items-center gap-sm rounded-lg border px-md py-sm text-label-md",
+                              followUpMode === value ? "border-primary bg-primary/10 text-primary" : "border-outline-variant",
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="follow-up-mode"
+                              checked={followUpMode === value}
+                              onChange={() => applyFollowUpMode(value)}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                      {followUpMode === "dated" && (
+                        <>
+                          <DatePicker value={followUpDate} onChange={setFollowUpDate} />
+                          <input placeholder="Reason" value={followUpReason} onChange={(e) => setFollowUpReason(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+                          <textarea placeholder="Instructions" value={followUpInstructions} onChange={(e) => setFollowUpInstructions(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
+                          <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
+                            <input type="checkbox" checked={followUpReminder} onChange={(e) => setFollowUpReminder(e.target.checked)} className="h-5 w-5" />
+                            Send reminder
+                          </label>
+                        </>
+                      )}
+                      {followUpMode === "prn" && (
+                        <>
+                          <p className="text-label-md text-on-surface-variant">
+                            Saves today&apos;s date with PRN instructions — patient may return if symptoms recur.
+                          </p>
+                          <textarea
+                            placeholder="Instructions"
+                            value={followUpInstructions}
+                            onChange={(e) => setFollowUpInstructions(e.target.value)}
+                            className="w-full rounded-lg border border-outline-variant p-md"
+                            rows={2}
+                          />
+                        </>
+                      )}
+                      {followUpMode === "none" && (
+                        <label className="flex min-h-[44px] items-start gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-md">
+                          <input
+                            type="checkbox"
+                            className="mt-xs"
+                            checked={noFollowUpConfirmed}
+                            onChange={(e) => setNoFollowUpConfirmed(e.target.checked)}
+                          />
+                          <span>
+                            <strong>No follow-up for this visit</strong>
+                            <span className="block text-label-md text-on-surface-variant">
+                              Required for Complete when you are not scheduling follow-up.
+                            </span>
+                          </span>
+                        </label>
+                      )}
                     </div>
                   )}
 
@@ -2396,6 +2983,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         >
                           Waive PF
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPfDecision(null);
+                            setPfAmount("");
+                            setPfWaiveReason("");
+                          }}
+                          className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === null ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
+                        >
+                          Decide at desk
+                        </button>
                       </div>
                       {pfDecision === "charge" && (
                         <div className="space-y-md">
@@ -2430,7 +3028,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 className="w-full"
                 onClick={() => setShowOccasional(true)}
               >
-                Show occasional sections (Labs · Med cert · Fee)
+                Show occasional sections (Vaccinations · Fee)
               </Button>
             )}
             {mode !== "complete" && showOccasional && (
@@ -2445,6 +3043,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             )}
 
         </div>
+        </div>
+        {/* JJQR - END */}
       </div>
 
       <Modal
@@ -2581,7 +3181,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         )}
         {!followUpSatisfied && (
           <p className="mt-md rounded-lg bg-amber-50 px-md py-sm text-label-md text-amber-700">
-            Set a follow-up date (or return-if instructions + date) before Complete — required for Grace clinic.
+            Complete follow-up (schedule a date, choose PRN, or confirm no follow-up) before Complete — required for Grace clinic.
           </p>
         )}
         {saveError && (
@@ -2827,54 +3427,75 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           which collides with AppShell's fixed sidebar footer) so they never
           fight the sidebar for the same corner. */}
 
-      {/* Consult2 sticky section rail */}
-      <nav
-        aria-label="Consultation sections"
-        className="fixed left-md top-1/2 z-30 hidden max-h-[70vh] w-44 -translate-y-1/2 flex-col gap-xs overflow-y-auto rounded-xl border border-outline-variant bg-surface-container-lowest p-sm shadow-lg lg:flex"
+      {/* JJQR - AI (Oct 31, 2026) — sticky bottom action bar (mobile + desktop) */}
+      <div
+        role="region"
+        aria-label="Consultation actions"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant bg-surface-container-lowest shadow-[0_-4px_16px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom)] lg:inset-x-0 lg:left-[var(--app-main-left,var(--spacing-sidebar))] lg:right-0"
       >
-        <p className="px-xs pb-xs text-label-sm text-on-surface-variant">Sections</p>
-        {visibleSectionOrder.map((i, displayIdx) => (
-          <button
-            key={SECTIONS[i]}
-            type="button"
-            onClick={() => setOpenSection(i)}
-            className={cn(
-              "flex items-center gap-sm rounded-lg px-sm py-sm text-left text-label-md transition-colors",
-              openSection === i ? "bg-primary/10 text-on-surface" : "text-on-surface-variant hover:bg-surface-container-low",
+        <div className="mx-auto flex w-full max-w-content flex-col gap-sm px-md py-sm lg:flex-row lg:items-center lg:justify-between lg:gap-md">
+          {mode === "complete" && !canComplete && missingRequiredSections.length > 0 && (
+            <div className="w-full">
+              <button
+                type="button"
+                className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-md py-xs text-label-md text-amber-950 lg:w-auto"
+                aria-expanded={needHintExpanded}
+                onClick={() => setNeedHintExpanded((v) => !v)}
+              >
+                <span className="font-medium">
+                  Need {missingRequiredSections.length}
+                </span>
+                <Icon name={needHintExpanded ? "expand_less" : "expand_more"} className="text-[20px]" aria-hidden />
+              </button>
+              {needHintExpanded && (
+                <ul className="mt-xs space-y-xs rounded-lg border border-amber-200 bg-amber-50/80 px-md py-sm text-label-sm text-amber-950">
+                  {missingRequiredSections.map((secIdx) => (
+                    <li key={secIdx}>
+                      <button
+                        type="button"
+                        className="min-h-[44px] w-full text-left font-medium text-primary underline"
+                        onClick={() => {
+                          setOpenSection(secIdx);
+                          setNeedHintExpanded(false);
+                        }}
+                      >
+                        {SECTIONS[secIdx]}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-xs sm:gap-sm">
+            <Button
+              variant="secondary"
+              onClick={() => setHistoryOpen(true)}
+              aria-label="Show History"
+              className="min-h-[44px] flex-1 whitespace-nowrap px-sm sm:flex-none sm:px-lg"
+            >
+              <Icon name="history" className="text-[18px]" />
+              <span className="hidden sm:inline">Show History</span>
+              <span className="sm:hidden">History</span>
+            </Button>
+            {mode === "complete" && (
+              <Button
+                disabled={!canComplete}
+                onClick={() => setChecklistOpen(true)}
+                aria-label="Complete Consultation"
+                className="min-h-[44px] flex-[1.2] whitespace-nowrap px-sm sm:flex-none sm:px-lg"
+              >
+                <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
+                  {doneRequired}/{REQUIRED_SECTIONS.length}
+                </span>
+                <span className="sm:hidden">Complete</span>
+                <span className="hidden sm:inline">Complete Consultation</span>
+              </Button>
             )}
-          >
-            {renderSectionIndicator(i, "text-[16px]")}
-            <span className="min-w-0 flex-1 truncate">
-              {displayIdx + 1}. {SECTIONS[i]}
-            </span>
-          </button>
-        ))}
-      </nav>
-      <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-md z-40 flex items-center gap-xs sm:right-lg sm:gap-sm">
-        <Button
-          variant="secondary"
-          onClick={() => setHistoryOpen(true)}
-          aria-label="Show History"
-          className="min-h-[44px] whitespace-nowrap px-sm shadow-lg sm:px-lg"
-        >
-          <Icon name="history" className="text-[18px]" />
-          <span className="hidden sm:inline">Show History</span>
-        </Button>
-        {mode === "complete" && (
-          <Button
-            disabled={!canComplete}
-            onClick={() => setChecklistOpen(true)}
-            aria-label="Complete Consultation"
-            className="min-h-[44px] whitespace-nowrap px-sm shadow-lg sm:px-lg"
-          >
-            <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
-              {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
-            </span>
-            <span className="sm:hidden">Complete</span>
-            <span className="hidden sm:inline">Complete Consultation</span>
-          </Button>
-        )}
+          </div>
+        </div>
       </div>
+      {/* JJQR - END */}
     </AppShell>
   );
 }

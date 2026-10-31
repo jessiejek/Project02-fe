@@ -1,9 +1,10 @@
 "use client";
 
-import { type ReactNode, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { VersionFooter } from "./VersionFooter";
+import { AppShellMobileNavProvider } from "./AppShellMobileNavContext";
 import type { Role } from "@/lib/nav-config";
 
 export interface AppShellProps {
@@ -29,13 +30,23 @@ export function AppShell({ role, roleBadge, children }: AppShellProps) {
   // round-trip through localStorage instead, same as any other per-viewer
   // UI preference).
   //JJQR - AI (Oct 31, 2026)
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return typeof window !== "undefined" && localStorage.getItem(COLLAPSE_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
+  // Default false for SSR/hydration; read preference after paint (deferred so
+  // we do not sync-setState inside the effect body — eslint react-hooks/set-state-in-effect).
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      try {
+        if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true);
+      } catch {
+        // Ignore — preference applies on next toggle only.
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   //JJQR - END
 
   function toggleCollapsed() {
@@ -50,14 +61,20 @@ export function AppShell({ role, roleBadge, children }: AppShellProps) {
     });
   }
 
+  function closeMobileNav() {
+    setMobileNavOpen(false);
+  }
+
   return (
+    <AppShellMobileNavProvider closeMobileNav={closeMobileNav}>
     <div className="flex min-h-screen">
       {/* Desktop sidebar — fixed width, flex child (no ml-[260px] math anywhere).
           `sticky top-0 h-screen` pins it to the viewport so Logout (and the
           rest of the nav) never scrolls out of reach on a long page — only
           the nav's own item list scrolls internally if it overflows. */}
+      {/* JJQR - AI (Oct 31, 2026) — full sidebar from lg (1024+); below lg use mobile drawer */}
       <aside
-        className={`sticky top-0 hidden h-screen shrink-0 md:flex ${collapsed ? "w-sidebar-collapsed" : "w-sidebar"}`}
+        className={`sticky top-0 hidden h-screen shrink-0 lg:flex ${collapsed ? "w-sidebar-collapsed" : "w-sidebar"}`}
       >
         <Sidebar role={role} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
       </aside>
@@ -66,7 +83,7 @@ export function AppShell({ role, roleBadge, children }: AppShellProps) {
           rail makes no sense on a drawer the user opens on demand and closes
           right after tapping a link. */}
       {isMobileNavOpen && (
-        <div className="fixed inset-0 z-50 flex md:hidden">
+        <div className="fixed inset-0 z-50 flex lg:hidden">
           <button
             type="button"
             aria-label="Close navigation menu"
@@ -79,7 +96,17 @@ export function AppShell({ role, roleBadge, children }: AppShellProps) {
         </div>
       )}
 
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      {/* JJQR - AI (Oct 31, 2026) — main column offset for fixed consult bottom bar */}
+      <div
+        className="flex min-h-screen min-w-0 flex-1 flex-col"
+        style={
+          {
+            ["--app-main-left" as string]: collapsed
+              ? "var(--spacing-sidebar-collapsed)"
+              : "var(--spacing-sidebar)",
+          } as CSSProperties
+        }
+      >
         <Topbar onMenuClick={() => setMobileNavOpen(true)} roleBadge={roleBadge} />
         <main className="flex-1 bg-background p-md sm:p-lg">
           <div className="mx-auto w-full max-w-content min-w-0">{children}</div>
@@ -87,5 +114,6 @@ export function AppShell({ role, roleBadge, children }: AppShellProps) {
         <VersionFooter />
       </div>
     </div>
+    </AppShellMobileNavProvider>
   );
 }

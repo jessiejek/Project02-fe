@@ -589,6 +589,24 @@ export async function deleteFavoriteMedicine(_supabase: unknown, id: string): Pr
   await api.delete(`/api/doctor-favorite-medicines/${id}`);
 }
 
+//JJQR - AI (Oct 31, 2026)
+export interface PatientLabValueRow {
+  test_name?: string | null;
+  creatinine_mg_dl?: number | null;
+  egfr?: number | null;
+  collected_at?: string | null;
+}
+
+/** Optional BE endpoint — returns [] when route is unavailable. */
+export async function queryPatientLabValues(_supabase: unknown, patientId: string): Promise<PatientLabValueRow[]> {
+  try {
+    return await api.get<PatientLabValueRow[]>(`/api/patients/${patientId}/lab-values`);
+  } catch {
+    return [];
+  }
+}
+//JJQR - END
+
 // ── audit_logs write ──────────────────────────────────────────────────────
 export async function writeAuditLog(
   _supabase: unknown,

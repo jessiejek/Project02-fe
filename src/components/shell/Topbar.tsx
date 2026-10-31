@@ -139,7 +139,7 @@ export function Topbar({ onMenuClick, roleBadge }: TopbarProps) {
           type="button"
           onClick={onMenuClick}
           aria-label="Open navigation menu"
-          className="shrink-0 rounded-full p-xs text-on-surface-variant transition-colors hover:bg-surface-container-high md:hidden"
+          className="shrink-0 rounded-full p-xs text-on-surface-variant transition-colors hover:bg-surface-container-high lg:hidden"
         >
           <Icon name="menu" />
         </button>

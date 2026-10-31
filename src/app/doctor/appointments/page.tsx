@@ -27,7 +27,7 @@ export default function DoctorAppointmentsPage() {
   const [bookings, setBookings] = useState<AppointmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "waiting" | "in-progress" | "completed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "waiting" | "in-progress" | "completed">("active");
   // Defaults to today, like every other daily-queue view in the app — this
   // page was pulling every booking ever made with no date scoping at all,
   // which only gets worse as visit history piles up. "All" is one click away.
@@ -96,6 +96,7 @@ export default function DoctorAppointmentsPage() {
 
   const STATUS_FILTERS: Record<typeof statusFilter, string[] | null> = {
     all: null,
+    active: ["CheckedIn", "InProgress"],
     waiting: ["CheckedIn"],
     "in-progress": ["InProgress"],
     completed: ["Completed"],
@@ -143,6 +144,7 @@ export default function DoctorAppointmentsPage() {
             className="rounded-lg border border-outline-variant px-md py-sm text-body-md text-on-surface"
           >
             <option value="all">All statuses</option>
+            <option value="active">Active (Checked in / In progress)</option>
             <option value="waiting">Waiting (Checked in)</option>
             <option value="in-progress">In progress</option>
             <option value="completed">Completed</option>

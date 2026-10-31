@@ -122,11 +122,22 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
 
   // ── 4. Prescription — one item, then Save (Add Item only stages it) ─────
   await doctor.getByRole("heading", { name: /4\. Prescription/ }).click();
+  //JJQR - AI (Oct 31, 2026) — soft allergy gate blocks Add Item until acknowledged
+  const ackBtn = doctor.getByRole("button", { name: "Acknowledge" });
+  if (await ackBtn.isVisible()) {
+    await ackBtn.click();
+  }
+  //JJQR - END
   const med = doctor.getByPlaceholder("Medication — pick from the list or just type it");
   await expect(med).toBeVisible();
   await med.fill("Paracetamol");
   await doctor.getByPlaceholder("Dosage / strength").fill("500 mg");
   await doctor.getByPlaceholder("# Quantity (e.g. 30, 1 box)").fill("20 tablets");
+  //JJQR - AI (Oct 31, 2026) — route defaults PO; timing + duration required for print sig
+  await doctor.getByRole("button", { name: "Breakfast", exact: true }).click();
+  await doctor.getByRole("button", { name: "Days", exact: true }).click();
+  await doctor.getByPlaceholder("# days").fill("5");
+  //JJQR - END
   await doctor.getByRole("button", { name: "Add Item" }).click();
   await expect(doctor.getByText("Paracetamol", { exact: false })).toBeVisible();
   await doctor.getByRole("button", { name: "Save", exact: true }).click();

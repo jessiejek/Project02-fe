@@ -11,9 +11,12 @@ export interface Icd10DiagnosisFieldProps {
   onChange: (next: { description: string; icd10Code: string | null }) => void;
   disabled?: boolean;
   className?: string;
+  //JJQR - AI (Oct 31, 2026)
+  onEnterSubmit?: () => void;
+  //JJQR - END
 }
 
-export function Icd10DiagnosisField({ description, icd10Code, onChange, disabled, className }: Icd10DiagnosisFieldProps) {
+export function Icd10DiagnosisField({ description, icd10Code, onChange, disabled, className, onEnterSubmit }: Icd10DiagnosisFieldProps) {
   const [suggestions, setSuggestions] = useState<Icd10CodeRow[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -53,6 +56,12 @@ export function Icd10DiagnosisField({ description, icd10Code, onChange, disabled
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && onEnterSubmit) {
+            e.preventDefault();
+            onEnterSubmit();
+          }
+        }}
         placeholder="Diagnosis (search ICD-10 or free text)"
         className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
       />

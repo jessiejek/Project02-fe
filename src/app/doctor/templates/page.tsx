@@ -7,7 +7,8 @@ import { DoctorTemplatesPanel } from "@/components/doctor/DoctorTemplatesPanel";
 export default function DoctorTemplatesPage() {
   return (
     <AppShell role="doctor">
-      <div className="mx-auto max-w-[46rem] space-y-lg">
+      {/* JJQR - AI (Oct 31, 2026) */}
+      <div className="mx-auto max-w-5xl space-y-lg">
         <div>
           <h1 className="text-headline-lg text-on-surface">Templates</h1>
           <p className="mt-xs text-body-md text-on-surface-variant">
@@ -16,6 +17,7 @@ export default function DoctorTemplatesPage() {
         </div>
         <DoctorTemplatesPanel />
       </div>
+      {/* JJQR - END */}
     </AppShell>
   );
 }
