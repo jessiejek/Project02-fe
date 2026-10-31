@@ -16,7 +16,7 @@ import { createPatient, checkInWalkIn, getBooking, type SeededPatient, type Queu
 const PATIENT_COUNT = 3;
 
 async function completeMinimalConsultation(doctor: Page, bookingId: string, label: string) {
-  await doctor.goto(`/doctor/consultation/${bookingId}`);
+  await doctor.goto(`/doctor/consultation2/${bookingId}`);
   await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
 
   await doctor.getByPlaceholder("Chief Complaint*").fill(`E2E batch — ${label}`);
@@ -36,12 +36,20 @@ async function completeMinimalConsultation(doctor: Page, bookingId: string, labe
   await expect(doctor.getByText(/Vitals saved at/)).toBeVisible();
 
   await doctor.getByRole("heading", { name: /3\. Diagnosis/ }).click();
-  await doctor.getByPlaceholder("Diagnosis (free text)*").fill("Acute URTI");
-  await doctor.getByRole("button", { name: "Add", exact: true }).click();
+  const dxInput = doctor.getByPlaceholder(/Diagnosis \(/);
+  await dxInput.fill("Acute URTI");
+  const addButtons = doctor.getByRole("button", { name: "Add", exact: true });
+  await (await addButtons.count()) > 1 ? addButtons.nth(1).click() : addButtons.click();
   await expect(doctor.getByText("Acute URTI (Primary)")).toBeVisible();
 
-  await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).click();
-  await expect(doctor.getByText("No follow-up set — confirm this is intentional?")).toBeVisible();
+  await doctor.getByRole("heading", { name: /4\. Prescription/ }).click();
+  await doctor.getByText(/No medicines this visit/i).click();
+
+  await doctor.locator("h3").filter({ hasText: /Follow-up/ }).click();
+  await doctor.getByRole("button", { name: "Select date" }).click();
+  await doctor.getByRole("button", { name: "Today" }).click();
+
+  await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).first().click();
   await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
   await expect(doctor.getByText("Consultation saved")).toBeVisible({ timeout: 15_000 });
   await expect(doctor.getByText(/Could not complete the consultation/)).toHaveCount(0);

@@ -94,11 +94,14 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
 
   // Count this doctor's non-cancelled bookings on the date being blocked
   // (Addendum D12 interim warning — remaining.md A.4).
+  //JJQR - AI (Oct 31, 2026)
+  const blockTargetDate = addingDate?.date;
+  const displayAffectedCount = blockTargetDate ? affectedCount : 0;
+  const displayAffectedLoading = blockTargetDate ? affectedLoading : false;
+  //JJQR - END
   useEffect(() => {
     const date = addingDate?.date;
     if (!date) {
-      setAffectedCount(0);
-      setAffectedLoading(false);
       return;
     }
     let cancelled = false;
@@ -277,9 +280,9 @@ function ScheduleEditor({ doctorId }: { doctorId: string }) {
           />
           {addingDate?.date ? (
             <p className="rounded-lg bg-amber-50 px-md py-sm text-label-md text-amber-700">
-              {affectedLoading
+              {displayAffectedLoading
                 ? "Checking bookings on this date…"
-                : `${affectedCount} patient${affectedCount === 1 ? "" : "s"} booked on this date (excluding cancelled). Blocking will not automatically notify or reschedule them — Staff will need to follow up.`}
+                : `${displayAffectedCount} patient${displayAffectedCount === 1 ? "" : "s"} booked on this date (excluding cancelled). Blocking will not automatically notify or reschedule them — Staff will need to follow up.`}
             </p>
           ) : (
             <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">

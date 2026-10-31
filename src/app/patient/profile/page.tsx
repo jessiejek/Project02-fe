@@ -99,44 +99,101 @@ function ProfileInfoTab({ patient }: { patient: Patient }) {
   const [form, setForm] = useState(patient);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ firstName?: string; lastName?: string; contactNumber?: string }>({});
+  const [saveError, setSaveError] = useState("");
 
   function set<K extends keyof Patient>(key: K, value: Patient[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  //JJQR - AI (Oct 31, 2026)
+  function validateProfile(): boolean {
+    const errors: typeof fieldErrors = {};
+    if (!form.firstName.trim()) errors.firstName = "First name is required.";
+    if (!form.lastName.trim()) errors.lastName = "Last name is required.";
+    const contact = form.contactNumber.trim();
+    if (contact) {
+      const digits = contact.replace(/\D/g, "");
+      if (digits.length < 10) errors.contactNumber = "Enter a valid phone number (at least 10 digits).";
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  async function reloadFromApi() {
+    const supabase = null as never;
+    const data = await queryPatientById(supabase, patient.id);
+    if (!data) return;
+    setForm({
+      id: data.patient_id,
+      patientCode: data.patient_code,
+      firstName: data.first_name,
+      middleName: data.middle_name ?? undefined,
+      lastName: data.last_name,
+      dateOfBirth: data.date_of_birth,
+      sex: data.sex,
+      civilStatus: data.civil_status ?? "",
+      address: data.address ?? "",
+      city: data.city ?? "",
+      zipCode: data.zip_code ?? "",
+      contactNumber: data.contact_number ?? "",
+      email: data.email,
+      emergencyContactName: data.emergency_contact_name ?? undefined,
+      emergencyContactNumber: data.emergency_contact_number ?? undefined,
+      emergencyContactRelationship: data.emergency_contact_relationship ?? undefined,
+      bloodType: data.blood_type ?? undefined,
+      philHealthNumber: data.philhealth_number ?? undefined,
+      hmoProvider: data.hmo_provider ?? undefined,
+      hmoCardNumber: data.hmo_card_number ?? undefined,
+      isEmailVerified: data.is_email_verified,
+      consentedAt: data.consented_at ?? undefined,
+      consentVersion: data.consent_version,
+    });
+  }
+
   async function handleSave() {
+    setSaveError("");
+    if (!validateProfile()) return;
     setSaving(true);
     const supabase = null as never;
-    await updatePatient(supabase, patient.id, {
-      first_name: form.firstName,
-      middle_name: form.middleName || null,
-      last_name: form.lastName,
-      date_of_birth: form.dateOfBirth,
-      sex: form.sex,
-      civil_status: form.civilStatus || null,
-      address: form.address || null,
-      city: form.city || null,
-      zip_code: form.zipCode || null,
-      contact_number: form.contactNumber || null,
-      emergency_contact_name: form.emergencyContactName || null,
-      emergency_contact_number: form.emergencyContactNumber || null,
-      emergency_contact_relationship: form.emergencyContactRelationship || null,
-      blood_type: form.bloodType || null,
-      philhealth_number: form.philHealthNumber || null,
-      hmo_provider: form.hmoProvider || null,
-      hmo_card_number: form.hmoCardNumber || null,
-    });
-    setSaving(false);
-    setSavedAt(new Date().toLocaleTimeString());
+    try {
+      await updatePatient(supabase, patient.id, {
+        first_name: form.firstName.trim(),
+        middle_name: form.middleName || null,
+        last_name: form.lastName.trim(),
+        date_of_birth: form.dateOfBirth,
+        sex: form.sex,
+        civil_status: form.civilStatus || null,
+        address: form.address || null,
+        city: form.city || null,
+        zip_code: form.zipCode || null,
+        contact_number: form.contactNumber.trim() || null,
+        emergency_contact_name: form.emergencyContactName || null,
+        emergency_contact_number: form.emergencyContactNumber || null,
+        emergency_contact_relationship: form.emergencyContactRelationship || null,
+        blood_type: form.bloodType || null,
+        philhealth_number: form.philHealthNumber || null,
+        hmo_provider: form.hmoProvider || null,
+        hmo_card_number: form.hmoCardNumber || null,
+      });
+      await reloadFromApi();
+      setSavedAt(new Date().toLocaleTimeString());
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Could not save your profile.");
+    } finally {
+      setSaving(false);
+    }
   }
+  //JJQR - END
 
   return (
     <div className="space-y-md">
       {savedAt && <Toast key={savedAt} variant="success" message={`Profile saved at ${savedAt}.`} />}
+      {saveError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{saveError}</p>}
       <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
-        <Field label="First Name" value={form.firstName} onChange={(v) => set("firstName", v)} />
+        <Field label="First Name" value={form.firstName} onChange={(v) => set("firstName", v)} error={fieldErrors.firstName} />
         <Field label="Middle Name" value={form.middleName ?? ""} onChange={(v) => set("middleName", v)} />
-        <Field label="Last Name" value={form.lastName} onChange={(v) => set("lastName", v)} />
+        <Field label="Last Name" value={form.lastName} onChange={(v) => set("lastName", v)} error={fieldErrors.lastName} />
       </div>
       <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
         <div className="space-y-xs">
@@ -159,7 +216,7 @@ function ProfileInfoTab({ patient }: { patient: Patient }) {
         <Field label="Civil Status" value={form.civilStatus} onChange={(v) => set("civilStatus", v)} />
         <Field label="Blood Type" value={form.bloodType ?? ""} onChange={(v) => set("bloodType", v)} />
       </div>
-      <Field label="Contact Number" value={form.contactNumber} onChange={(v) => set("contactNumber", v)} />
+      <Field label="Contact Number" value={form.contactNumber} onChange={(v) => set("contactNumber", v)} error={fieldErrors.contactNumber} />
       <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
         <Field label="Address" value={form.address} onChange={(v) => set("address", v)} />
         <Field label="City" value={form.city} onChange={(v) => set("city", v)} />
@@ -233,26 +290,43 @@ function ChangePasswordTab() {
   );
 }
 
+//JJQR - AI (Oct 31, 2026)
+function fieldIdFromLabel(label: string): string {
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug ? `field-${slug}` : "field-input";
+}
+
 function Field({
   label,
   value,
   onChange,
   type = "text",
+  error,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  error?: string;
 }) {
+  const inputId = fieldIdFromLabel(label);
   return (
     <div className="space-y-xs">
-      <label className="text-label-md text-on-surface-variant">{label}</label>
+      <label htmlFor={inputId} className="text-label-md text-on-surface-variant">
+        {label}
+      </label>
       <input
+        id={inputId}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
+      {error && <p className="text-label-sm text-error">{error}</p>}
     </div>
   );
 }
+//JJQR - END

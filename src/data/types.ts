@@ -143,6 +143,9 @@ export interface Diagnosis {
   code: string;
   description: string;
   type: "Primary" | "Secondary" | "Differential" | "Comorbidity";
+  //JJQR - AI (Oct 31, 2026)
+  icd10Code?: string | null;
+  //JJQR - END
 }
 
 // Rebuilt per clinic-vitals-fe.md's reference architecture: the 7 standard
@@ -285,6 +288,9 @@ export interface PrescriptionLineItem {
   durationKind?: "Maintain" | "Days" | "Weeks" | null;
   durationValue?: number | null;
   indication?: string | null;
+  //JJQR - AI (Oct 31, 2026)
+  route?: string | null;
+  //JJQR - END
 }
 
 export interface PrescriptionGroup {

@@ -18,13 +18,12 @@ import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { queryPatientById } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
 import { queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
-import { printHtml, escapeHtml } from "@/lib/print";
+import { printPrescription } from "@/lib/print-forms";
+import { queryClinicSettings } from "@/lib/data/admin";
+import { queryDoctorById } from "@/lib/data/doctors";
 import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
 import { todayManila } from "@/lib/clock";
 import type { PrescriptionGroup, VitalFieldTemplate, BookingStatus } from "@/data/types";
-import type { Database } from "@/data/supabase-types";
-
-type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
 
 function computeAge(dateOfBirth: string): number {
   const [ty, tm, td] = todayManila().split("-").map(Number);
@@ -194,6 +193,14 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
             quantity: i.quantity,
             instruction: i.instruction ?? "",
             isControlledSubstance: i.is_controlled_substance,
+            //JJQR - AI (Oct 31, 2026)
+            mealRelation: (i.meal_relation as "Before" | "After" | null) ?? null,
+            timing: i.timing ?? null,
+            durationKind: (i.duration_kind as "Maintain" | "Days" | "Weeks" | null) ?? null,
+            durationValue: i.duration_value ?? null,
+            indication: i.indication ?? null,
+            route: i.route ?? null,
+            //JJQR - END
           })),
         })),
       );
@@ -713,20 +720,51 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         title="Print Preview"
         footer={
           <Button
-            onClick={() => {
-              if (!printPreviewGroup) return;
-              const items = printPreviewGroup.items
-                .map(
-                  (item, i) =>
-                    `<p><strong>${i + 1}. ${escapeHtml(item.genericName)} #${escapeHtml(item.quantity)}</strong><br/>Sig. ${escapeHtml(item.dosage)} ${escapeHtml(item.instruction)}</p>`,
-                )
-                .join("");
-              printHtml(
-                `Prescription ${patient.fullName}`,
-                `<h1>Prescription</h1>
-                 <p class="meta">${escapeHtml(patient.fullName)} · ${escapeHtml(printPreviewGroup.createdAt)}</p>
-                 <div class="card">${items}</div>`,
-              );
+            onClick={async () => {
+              if (!printPreviewGroup || !patient) return;
+              //JJQR - AI (Oct 31, 2026)
+              const supabase = null as never;
+              const [clinic, doctor] = await Promise.all([
+                queryClinicSettings(supabase),
+                queryDoctorById(supabase, printPreviewGroup.doctorId || doctorId),
+              ]);
+              printPrescription({
+                clinic: clinic
+                  ? {
+                      clinic_name: clinic.clinic_name,
+                      address: clinic.address,
+                      contact_number: clinic.contact_number,
+                    }
+                  : { clinic_name: "Grace Medical Clinic", address: "", contact_number: null },
+                doctor: {
+                  full_name: doctor?.staff_accounts?.full_name ?? "",
+                  license_number: doctor?.license_number ?? null,
+                  ptr_number: doctor?.ptr_number ?? null,
+                  s2_number: doctor?.s2_number ?? null,
+                },
+                patient: {
+                  full_name: patient.fullName,
+                  patient_code: patient.patientCode,
+                  date_of_birth: patient.dateOfBirth,
+                  sex: patient.sex,
+                  address: null,
+                },
+                items: printPreviewGroup.items.map((item) => ({
+                  generic_name: item.genericName,
+                  dosage: item.dosage,
+                  quantity: item.quantity,
+                  instruction: item.instruction,
+                  meal_relation: item.mealRelation ?? null,
+                  timing: item.timing ?? null,
+                  duration_kind: item.durationKind ?? null,
+                  duration_value: item.durationValue ?? null,
+                  indication: item.indication ?? null,
+                  is_controlled_substance: item.isControlledSubstance,
+                  route: item.route ?? null,
+                })),
+                date: printPreviewGroup.createdAt,
+              });
+              //JJQR - END
             }}
           >
             Print

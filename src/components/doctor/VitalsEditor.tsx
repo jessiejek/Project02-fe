@@ -18,10 +18,62 @@ interface VitalInputCardProps {
   onRemove?: () => void;
 }
 
-// One tile per vital template (clinic-vitals-fe.md's `VitalDetailFieldCard`) —
-// default templates are always shown; "Others" templates get a red trash icon
-// since they were added on-demand and can be removed again.
+//JJQR - AI (Oct 31, 2026) — F-015 adult default ranges by formKey
+type NumericRange = { min: number; max: number };
+
+const SINGLE_VITAL_RANGES: Record<string, NumericRange> = {
+  pulse_rate: { min: 60, max: 100 },
+  temperature: { min: 36.1, max: 37.2 },
+  respiratory_rate: { min: 12, max: 20 },
+  o2_saturation: { min: 95, max: 100 },
+  oxygen_saturation: { min: 95, max: 100 },
+  spo2: { min: 95, max: 100 },
+  weight: { min: 35, max: 200 },
+  blood_pressure_systolic: { min: 90, max: 140 },
+  blood_pressure_diastolic: { min: 60, max: 90 },
+};
+
+const BP_SYSTOLIC: NumericRange = { min: 90, max: 140 };
+const BP_DIASTOLIC: NumericRange = { min: 60, max: 90 };
+
+function parseVitalNumber(raw: string): number | null {
+  const n = Number.parseFloat(raw.replace(/[^\d.]/g, ""));
+  return Number.isNaN(n) ? null : n;
+}
+
+function withinRange(n: number, range: NumericRange): boolean {
+  return n >= range.min && n <= range.max;
+}
+
+function vitalOutOfRange(formKey: string, value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+
+  const key = formKey.toLowerCase();
+  if (key === "blood_pressure") {
+    const slash = trimmed.split("/").map((p) => p.trim());
+    if (slash.length >= 2) {
+      const sys = parseVitalNumber(slash[0] ?? "");
+      const dia = parseVitalNumber(slash[1] ?? "");
+      if (sys != null && !withinRange(sys, BP_SYSTOLIC)) return true;
+      if (dia != null && !withinRange(dia, BP_DIASTOLIC)) return true;
+      return false;
+    }
+    const lone = parseVitalNumber(trimmed);
+    return lone != null && !withinRange(lone, BP_SYSTOLIC);
+  }
+
+  const range = SINGLE_VITAL_RANGES[key];
+  if (!range) return false;
+  const n = parseVitalNumber(trimmed);
+  return n != null && !withinRange(n, range);
+}
+//JJQR - END
+
 function VitalInputCard({ template, value, onChange, onRemove }: VitalInputCardProps) {
+  //JJQR - AI (Oct 31, 2026)
+  const showOutOfRange = vitalOutOfRange(template.formKey, value);
+  //JJQR - END
   return (
     <Card className="space-y-sm">
       <div className="flex items-center justify-between">
@@ -40,10 +92,18 @@ function VitalInputCard({ template, value, onChange, onRemove }: VitalInputCardP
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={template.unit ? `Enter ${(template.description ?? "").toLowerCase()}` : "Enter value"}
-          className="w-full rounded-lg border border-outline-variant px-md py-sm"
+          className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
         />
         {template.unit && <span className="shrink-0 text-label-sm text-on-surface-variant">{template.unit}</span>}
       </div>
+      {/* JJQR - AI (Oct 31, 2026) */}
+      {showOutOfRange && (
+        <p className="flex items-center gap-xs text-label-sm text-amber-800" role="status">
+          <Icon name="warning" className="text-[16px]" aria-hidden />
+          Out of range
+        </p>
+      )}
+      {/* JJQR - END */}
     </Card>
   );
 }

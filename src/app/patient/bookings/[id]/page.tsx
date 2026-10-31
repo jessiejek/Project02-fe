@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
+import { queryBookingById, cancelMyBooking } from "@/lib/data/bookings";
 import { showPaymentStatus, isVoidBooking } from "@/lib/paymentDisplay";
 
 const TIMELINE = ["Pending", "Confirmed", "CheckedIn", "Completed"];
@@ -89,22 +89,41 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   async function handleCancel() {
     setActionError("");
     setSubmitting(true);
-    const supabase = null as never;
     try {
-      await updateBookingStatus(supabase, id, "Cancelled", { reason: cancelReason.trim() || undefined });
+      await cancelMyBooking(id, cancelReason.trim() || undefined);
+      const supabase = null as never;
+      const b = await queryBookingById(supabase, id);
+      if (b && session?.patientId && b.patient_id === session.patientId) {
+        setBooking({
+          id: b.booking_id,
+          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+          appointmentDate: b.appointment_date,
+          slotStartTime: b.slot_start_time.slice(0, 5),
+          slotEndTime: b.slot_end_time.slice(0, 5),
+          status: b.status,
+          queueNumber: b.queue_number,
+          amountDue: Number(b.amount_due),
+          totalFee: Number(b.total_fee),
+          paymentStatus: b.payments?.status ?? "Unpaid",
+          paymentMode: b.payment_mode,
+          waivedReason: b.payments?.waived_reason ?? null,
+          createdAt: b.created_at.slice(0, 10),
+        });
+      } else {
+        setBooking((prev) => (prev ? { ...prev, status: "Cancelled" } : prev));
+      }
     } catch (e) {
-      setSubmitting(false);
       setActionError(e instanceof Error ? e.message : "Could not cancel this booking.");
+      setSubmitting(false);
       return;
     }
     setSubmitting(false);
-    setBooking((prev) => (prev ? { ...prev, status: "Cancelled" } : prev));
     setCancelOpen(false);
     setCancelReason("");
   }
 
-  const isClosed = ["Cancelled", "NoShow", "Expired"].includes(booking.status);
-  const isUpcoming = ["Confirmed", "CheckedIn"].includes(booking.status);
+  const isClosed = ["Cancelled", "NoShow", "Expired", "Rescheduled"].includes(booking.status);
+  const canPatientCancel = booking.status === "Pending";
   const isCompleted = booking.status === "Completed";
   // Patient.md §7's actual documented conditions — previously this checked
   // status==="Completed" for both, which doesn't match either spec'd rule
@@ -186,7 +205,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           </Card>
         )}
 
-        {isUpcoming && (
+        {canPatientCancel && (
           <Card>
             <Button variant="danger" onClick={() => setCancelOpen(true)}>
               Cancel Booking

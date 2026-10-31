@@ -1,14 +1,15 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { notFound } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
+import { queryBookingById, updateBookingStatus, rescheduleBooking } from "@/lib/data/bookings";
 import { confirmPayment, waivePayment } from "@/lib/data/payments";
+import { RescheduleBookingModal } from "@/components/bookings/RescheduleBookingModal";
 
 interface BookingView {
   id: string;
@@ -41,6 +42,7 @@ function newOrNumber(bookingId: string) {
 // mirrors admin/bookings/[id]/page.tsx's already-established pattern.
 export default function StaffBookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [booking, setBooking] = useState<BookingView | null | undefined>(undefined);
   const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false);
   const [waiveOpen, setWaiveOpen] = useState(false);
@@ -52,6 +54,10 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
   const [amountReceived, setAmountReceived] = useState("");
   const [notes, setNotes] = useState("");
   const [reasonText, setReasonText] = useState("");
+  const [noShowOpen, setNoShowOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -192,7 +198,13 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
         </Card>
 
         <Card className="flex flex-wrap gap-md">
-          {isConfirmed && <Button onClick={() => updateBooking({ status: "CheckedIn" })}>Check In</Button>}
+          {isConfirmed && (
+            <>
+              <Button onClick={() => updateBooking({ status: "CheckedIn" })}>Check In</Button>
+              <Button variant="secondary" onClick={() => setNoShowOpen(true)}>Mark No Show</Button>
+              <Button variant="secondary" onClick={() => setRescheduleOpen(true)}>Reschedule</Button>
+            </>
+          )}
           {isCheckedIn && (
             <Button variant="secondary" onClick={() => updateBooking({ status: "Confirmed" })}>
               Undo Check-In
@@ -332,6 +344,67 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
           rows={3}
         />
       </Modal>
+
+      <Modal
+        isOpen={noShowOpen}
+        onClose={() => { if (!actionSubmitting) { setNoShowOpen(false); setReasonText(""); setActionError(""); } }}
+        title="Mark No Show"
+        footer={
+          <>
+            <Button variant="secondary" disabled={actionSubmitting} onClick={() => { setNoShowOpen(false); setReasonText(""); setActionError(""); }}>Back</Button>
+            <Button
+              variant="danger"
+              disabled={actionSubmitting}
+              onClick={async () => {
+                setActionError("");
+                setActionSubmitting(true);
+                try {
+                  await updateBooking({ status: "NoShow", cancellationReason: reasonText.trim() || undefined });
+                  setNoShowOpen(false);
+                  setReasonText("");
+                } catch (e) {
+                  setActionError(e instanceof Error ? e.message : "Could not update booking.");
+                } finally {
+                  setActionSubmitting(false);
+                }
+              }}
+            >
+              Confirm No Show
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-md text-body-md text-on-surface-variant">Mark this appointment as a no-show?</p>
+        {actionError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{actionError}</p>}
+        <textarea
+          value={reasonText}
+          onChange={(e) => setReasonText(e.target.value)}
+          placeholder="Reason (optional)"
+          className="w-full rounded-lg border border-outline-variant p-md text-body-md"
+          rows={3}
+        />
+      </Modal>
+
+      <RescheduleBookingModal
+        isOpen={rescheduleOpen}
+        submitting={actionSubmitting}
+        error={actionError}
+        onClose={() => { setRescheduleOpen(false); setActionError(""); }}
+        onConfirm={async (appointmentDate, reason) => {
+          setActionError("");
+          setActionSubmitting(true);
+          try {
+            const result = await rescheduleBooking(id, appointmentDate, reason || undefined);
+            setBooking((prev) => (prev ? { ...prev, status: "Rescheduled" } : prev));
+            setRescheduleOpen(false);
+            setActionSubmitting(false);
+            router.push(`/staff/bookings/${result.new_booking_id}`);
+          } catch (e) {
+            setActionError(e instanceof Error ? e.message : "Could not reschedule.");
+            setActionSubmitting(false);
+          }
+        }}
+      />
 
       {/* Receipt/print modal — Staff.md §3: OR number, patient/doctor, services,
           date, amount, method, reference, staff name, timestamp. */}

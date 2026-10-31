@@ -32,9 +32,31 @@ export interface ConsultationRow {
   // §6 embeds (present on list/by-booking reads)
   bookings?: { appointment_date: string | null; doctor_id?: string | null } | null;
   doctors?: { staff_accounts: { full_name: string | null } | null } | null;
-  consultation_diagnoses?: Array<{ custom_description: string | null; type: string }>;
+  //JJQR - AI (Oct 31, 2026)
+  consultation_diagnoses?: Array<{ icd10_code: string | null; custom_description: string | null; type: string }>;
+  //JJQR - END
   follow_ups?: { follow_up_date: string | null; instructions: string | null } | null;
 }
+
+//JJQR - AI (Oct 31, 2026)
+export function formatConsultationDiagnosisLabel(d: {
+  icd10_code?: string | null;
+  custom_description?: string | null;
+}): string {
+  const code = d.icd10_code?.trim();
+  const desc = d.custom_description?.trim();
+  if (code && desc) return `${code} — ${desc}`;
+  if (code) return code;
+  return desc ?? "";
+}
+
+export function shortRxSummaryForItems(items: Array<{ generic_name: string }> | undefined): string {
+  if (!items?.length) return "—";
+  const names = items.slice(0, 2).map((i) => i.generic_name);
+  const suffix = items.length > 2 ? ` +${items.length - 2} more` : "";
+  return names.join(", ") + suffix;
+}
+//JJQR - END
 
 // PostgREST returns to-one embeds as object|array — flatten to object.
 function flattenConsultation(c: Record<string, unknown>): ConsultationRow {
@@ -277,6 +299,9 @@ export interface RxItem {
   duration_value?: number | null;
   indication?: string | null;
   created_at?: string;
+  //JJQR - AI (Oct 31, 2026)
+  route?: string | null;
+  //JJQR - END
 }
 export interface RxGroupRow {
   group_id: string;

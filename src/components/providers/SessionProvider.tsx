@@ -25,7 +25,9 @@ export function SessionProvider({
 
   // Keep in sync when the server re-resolves it (e.g. after router.refresh()).
   useEffect(() => {
-    setSession(initialSession);
+    //JJQR - AI (Oct 31, 2026)
+    queueMicrotask(() => setSession(initialSession));
+    //JJQR - END
   }, [initialSession]);
 
   return <SessionContext.Provider value={{ session, loading: false }}>{children}</SessionContext.Provider>;

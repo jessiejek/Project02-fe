@@ -52,9 +52,11 @@ export default function AdminReportsPage() {
       const supabase = null as never;
       const inRange = (d: string | null | undefined, lo: string, hi: string) => !!d && d >= lo && d <= hi;
       const [unpaidAll, followUpsAll, summaryAll] = await Promise.all([
-        queryReport<Record<string, any>>(supabase, "v_unpaid_completed_visits"),
-        queryReport<Record<string, any>>(supabase, "v_pending_follow_ups"),
-        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary"),
+        //JJQR - AI (Oct 31, 2026)
+        queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits"),
+        queryReport<Record<string, unknown>>(supabase, "v_pending_follow_ups"),
+        queryReport<Record<string, unknown>>(supabase, "v_daily_booking_summary"),
+        //JJQR - END
       ]);
       const unpaidRes = { data: unpaidAll.filter((b) => inRange(b.appointment_date as string, dateFrom, dateTo)) };
       const followUpsRes = {
@@ -72,27 +74,33 @@ export default function AdminReportsPage() {
         (unpaidRes.data ?? [])
           .filter((b) => b.payment_status === "Unpaid")
           .map((b) => ({
-            bookingId: b.booking_id ?? "",
-            patientName: b.patient_name ?? "Unknown Patient",
-            doctorName: b.doctor_name ?? "Unknown Doctor",
-            visitDate: b.appointment_date ?? "",
+            //JJQR - AI (Oct 31, 2026)
+            bookingId: String(b.booking_id ?? ""),
+            patientName: String(b.patient_name ?? "Unknown Patient"),
+            doctorName: String(b.doctor_name ?? "Unknown Doctor"),
+            visitDate: String(b.appointment_date ?? ""),
+            //JJQR - END
             amountDue: Number(b.amount_due ?? 0),
           })),
       );
 
       setPendingFollowUps(
         (followUpsRes.data ?? []).map((f) => ({
-          id: f.follow_up_id ?? "",
-          patientName: f.patient_name ?? "Unknown Patient",
-          doctorName: f.doctor_name ?? "Unknown Doctor",
-          reason: f.reason ?? "Follow-up",
-          followUpDate: f.follow_up_date ?? "",
+          //JJQR - AI (Oct 31, 2026)
+          id: String(f.follow_up_id ?? ""),
+          patientName: String(f.patient_name ?? "Unknown Patient"),
+          doctorName: String(f.doctor_name ?? "Unknown Doctor"),
+          reason: String(f.reason ?? "Follow-up"),
+          followUpDate: String(f.follow_up_date ?? ""),
+          //JJQR - END
         })),
       );
 
       setDailySummary(
         (summaryRes.data ?? []).map((row) => ({
-          date: row.appointment_date ?? "",
+          //JJQR - AI (Oct 31, 2026)
+          date: String(row.appointment_date ?? ""),
+          //JJQR - END
           total: Number(row.total_bookings ?? 0),
           completed: Number(row.completed_count ?? 0),
           paid: Number(row.paid_count ?? 0),

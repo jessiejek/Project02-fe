@@ -121,7 +121,11 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    //JJQR - AI (Oct 31, 2026)
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
+    //JJQR - END
     // §16.2 — debounce the free-text search into a server query.
     const handle = setTimeout(async () => {
       const supabase = null as never;

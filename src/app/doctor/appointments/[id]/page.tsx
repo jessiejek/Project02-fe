@@ -7,7 +7,15 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { getServerSession } from "@/lib/auth/session";
 import { queryBookingById } from "@/lib/data/bookings";
-import { queryConsultationByBooking } from "@/lib/data/clinical";
+import {
+  formatConsultationDiagnosisLabel,
+  queryConsultationByBooking,
+  queryConsultations,
+  queryRxGroups,
+  shortRxSummaryForItems,
+} from "@/lib/data/clinical";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { AppointmentPrintActions } from "@/components/doctor/AppointmentPrintActions";
 
 // Stitch appointment_overview_states — 3 states driven by booking status,
 // per React-Conversion-Guide.md §4. Screen 3b (View/Edit split on Completed)
@@ -20,11 +28,15 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
   const session = await getServerSession();
   if (!session || (session.role !== "Doctor" && session.role !== "Admin")) redirect("/login");
 
-  const [b, consultation] = await Promise.all([
-    queryBookingById(null as never, id),
-    queryConsultationByBooking(null as never, id),
-  ]);
+  const supabase = null as never;
+  const b = await queryBookingById(supabase, id);
   if (!b || (session.role === "Doctor" && session.staffId && b.doctor_id !== session.staffId)) notFound();
+
+  const [consultation, priorConsults, patientRxGroups] = await Promise.all([
+    queryConsultationByBooking(supabase, id),
+    queryConsultations(supabase, { patientId: b.patient_id }),
+    queryRxGroups(supabase, { patientId: b.patient_id }),
+  ]);
 
   const booking = {
     id: b.booking_id,
@@ -42,7 +54,16 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
 
   const isActive = ["Confirmed", "CheckedIn", "InProgress"].includes(booking.status);
   const isCompleted = booking.status === "Completed";
-  const isClosed = ["Cancelled", "NoShow"].includes(booking.status);
+  const isClosed = ["Cancelled", "NoShow", "Rescheduled"].includes(booking.status);
+
+  const rxByBookingId = new Map(patientRxGroups.map((g) => [g.booking_id, g]));
+  const previousConsultations = priorConsults
+    .filter((c) => c.booking_id !== booking.id)
+    .sort((a, b) => {
+      const da = a.bookings?.appointment_date ?? a.created_at;
+      const db = b.bookings?.appointment_date ?? b.created_at;
+      return db.localeCompare(da);
+    });
 
   return (
     <AppShell role="doctor">
@@ -84,27 +105,48 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
 
         <Card>
           {isActive && (
-            <Link href={`/doctor/consultation/${booking.id}?mode=complete`}>
+            <Link href={`/doctor/consultation2/${booking.id}?mode=complete`}>
               <Button className="w-full">Open Consultation</Button>
             </Link>
           )}
           {isCompleted && (
             <div className="flex flex-col gap-md sm:flex-row">
-              <Link href={`/doctor/consultation/${booking.id}?mode=view`} className="flex-1">
+              <Link href={`/doctor/consultation2/${booking.id}?mode=view`} className="flex-1">
                 <Button variant="secondary" className="w-full">
                   View Consultation
                 </Button>
               </Link>
-              <Link href={`/doctor/consultation/${booking.id}?mode=amend`} className="flex-1">
+              <Link href={`/doctor/consultation2/${booking.id}?mode=amend`} className="flex-1">
                 <Button className="w-full">Edit / Amend</Button>
               </Link>
             </div>
           )}
-          {isClosed && (
-            <Button disabled className="w-full">
-              Appointment Closed
-            </Button>
+          {isCompleted && (
+            <AppointmentPrintActions bookingId={booking.id} className="mt-md flex flex-wrap gap-sm border-t border-outline-variant pt-md" />
           )}
+          {isClosed && (
+            <>
+              <p className="text-body-md text-on-surface-variant">
+                {booking.status === "Rescheduled"
+                  ? "This appointment was rescheduled — open the new booking from your appointments list."
+                  : "This appointment is closed (cancelled or no-show)."}
+              </p>
+              <Button disabled className="mt-md w-full">
+                Appointment Closed
+              </Button>
+            </>
+          )}
+          {!isActive && !isCompleted && !isClosed && (
+            <div className="space-y-md">
+              <p className="text-body-md text-on-surface-variant">
+                This booking is still {booking.status} — open the consultation after staff confirms or checks the patient in.
+              </p>
+              <Button disabled className="w-full" variant="secondary">
+                Open Consultation (unavailable)
+              </Button>
+            </div>
+          )}
+          {/*JJQR - END*/}
         </Card>
 
         {isCompleted && consultation && (
@@ -118,6 +160,63 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
         {isClosed && (
           <p className="text-body-md text-on-surface-variant">No consultation record for this appointment.</p>
         )}
+
+        {/*JJQR - AI (Oct 31, 2026)*/}
+        <section className="space-y-md">
+          <h2 className="text-headline-sm text-on-surface">Previous consultations</h2>
+          {previousConsultations.length === 0 ? (
+            <EmptyState icon="clinical_notes" message="No previous consultations for this patient." />
+          ) : (
+            <div className="space-y-sm">
+              {previousConsultations.map((c) => {
+                const date = c.bookings?.appointment_date ?? c.created_at.slice(0, 10);
+                const doctorName = c.doctors?.staff_accounts?.full_name ?? "—";
+                const summaryLine = [c.chief_complaint, c.assessment].filter(Boolean).join(" · ") || "—";
+                const diagnoses = (c.consultation_diagnoses ?? [])
+                  .map((d) => formatConsultationDiagnosisLabel(d))
+                  .filter(Boolean);
+                const rxSummary = shortRxSummaryForItems(rxByBookingId.get(c.booking_id)?.prescription_line_items);
+                const followUpDate = c.follow_ups?.follow_up_date;
+                const followUpNote = c.follow_ups?.instructions;
+                return (
+                  <div
+                    key={c.consultation_id}
+                    className="rounded-xl border border-outline-variant p-md transition-colors hover:bg-surface-container-low"
+                  >
+                    <Link
+                      href={`/doctor/consultation2/${c.booking_id}?mode=view`}
+                      className="block"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-sm">
+                        <span className="text-label-md font-medium text-on-surface">{date}</span>
+                        <span className="text-label-sm text-on-surface-variant">{doctorName}</span>
+                      </div>
+                      <p className="mt-xs text-body-md text-on-surface-variant">{summaryLine}</p>
+                      {diagnoses.length > 0 && (
+                        <p className="mt-xs text-label-sm text-on-surface-variant">
+                          ICD-10: {diagnoses.join("; ")}
+                        </p>
+                      )}
+                      <p className="mt-xs text-label-sm text-on-surface-variant">Rx: {rxSummary}</p>
+                      {(followUpDate || followUpNote) && (
+                        <p className="mt-xs text-label-sm text-on-surface-variant">
+                          Follow-up: {followUpDate ?? "—"}
+                          {followUpNote ? ` — ${followUpNote}` : ""}
+                        </p>
+                      )}
+                    </Link>
+                    <AppointmentPrintActions
+                      bookingId={c.booking_id}
+                      compact
+                      className="mt-sm flex flex-wrap gap-sm border-t border-outline-variant pt-sm"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+        {/*JJQR - END*/}
       </div>
     </AppShell>
   );

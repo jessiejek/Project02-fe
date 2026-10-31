@@ -6,6 +6,7 @@
  * letterhead below is used instead.
  */
 import { printHtml, escapeHtml } from "@/lib/print";
+import { todayManila } from "@/lib/clock";
 
 export interface PrintClinic {
   clinic_name: string;
@@ -32,6 +33,18 @@ const e = (v: string | null | undefined) => escapeHtml(v ?? "");
 const fmtDate = (d: string | null | undefined) =>
   d ? new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }) : "";
 
+//JJQR - AI (Oct 31, 2026)
+function ageFromDob(dob: string | null | undefined): string {
+  if (!dob) return "";
+  const [ty, tm, td] = todayManila().split("-").map(Number);
+  const [by, bm, bd] = dob.split("-").map(Number);
+  if (!by) return "";
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age--;
+  return age >= 0 ? String(age) : "";
+}
+//JJQR - END
+
 function letterhead(clinic: PrintClinic): string {
   return `<div class="lh">
     <div class="lh-name">${e(clinic.clinic_name)}</div>
@@ -44,6 +57,9 @@ function signature(doctor: PrintDoctor): string {
     `<div class="sig-name">${e(doctor.full_name)}, MD</div>`,
     doctor.license_number ? `<div class="sig-line">License No. ${e(doctor.license_number)}</div>` : "",
     doctor.ptr_number ? `<div class="sig-line">PTR No. ${e(doctor.ptr_number)}</div>` : "",
+    //JJQR - AI (Oct 31, 2026)
+    doctor.s2_number ? `<div class="sig-line">S2 No. ${e(doctor.s2_number)}</div>` : "",
+    //JJQR - END
   ];
   return `<div class="sig">${lines.join("")}</div>`;
 }
@@ -93,6 +109,9 @@ export interface RxLine {
   duration_value?: number | null;
   indication?: string | null;
   is_controlled_substance?: boolean;
+  //JJQR - AI (Oct 31, 2026)
+  route?: string | null;
+  //JJQR - END
 }
 
 export function printPrescription(opts: {
@@ -129,6 +148,7 @@ export function printPrescription(opts: {
   const rows = items
     .map((i, idx) => {
       const dir = [
+        i.route ? String(i.route) : "",
         whenPhrase(i.meal_relation, i.timing),
         durationPhrase(i.duration_kind, i.duration_value),
       ].filter(Boolean).join(", ");
@@ -144,7 +164,7 @@ export function printPrescription(opts: {
     .join("");
   const inner = `<div class="doc-title">Prescription</div>
     <div class="row"><span class="lbl">Patient:</span> <strong>${e(patient.full_name)}</strong>${patient.patient_code ? ` (${e(patient.patient_code)})` : ""}</div>
-    <div class="row"><span class="lbl">Age/Sex:</span> ${e(patient.date_of_birth ? String(new Date().getFullYear() - new Date(patient.date_of_birth).getFullYear()) : "")} / ${e(patient.sex)}</div>
+    <div class="row"><span class="lbl">Age/Sex:</span> ${e(ageFromDob(patient.date_of_birth))} / ${e(patient.sex)}</div>
     <div class="row"><span class="lbl">Date:</span> ${e(dateStr)}</div>
     <div class="rx-symbol">℞</div>
     ${rows || '<div class="rx-item sub">No medicines prescribed.</div>'}`;
@@ -196,6 +216,10 @@ export function printLabRequest(opts: {
   tests: string[];
   catalog?: { name: string }[];
   date?: string;
+  //JJQR - AI (Oct 31, 2026)
+  clinicalNotes?: string | null;
+  diagnoses?: string[];
+  //JJQR - END
 }): boolean {
   const { clinic, doctor, patient, tests } = opts;
   const chosen = new Set(tests.map((t) => t.toUpperCase()));
@@ -203,9 +227,25 @@ export function printLabRequest(opts: {
     (t) => `<div>${chosen.has(t.name.toUpperCase()) ? "☑" : "☐"} ${e(t.name)}</div>`,
   );
   const extras = tests.filter((t) => !(opts.catalog ?? []).some((c) => c.name.toUpperCase() === t.toUpperCase()));
+  //JJQR - AI (Oct 31, 2026)
+  const dxBlock =
+    opts.diagnoses && opts.diagnoses.length
+      ? `<div class="row"><span class="lbl">Diagnosis:</span> ${e(opts.diagnoses.join("; "))}</div>`
+      : "";
+  const notesBlock = opts.clinicalNotes?.trim()
+    ? `<div class="row"><span class="lbl">Clinical notes:</span><br/>${e(opts.clinicalNotes.trim())}</div>`
+    : "";
+  const requestedBlock = tests.length
+    ? `<div class="row"><span class="lbl">Requested tests:</span> ${e(tests.join(", "))}</div>`
+    : "";
+  //JJQR - END
   const inner = `<div class="doc-title">Laboratory Request</div>
     <div class="row"><span class="lbl">Patient:</span> <strong>${e(patient.full_name)}</strong>${patient.patient_code ? ` (${e(patient.patient_code)})` : ""}</div>
+    <div class="row"><span class="lbl">Age/Sex:</span> ${e(ageFromDob(patient.date_of_birth))} / ${e(patient.sex)}</div>
     <div class="row"><span class="lbl">Date:</span> ${e(fmtDate(opts.date ?? new Date().toISOString()))}</div>
+    ${requestedBlock}
+    ${dxBlock}
+    ${notesBlock}
     <div class="checklist">${boxes.join("") || '<div class="sub">No standard panel loaded.</div>'}</div>
     ${extras.length ? `<div class="row"><span class="lbl">Additional:</span> ${e(extras.join(", "))}</div>` : ""}`;
   return wrap("Laboratory Request", clinic, doctor, inner);

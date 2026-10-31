@@ -109,7 +109,10 @@ export async function queryDoctorById(
   doctorId: string,
 ): Promise<DoctorRow | null> {
   try {
-    const row = await api.get<Record<string, unknown>>(`/api/doctors/${doctorId}`, { anonymous: true });
+    //JJQR - AI (Oct 31, 2026)
+    // Staff session required so license/PTR/S2 are not redacted on Rx print.
+    const row = await api.get<Record<string, unknown>>(`/api/doctors/${doctorId}`);
+    //JJQR - END
     return projectDoctor(row);
   } catch {
     return null;

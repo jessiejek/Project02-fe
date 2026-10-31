@@ -63,7 +63,9 @@ export function VersionFooter() {
   }, []);
 
   return (
-    <footer className="shrink-0 px-md py-sm text-center text-label-sm text-on-surface-variant/60">
+    //JJQR - AI (Oct 31, 2026): text-on-surface-variant (no /60) for WCAG AA on label-sm footer
+    <footer className="shrink-0 px-md py-sm text-center text-label-sm text-on-surface-variant">
+      {/*JJQR - END*/}
       FE (v{feVersion})({feStamp ?? "…"}) | BE (
       {api === null && "…"}
       {api === "unreachable" && "unreachable"}
