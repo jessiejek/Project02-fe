@@ -106,6 +106,8 @@ export interface ConsultPatientBannerProps {
   guardianName?: string | null;
   guardianRelationship?: string | null;
   ageYears?: number | null;
+  /** When set, replaces the default inner `max-w-[64rem]` (e.g. completed view column). */
+  contentClassName?: string;
   //JJQR - END
 }
 
@@ -131,6 +133,7 @@ export function ConsultPatientBanner({
   guardianName,
   guardianRelationship,
   ageYears,
+  contentClassName,
 }: ConsultPatientBannerProps) {
   const [allergyEditorOpen, setAllergyEditorOpen] = useState(false);
   const idLine = patientIdentifierLine({ patientCode, patientSex, patientDob });
@@ -175,7 +178,12 @@ export function ConsultPatientBanner({
         )}
       >
         {/* JJQR - AI (Oct 31, 2026) — compact sticky identity at all breakpoints */}
-        <div className="mx-auto flex min-h-[44px] max-w-[64rem] items-center gap-xs">
+        <div
+          className={cn(
+            "mx-auto flex min-h-[44px] max-w-[64rem] items-center gap-xs",
+            contentClassName,
+          )}
+        >
           <span
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary"
             aria-hidden
@@ -186,7 +194,7 @@ export function ConsultPatientBanner({
             <span className="font-medium">{patientName || "—"}</span>
             {metaCompact ? <span className="text-on-surface-variant"> · {metaCompact}</span> : null}
           </p>
-          <div className="flex max-w-[58%] shrink-0 items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-0 max-w-[65%] shrink items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {isPregnant && obAog && (
               <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-xs py-[2px] text-[11px] leading-tight text-primary">
                 Preg {obAog.weeks}w
@@ -224,7 +232,7 @@ export function ConsultPatientBanner({
                 <span className="truncate">{allergyChipLabel}</span>
               </span>
             )}
-            <StatusPill status={paymentStatus === "Paid" ? "Paid" : "Unpaid"} />
+            <span className="shrink-0"><StatusPill status={paymentStatus === "Paid" ? "Paid" : "Unpaid"} /></span>
           </div>
         </div>
         {/* JJQR - END */}
