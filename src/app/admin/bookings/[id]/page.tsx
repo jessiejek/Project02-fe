@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -8,9 +9,10 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
-import { queryBookingById, updateBookingStatus } from "@/lib/data/bookings";
+import { queryBookingById, updateBookingStatus, rescheduleBooking } from "@/lib/data/bookings";
 import { waivePayment, refundPayment } from "@/lib/data/payments";
 import { printHtml, escapeHtml } from "@/lib/print";
+import { RescheduleBookingModal } from "@/components/bookings/RescheduleBookingModal";
 
 const TIMELINE = ["Pending", "ProofSubmitted", "Confirmed", "Completed"];
 
@@ -44,12 +46,17 @@ function newOrNumber(bookingId: string) {
 // updateBooking()/updatePayment() instead of the old single update() helper.
 export default function AdminBookingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [booking, setBooking] = useState<BookingView | null | undefined>(undefined);
   const [reasonModal, setReasonModal] = useState<"confirm" | "reject" | "cancel" | null>(null);
   const [waiveOpen, setWaiveOpen] = useState(false);
   const [refundOpen, setRefundOpen] = useState(false);
   const [reasonText, setReasonText] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
+  const [noShowOpen, setNoShowOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -171,6 +178,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
             <>
               <Button onClick={() => updateBooking({ status: "Confirmed" })}>Confirm Booking</Button>
               <Button variant="danger" onClick={() => setReasonModal("reject")}>Reject Booking</Button>
+              <Button variant="danger" onClick={() => setReasonModal("cancel")}>Cancel Booking</Button>
             </>
           )}
           {booking.status === "ProofSubmitted" && (
@@ -189,8 +197,8 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
           {booking.status === "Confirmed" && (
             <>
               <Button onClick={() => updateBooking({ status: "Completed" })}>Mark Complete</Button>
-              <Button variant="secondary" onClick={() => updateBooking({ status: "NoShow" })}>Mark No Show</Button>
-              <Button variant="secondary" onClick={() => updateBooking({ status: "Rescheduled" })}>Reschedule</Button>
+              <Button variant="secondary" onClick={() => setNoShowOpen(true)}>Mark No Show</Button>
+              <Button variant="secondary" onClick={() => setRescheduleOpen(true)}>Reschedule</Button>
               <Button variant="danger" onClick={() => setReasonModal("cancel")}>Cancel Booking</Button>
             </>
           )}
@@ -344,6 +352,67 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
           />
         </div>
       </Modal>
+
+      <Modal
+        isOpen={noShowOpen}
+        onClose={() => { if (!actionSubmitting) { setNoShowOpen(false); setReasonText(""); setActionError(""); } }}
+        title="Mark No Show"
+        footer={
+          <>
+            <Button variant="secondary" disabled={actionSubmitting} onClick={() => { setNoShowOpen(false); setReasonText(""); setActionError(""); }}>Back</Button>
+            <Button
+              variant="danger"
+              disabled={actionSubmitting}
+              onClick={async () => {
+                setActionError("");
+                setActionSubmitting(true);
+                try {
+                  await updateBooking({ status: "NoShow", cancellationReason: reasonText.trim() || undefined });
+                  setNoShowOpen(false);
+                  setReasonText("");
+                } catch (e) {
+                  setActionError(e instanceof Error ? e.message : "Could not update booking.");
+                } finally {
+                  setActionSubmitting(false);
+                }
+              }}
+            >
+              Confirm No Show
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-md text-body-md text-on-surface-variant">Mark this appointment as a no-show?</p>
+        {actionError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{actionError}</p>}
+        <textarea
+          value={reasonText}
+          onChange={(e) => setReasonText(e.target.value)}
+          placeholder="Reason (optional)"
+          className="w-full rounded-lg border border-outline-variant p-md text-body-md"
+          rows={3}
+        />
+      </Modal>
+
+      <RescheduleBookingModal
+        isOpen={rescheduleOpen}
+        submitting={actionSubmitting}
+        error={actionError}
+        onClose={() => { setRescheduleOpen(false); setActionError(""); }}
+        onConfirm={async (appointmentDate, reason) => {
+          setActionError("");
+          setActionSubmitting(true);
+          try {
+            const result = await rescheduleBooking(id, appointmentDate, reason || undefined);
+            setBooking((prev) => (prev ? { ...prev, status: "Rescheduled" } : prev));
+            setRescheduleOpen(false);
+            setActionSubmitting(false);
+            router.push(`/admin/bookings/${result.new_booking_id}`);
+          } catch (e) {
+            setActionError(e instanceof Error ? e.message : "Could not reschedule.");
+            setActionSubmitting(false);
+          }
+        }}
+      />
     </AppShell>
   );
 }

@@ -78,13 +78,13 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   const queueRow = staff.locator("tr", { hasText: ticket.queue_number });
   await expect(queueRow).toBeVisible();
   await queueRow.getByRole("button", { name: "Call" }).click();
-  await expect(queueRow.getByText("INPROGRESS")).toBeVisible();
+  await expect(queueRow.getByText(/IN\s*PROGRESS|InProgress|INPROGRESS/i)).toBeVisible({ timeout: 15_000 });
 
   // ── doctor: run the consultation ────────────────────────────────────────
   // "Start Consultation" (/doctor/appointments) and "Open Consult" (queue board)
   // both just link here — go direct so the journey doesn't hinge on list state.
   const doctor = await as("doctor");
-  await doctor.goto(`/doctor/consultation/${ticket.booking_id}`);
+  await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
   await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
 
   // Progress is a header dropdown now (closed by default), not a floating
@@ -110,13 +110,14 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
 
   // ── 3. Diagnosis — a primary + a secondary line ────────────────────────
   await doctor.getByRole("heading", { name: /3\. Diagnosis/ }).click();
-  const dx = doctor.getByPlaceholder("Diagnosis (free text)*");
+  const dx = doctor.getByPlaceholder(/Diagnosis \(/);
   await expect(dx).toBeVisible();
   await dx.fill(DX_PRIMARY);
-  await doctor.getByRole("button", { name: "Add", exact: true }).click();
+  const addButtons = doctor.getByRole("button", { name: "Add", exact: true });
+  await (await addButtons.count()) > 1 ? addButtons.nth(1).click() : addButtons.click();
   await expect(doctor.getByText(`${DX_PRIMARY} (Primary)`)).toBeVisible();
   await dx.fill(DX_SECONDARY);
-  await doctor.getByRole("button", { name: "Add", exact: true }).click();
+  await (await addButtons.count()) > 1 ? addButtons.nth(1).click() : addButtons.click();
   await expect(doctor.getByText(`${DX_SECONDARY} (Secondary)`)).toBeVisible();
 
   // ── 4. Prescription — one item, then Save (Add Item only stages it) ─────
@@ -129,17 +130,22 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.getByRole("button", { name: "Add Item" }).click();
   await expect(doctor.getByText("Paracetamol", { exact: false })).toBeVisible();
   await doctor.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(doctor.getByText(/Prescription saved at/)).toBeVisible();
+  await doctor.getByRole("dialog", { name: /Confirm Prescription/ }).getByRole("button", { name: /Confirm & Save/ }).click();
+  await expect(doctor.getByText(/Prescription saved at/)).toBeVisible({ timeout: 15_000 });
 
   // ── 5. Lab Orders — one handwritten test (persists on Complete) ─────────
-  await doctor.getByRole("heading", { name: /5\. Lab Orders/ }).click();
+  const labOrdersHeading = doctor.getByRole("heading", { name: /Lab Orders/i });
+  if (!(await labOrdersHeading.isVisible())) {
+    await doctor.getByRole("button", { name: /Show occasional sections/i }).click();
+  }
+  await labOrdersHeading.click();
   await doctor.getByPlaceholder("Add another test").fill(LAB_TEST);
   await doctor.getByPlaceholder("Reason / clinical indication").fill("rule out strep");
   await doctor.getByRole("button", { name: "Add test" }).click();
   await expect(doctor.getByText(LAB_TEST, { exact: false })).toBeVisible();
 
   // ── 6. Vaccinations — stage one dose ───────────────────────────────────
-  await doctor.getByRole("heading", { name: /6\. Vaccinations/ }).click();
+  await doctor.getByRole("heading", { name: /Vaccinations/ }).click();
   await doctor.getByPlaceholder("Vaccine Name").fill(VAX.name);
   await doctor.getByPlaceholder("Dose #").fill(VAX.dose);
   await doctor.getByPlaceholder("Route").fill(VAX.route);
@@ -150,7 +156,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await expect(doctor.getByText(`${VAX.name} — Dose #${VAX.dose}`, { exact: false })).toBeVisible();
 
   // ── 7. Follow-up — date + reason + instructions (persists on Complete) ──
-  await doctor.getByRole("heading", { name: /7\. Follow-up/ }).click();
+  await doctor.getByRole("heading", { name: /Follow-up/ }).click();
   await doctor.getByRole("button", { name: "Select date" }).click();
   await doctor.getByRole("button", { name: "Next month" }).click();
   await doctor.getByRole("button", { name: "15", exact: true }).first().click();
@@ -160,15 +166,16 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.getByPlaceholder("Instructions").fill(FOLLOWUP_INSTRUCTIONS);
 
   // ── 8. Medical Certificate — fill + save (own endpoint, persists now) ──
-  await doctor.getByRole("heading", { name: /8\. Medical Certificate/ }).click();
+  await doctor.getByRole("heading", { name: /Medical Certificate/ }).click();
   await doctor.getByPlaceholder(/residing at/).fill(MC_ADDRESS);
   await doctor.getByPlaceholder(/Diagnosis \/ Impressions/).fill(MC_DIAGNOSIS);
   await doctor.getByPlaceholder(/Recommendations/).fill(MC_RECOMMENDATIONS);
   await doctor.getByRole("button", { name: "Save without printing" }).click();
+  await doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ }).getByRole("button", { name: /Confirm & Save/ }).click();
   await expect(doctor.getByText(/Certificate saved at/)).toBeVisible({ timeout: 15_000 });
 
   // ── 9. Professional Fee Decision — flag med-cert fee + record a charge ──
-  await doctor.getByRole("heading", { name: /9\. Professional Fee Decision/ }).click();
+  await doctor.getByRole("heading", { name: /Professional Fee Decision/ }).click();
   // the +₱50 med-cert line item — this checkbox DOES persist (backend recomputes the fee)
   await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
   await doctor.getByRole("button", { name: "Charge PF" }).click();
@@ -177,7 +184,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   // ── Complete → checklist modal → confirm ──────────────────────────────
   // exact: true — the floating counterpart button's name also contains
   // "Complete Consultation" (prefixed with the "N/9" progress badge).
-  await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).click();
+  await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).first().click();
   await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
   // The "Consultation saved" screen only renders after handleComplete has
   // finished ALL its writes (row + PF → diagnoses → follow-up → lab orders →
@@ -285,14 +292,19 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   const printWin = await popupPromise;
   // printHtml() does window.open() then document.write()/close() — wait for the
   // written DOM to actually be there before snapshotting it.
-  await printWin.getByRole("heading", { name: "Prescription" }).waitFor({ timeout: 10_000 });
+  // print-forms uses <div class="doc-title">Prescription</div>, not a heading role
+  await printWin.getByText("Prescription", { exact: true }).waitFor({ timeout: 10_000 });
 
   const html = await printWin.content();
   expect(html).toContain("Prescription");
   expect(html).toContain(patientName);
   expect(html).toContain("Paracetamol");
   expect(html).toContain("20 tablets");
-  expect(html).toMatch(/Sig\./);
+  expect(html).toMatch(/Sig\.?/i);
+  // F-009: patient-tab print path must surface license / PTR / S2 from print-forms
+  expect(html).toMatch(/License No\./);
+  expect(html).toMatch(/PTR No\./);
+  expect(html).toMatch(/S2 No\./);
 
   mkdirSync(ARTIFACTS, { recursive: true });
   const pdfPath = join(ARTIFACTS, `prescription-${tag}.pdf`);

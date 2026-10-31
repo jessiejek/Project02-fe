@@ -17,6 +17,16 @@ import { VitalsEditor } from "@/components/doctor/VitalsEditor";
 import { PatientHistoryModal } from "@/components/doctor/PatientHistoryModal";
 import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
+//JJQR - AI (Oct 31, 2026)
+import { ConsultPatientBanner } from "@/components/doctor/ConsultPatientBanner";
+import { ConsultMobileSectionStepper } from "@/components/doctor/ConsultMobileSectionStepper";
+import { Icd10DiagnosisField } from "@/components/doctor/Icd10DiagnosisField";
+import {
+  queryPatientAllergies,
+  replacePatientAllergies,
+  type PatientAllergyRow,
+} from "@/lib/data/patients";
+//JJQR - END
 import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
@@ -52,7 +62,12 @@ import {
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
 import { queryPatientById } from "@/lib/data/patients";
-import { printMedicalCertificate, printLabRequest } from "@/lib/print-forms";
+import { printMedicalCertificate } from "@/lib/print-forms";
+import {
+  printLabOrdersForBooking,
+  printPrescriptionForBooking,
+} from "@/lib/consult-print";
+import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
 import type { Consultation, Diagnosis, SoapTemplate, PrescriptionGroup, VitalFieldTemplate } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 
@@ -78,6 +93,9 @@ function mapRxGroup(g: RxGroupRow): PrescriptionGroup {
       durationKind: (i.duration_kind as "Maintain" | "Days" | "Weeks" | null) ?? null,
       durationValue: i.duration_value ?? null,
       indication: i.indication ?? null,
+      //JJQR - AI (Oct 31, 2026)
+      route: i.route ?? null,
+      //JJQR - END
     })),
   };
 }
@@ -123,8 +141,8 @@ const SECTIONS = [
 // contradicted that explicit section).
 /** Consult2 / Grace clinic: always chart Rx + follow-up as well as SOAP/vitals/Dx. */
 const REQUIRED_SECTIONS = [0, 1, 2, 3, 6];
-/** Labs / vaccinations / med-cert / PF — still available, not in the default stack. */
-const OCCASIONAL_SECTIONS = [4, 5, 7, 8] as const;
+/** Labs / med-cert / PF — still available, not in the default stack (vaccinations stay visible). */
+const OCCASIONAL_SECTIONS = [4, 7, 8] as const;
 const SECTION_ORDER = [0, 1, 2, 3, 6, 4, 5, 7, 8] as const;
 
 type SectionStatus = "complete" | "warning" | "partial" | "empty";
@@ -184,6 +202,16 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const initialMode = (searchParams.get("mode") as "complete" | "view" | "amend") ?? "complete";
 
   const [loaded, setLoaded] = useState(false);
+  //JJQR - AI (Oct 31, 2026)
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [patientAllergies, setPatientAllergies] = useState<PatientAllergyRow[]>([]);
+  const [nkda, setNkda] = useState(false);
+  const formDirtyRef = useRef(false);
+  //JJQR - AI (Oct 31, 2026) — F-010 beforeunload baseline
+  const completeBaselineRef = useRef<string | null>(null);
+  const consultationFinalizedRef = useRef(false);
+  //JJQR - END
   const [booking, setBooking] = useState<ConsultationBooking | null>(null);
   const [consultationId, setConsultationId] = useState<string | null>(null);
   // Doctor.md §4: "View Last Visit SOAP" quick reference — the most recent
@@ -210,8 +238,14 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [certConfirmPrint, setCertConfirmPrint] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
   const [openSection, setOpenSection] = useState(0);
-  /** Consult2: occasional sections hidden until the doctor asks for them. */
+  //JJQR - AI (Oct 31, 2026) — complete mode shows all sections; no occasional toggle
+  /** Consult2: occasional sections hidden until the doctor asks for them (not in complete mode). */
   const [showOccasional, setShowOccasional] = useState(false);
+  const revealOccasionalSections = mode === "complete" || showOccasional;
+  const visibleSectionOrder = SECTION_ORDER.filter(
+    (i) => revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]),
+  );
+  //JJQR - END
   /** Explicit escape hatch when Grace would omit medicines (rare). */
   const [noMedsConfirmed, setNoMedsConfirmed] = useState(false);
   // Bumped after each in-place prescription save to remount the embedded
@@ -352,24 +386,55 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Section 3: Diagnosis
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
   const [newDiagnosisText, setNewDiagnosisText] = useState("");
+  //JJQR - AI (Oct 31, 2026)
+  const [newDiagnosisIcd, setNewDiagnosisIcd] = useState<string | null>(null);
+  //JJQR - END
   // Doctor's reusable diagnoses (managed in Settings).
   const [diagnosisTemplates, setDiagnosisTemplates] = useState<DiagnosisTemplateRow[]>([]);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [saveTplLabel, setSaveTplLabel] = useState("");
 
-  function addDiagnosisLine(text: string) {
+  function addDiagnosisLine(text: string, icd10Code: string | null = null) {
     const t = text.trim();
     if (!t) return;
     setDiagnoses((prev) => [
       ...prev,
-      { code: "—", description: t, type: prev.length === 0 ? "Primary" : "Secondary" },
+      {
+        code: icd10Code ?? "—",
+        description: t,
+        type: prev.length === 0 ? "Primary" : "Secondary",
+        //JJQR - AI (Oct 31, 2026)
+        icd10Code,
+        //JJQR - END
+      },
     ]);
+    formDirtyRef.current = true;
   }
   function addDiagnosis() {
     if (!newDiagnosisText.trim()) return;
-    addDiagnosisLine(newDiagnosisText);
+    addDiagnosisLine(newDiagnosisText, newDiagnosisIcd);
     setNewDiagnosisText("");
+    setNewDiagnosisIcd(null);
   }
+
+  //JJQR - AI (Oct 31, 2026)
+  async function persistAllergies(nextRows: PatientAllergyRow[], nextNkda: boolean) {
+    if (!booking) return;
+    const payload = nextNkda
+      ? [{ allergen: "NKDA", is_nkda: true }]
+      : nextRows.filter((a) => !a.is_nkda).map((a) => ({
+          allergen: a.allergen,
+          reaction: a.reaction,
+          severity: a.severity,
+          is_nkda: false,
+        }));
+    const saved = await replacePatientAllergies(null as never, booking.patientId, payload);
+    setPatientAllergies(saved);
+    setNkda(saved.some((a) => a.is_nkda));
+    formDirtyRef.current = true;
+  }
+  //JJQR - END
+
   async function saveDiagnosisTemplate() {
     const label = saveTplLabel.trim();
     const body = newDiagnosisText.trim();
@@ -401,6 +466,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [newLab, setNewLab] = useState<LabOrderDraft>(BLANK_LAB);
   const [labCatalog, setLabCatalog] = useState<LabTestRow[]>([]);
   const [savingLabs, setSavingLabs] = useState(false);
+  const [printingLabs, setPrintingLabs] = useState(false);
+  const [printingRx, setPrintingRx] = useState(false);
   const [labsSavedAt, setLabsSavedAt] = useState<string | null>(null);
 
   function addLabOrder() {
@@ -421,6 +488,90 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   // §16.8 Form 3 — persist the lab request (replace-all on consultation) then
   // optionally print it. Requires a saved consultation.
+  function labPrintOverrides() {
+    return {
+      tests: labOrders.filter((l) => l.testName.trim()).map((l) => l.testName.trim()),
+      catalog: labCatalog.map((t) => ({ name: t.name })),
+      diagnoses: diagnoses
+        .map((d) =>
+          formatConsultationDiagnosisLabel({
+            icd10_code: d.icd10Code ?? null,
+            custom_description: d.description,
+          }),
+        )
+        .filter(Boolean),
+      clinicalNotes: [assessment, plan].filter(Boolean).join("\n"),
+      date: booking?.appointmentDate,
+    };
+  }
+
+  async function runPrintLabOrders() {
+    if (!booking) return;
+    const { tests } = labPrintOverrides();
+    if (tests.length === 0) return;
+    setPrintingLabs(true);
+    try {
+      await printLabOrdersForBooking(bookingId, labPrintOverrides());
+    } finally {
+      setPrintingLabs(false);
+    }
+  }
+
+  async function runPrintPrescription() {
+    const group = prescriptionGroup;
+    if (!booking || !group?.items.length) return;
+    setPrintingRx(true);
+    try {
+      await printPrescriptionForBooking(bookingId, {
+        date: booking.appointmentDate,
+        items: group.items.map((i) => ({
+          generic_name: i.genericName,
+          dosage: i.dosage,
+          quantity: i.quantity,
+          instruction: i.instruction,
+          timing: i.timing,
+          meal_relation: i.mealRelation,
+          duration_kind: i.durationKind,
+          duration_value: i.durationValue,
+          indication: i.indication,
+          is_controlled_substance: i.isControlledSubstance,
+          route: i.route ?? null,
+        })),
+      });
+    } finally {
+      setPrintingRx(false);
+    }
+  }
+
+  function consultPrintButtons(className?: string) {
+    const showRx = (prescriptionGroup?.items.length ?? 0) > 0;
+    const showLabs = labOrders.some((l) => l.testName.trim());
+    //JJQR - AI (Oct 31, 2026)
+    return (
+      <div className={className ?? "flex flex-wrap gap-sm"}>
+        <Button
+          variant="secondary"
+          loading={printingRx}
+          disabled={!showRx}
+          onClick={() => void runPrintPrescription()}
+        >
+          <Icon name="print" className="text-[16px]" />
+          Print Prescription
+        </Button>
+        <Button
+          variant="secondary"
+          loading={printingLabs}
+          disabled={!showLabs}
+          onClick={() => void runPrintLabOrders()}
+        >
+          <Icon name="print" className="text-[16px]" />
+          Print Lab Orders
+        </Button>
+      </div>
+    );
+    //JJQR - END
+  }
+
   async function handleSaveLabOrders(printAfter: boolean) {
     if (!booking) return;
     setSavingLabs(true);
@@ -442,29 +593,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           })),
       );
       setLabsSavedAt(new Date().toLocaleTimeString());
-      if (!printAfter) return;
-      const [doc, pat] = await Promise.all([
-        queryDoctorById(supabase, booking.doctorId),
-        queryPatientById(supabase, booking.patientId),
-      ]);
-      printLabRequest({
-        clinic: {
-          clinic_name: clinicRow?.clinic_name ?? "Grace Medical Clinic",
-          address: clinicRow?.address ?? "",
-          contact_number: clinicRow?.contact_number ?? null,
-        },
-        doctor: {
-          full_name: booking.doctorName || (doc?.staff_accounts?.full_name ?? ""),
-          license_number: doc?.license_number ?? null,
-          ptr_number: doc?.ptr_number ?? null,
-        },
-        patient: {
-          full_name: pat ? `${pat.first_name} ${pat.last_name}`.trim() : "",
-          patient_code: pat?.patient_code,
-        },
-        tests: labOrders.filter((l) => l.testName.trim()).map((l) => l.testName.trim()),
-        catalog: labCatalog.map((t) => ({ name: t.name })),
-      });
+      if (printAfter) await runPrintLabOrders();
     } finally {
       setSavingLabs(false);
     }
@@ -584,13 +713,25 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      //JJQR - AI (Oct 31, 2026)
+      setLoadError(null);
+      const abort = new AbortController();
+      const timeout = setTimeout(() => abort.abort(), 20_000);
+      try {
+      //JJQR - END
       const supabase = null as never;
       const bookingRow = await queryBookingById(supabase, bookingId);
       if (cancelled) return;
       if (!bookingRow) {
-        setLoaded(true);
         return;
       }
+      //JJQR - AI (Oct 31, 2026)
+      const allergyRows = await queryPatientAllergies(supabase, bookingRow.patient_id).catch(() => [] as PatientAllergyRow[]);
+      if (!cancelled) {
+        setPatientAllergies(allergyRows);
+        setNkda(allergyRows.some((a) => a.is_nkda));
+      }
+      //JJQR - END
       const realBooking: ConsultationBooking = {
         id: bookingRow.booking_id,
         patientId: bookingRow.patient_id,
@@ -713,6 +854,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           code: d.icd10_code ?? "—",
           description: d.custom_description ?? "",
           type: d.type as Diagnosis["type"],
+          //JJQR - AI (Oct 31, 2026)
+          icd10Code: d.icd10_code ?? null,
+          //JJQR - END
         }));
         loadedConsultation = {
           id: consultRes.data.consultation_id,
@@ -734,6 +878,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           followUpReminder: followRes.data?.reminder_enabled ?? true,
         };
         if (consultRes.data.status === "Completed" || consultRes.data.status === "Amended") {
+          //JJQR - AI (Oct 31, 2026) — F-010: no beforeunload on finalized records
+          consultationFinalizedRef.current = true;
+          //JJQR - END
           const logs = await queryAuditLogs(supabase, {
             entityType: "Consultation",
             entityId: consultRes.data.consultation_id,
@@ -822,13 +969,22 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           })
           .catch(() => {});
       }
-      setLoaded(true);
+      //JJQR - AI (Oct 31, 2026)
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : "Could not load consultation data.");
+        }
+      } finally {
+        clearTimeout(timeout);
+        if (!cancelled) setLoaded(true);
+      }
+      //JJQR - END
     }
     load();
     return () => {
       cancelled = true;
     };
-  }, [bookingId]);
+  }, [bookingId, loadAttempt]);
 
   // Doctor.md requires BP + HR when those templates exist; never read hardcoded
   // Record keys that may be missing before templates load (or if form_key differs).
@@ -862,8 +1018,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     mcDiagnosis.trim() !== "" || mcRecommendations.trim() !== "" || mcAddress.trim() !== "",
     pfDecision !== null,
   ];
+  const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
+  const followUpSatisfied = sectionSatisfied[6];
   function sectionStatus(i: number): SectionStatus {
-    if (sectionSatisfied[i]) return "complete";
+    const satisfied = i === 3 ? rxSatisfied : sectionSatisfied[i];
+    if (satisfied) return "complete";
     if (REQUIRED_SECTIONS.includes(i)) return "warning";
     return sectionHasDraft[i] ? "partial" : "empty";
   }
@@ -907,9 +1066,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // explicit: Chief Complaint, >=1 diagnosis, BP, HR — "everything else
   // (...PF decision) is optional/recommended." This previously also gated on
   // Professional Fee Decision, contradicting that section outright.
-  const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
-  const followUpSatisfied = sectionSatisfied[6];
-  // Consult2 / Grace: cannot Complete without Rx (or explicit no-meds) and follow-up.
   const canComplete =
     sectionSatisfied[0] &&
     sectionSatisfied[1] &&
@@ -948,7 +1104,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   function buildConsultationRecord(): Consultation {
     return {
-      id: consultationId ?? `c${Date.now()}`,
+      //JJQR - AI (Oct 31, 2026) — avoid Date.now() impure call (eslint react-hooks/purity)
+      id: consultationId ?? "draft",
+      //JJQR - END
       bookingId,
       patientId: booking!.patientId,
       doctorName: booking!.doctorName,
@@ -1012,7 +1170,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     await replaceDiagnoses(
       supabase,
       savedId,
-      diagnoses.map((d) => ({ icd10_code: null, custom_description: d.description, type: toDiagnosisType(d) })),
+      diagnoses.map((d) => ({
+        //JJQR - AI (Oct 31, 2026)
+        icd10_code: d.icd10Code ?? (d.code !== "—" ? d.code : null),
+        //JJQR - END
+        custom_description: d.description,
+        type: toDiagnosisType(d),
+      })),
     );
 
     if (followUpDate) {
@@ -1097,6 +1261,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       await updateQueueEntry(supabase, bookingId, "complete");
       setSavedConsultation(buildConsultationRecord());
       setChecklistOpen(false);
+      //JJQR - AI (Oct 31, 2026) — F-010: clear dirty before success UI / navigation
+      formDirtyRef.current = false;
+      completeBaselineRef.current = currentFormSnapshot();
+      consultationFinalizedRef.current = true;
+      //JJQR - END
       setJustCompleted(true);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not complete the consultation. Try again.");
@@ -1269,10 +1438,58 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, canComplete]);
 
+  //JJQR - AI (Oct 31, 2026) — F-010 beforeunload, F-022 autosave
+  useEffect(() => {
+    if (loaded && mode === "complete" && completeBaselineRef.current === null) {
+      completeBaselineRef.current = currentFormSnapshot();
+    }
+  }, [loaded, mode]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (justCompleted || mode === "view" || consultationFinalizedRef.current) {
+      formDirtyRef.current = false;
+      return;
+    }
+    const dirty =
+      mode === "amend"
+        ? isDirty
+        : completeBaselineRef.current !== null && currentFormSnapshot() !== completeBaselineRef.current;
+    formDirtyRef.current = dirty;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (formDirtyRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  });
+
+  useEffect(() => {
+    if (mode !== "complete" || !loaded || !booking) return;
+    const timer = setInterval(() => {
+      void handleSaveDraft();
+    }, 30_000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, loaded, booking?.id]);
+  //JJQR - END
+
   if (!loaded) {
     return (
       <AppShell role="doctor">
         <div className="space-y-md">
+          {/* JJQR - AI (Oct 31, 2026) — F-024 */}
+          {loadError && (
+            <div className="flex flex-wrap items-center justify-between gap-sm rounded-lg border border-error/30 bg-error/5 px-md py-sm">
+              <p className="text-body-md text-error">{loadError}</p>
+              <Button variant="secondary" onClick={() => { setLoaded(false); setLoadAttempt((n) => n + 1); }}>
+                Retry
+              </Button>
+            </div>
+          )}
+          {/* JJQR - END */}
           <SkeletonCard lines={2} />
           <SkeletonCard lines={4} />
           <SkeletonCard lines={4} />
@@ -1291,7 +1508,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               <Icon name="check_circle" />
               Consultation saved
             </span>
-            <div className="flex flex-col gap-sm sm:flex-row">
+            <div className="flex flex-col gap-sm sm:flex-row sm:items-center">
+              {consultPrintButtons("flex flex-col gap-sm sm:flex-row")}
               <Link href="/doctor/dashboard">
                 <Button variant="secondary" className="w-full sm:w-auto">Back to Queue</Button>
               </Link>
@@ -1321,6 +1539,45 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const sc = savedConsultation;
     return (
       <AppShell role="doctor">
+        {/* JJQR - AI (Oct 31, 2026) — allergies editable on completed view */}
+        <ConsultPatientBanner
+          patientName={booking.patientName}
+          patientCode={booking.patientCode}
+          patientSex={booking.patientSex}
+          patientDob={booking.patientDob}
+          paymentStatus={booking.paymentStatus}
+          allergies={patientAllergies}
+          nkda={nkda}
+          mode="view"
+          onToggleNkda={(next) => {
+            setNkda(next);
+            void persistAllergies(next ? [] : patientAllergies.filter((a) => !a.is_nkda), next);
+          }}
+          onAddAllergy={(allergen) => {
+            const next = [
+              ...patientAllergies.filter((a) => !a.is_nkda),
+              {
+                id: `local-${Date.now()}`,
+                patient_id: booking.patientId,
+                allergen,
+                reaction: null,
+                severity: null,
+                is_nkda: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              },
+            ];
+            setPatientAllergies(next);
+            setNkda(false);
+            void persistAllergies(next, false);
+          }}
+          onRemoveAllergy={(index) => {
+            const filtered = patientAllergies.filter((a) => !a.is_nkda);
+            const next = filtered.filter((_, i) => i !== index);
+            setPatientAllergies(next);
+            void persistAllergies(next, false);
+          }}
+        />
         <div className="mx-auto max-w-[40rem] space-y-lg">
           <div className="flex flex-wrap items-center justify-between gap-md">
             <div>
@@ -1336,6 +1593,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               </p>
             </div>
             <div className="flex flex-wrap gap-sm">
+              {consultPrintButtons()}
               <Button variant="secondary" onClick={() => setAmendHistoryOpen(true)}>
                 History
               </Button>
@@ -1448,7 +1706,47 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // mode === "complete" | "amend"
   return (
     <AppShell role="doctor">
-      <div className="space-y-lg">
+      {/* JJQR - AI (Oct 31, 2026) — F-002 sticky patient banner */}
+      <ConsultPatientBanner
+        patientName={booking.patientName}
+        patientCode={booking.patientCode}
+        patientSex={booking.patientSex}
+        patientDob={booking.patientDob}
+        paymentStatus={booking.paymentStatus}
+        allergies={patientAllergies}
+        nkda={nkda}
+        mode={mode}
+        onToggleNkda={(next) => {
+          setNkda(next);
+          void persistAllergies(next ? [] : patientAllergies.filter((a) => !a.is_nkda), next);
+        }}
+        onAddAllergy={(allergen) => {
+          const next = [
+            ...patientAllergies.filter((a) => !a.is_nkda),
+            {
+              id: `local-${Date.now()}`,
+              patient_id: booking.patientId,
+              allergen,
+              reaction: null,
+              severity: null,
+              is_nkda: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ];
+          setPatientAllergies(next);
+          setNkda(false);
+          void persistAllergies(next, false);
+        }}
+        onRemoveAllergy={(index) => {
+          const filtered = patientAllergies.filter((a) => !a.is_nkda);
+          const next = filtered.filter((_, i) => i !== index);
+          setPatientAllergies(next);
+          void persistAllergies(next, false);
+        }}
+      />
+      {/* JJQR - END */}
+      <div className="min-w-0 space-y-lg overflow-x-hidden">
         {mode === "amend" && (
           <Toast variant="info" message="Manual save only — autosave is off in amend mode." dismissible={false} />
         )}
@@ -1459,13 +1757,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
         <div className="flex flex-wrap items-center justify-between gap-md">
           <div>
+            {/* JJQR - AI (Oct 31, 2026) — patient identity moved to ConsultPatientBanner */}
             <div className="flex flex-wrap items-center gap-sm">
-              <h1 className="text-headline-md text-on-surface">{booking.patientName || "Patient"}</h1>
-              <StatusPill status={booking.paymentStatus} />
+              <h1 className="text-headline-md text-on-surface">Consultation</h1>
             </div>
-            {patientIdentifierLine(booking) && (
-              <p className="text-label-md text-on-surface-variant">{patientIdentifierLine(booking)}</p>
-            )}
+            {/* JJQR - END */}
             {/* Noticeable, and reversible — staff's New/Follow-up tag from
                 check-in drives the fee, so the doctor needs to see it without
                 digging into §9, and can flip it right here if it's wrong. */}
@@ -1477,7 +1773,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   aria-pressed={visitType === vt}
                   onClick={() => setVisitType(vt)}
                   className={cn(
-                    "rounded-full border px-md py-xs text-label-md font-medium",
+                    "min-h-[44px] rounded-full border px-md py-xs text-label-md font-medium",
                     visitType === vt
                       ? vt === "New"
                         ? "border-primary bg-primary/10 text-primary"
@@ -1551,6 +1847,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
               View Patient History
             </Button>
+            {consultPrintButtons()}
             {mode === "complete" ? (
               <>
                 <Button variant="secondary" loading={savingDraft} onClick={handleSaveDraft}>Save Draft</Button>
@@ -1569,15 +1866,25 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           </div>
         </div>
 
-        <div className="space-y-md">
-            <div className="rounded-lg border border-primary/30 bg-primary/5 px-md py-sm text-label-md text-on-surface">
-              <strong>Consult2 (experiment)</strong> — production page unchanged at{" "}
-              <Link href={`/doctor/consultation/${bookingId}`} className="text-primary underline">
-                /doctor/consultation/{bookingId}
-              </Link>
-              . Grace path: SOAP → Vitals → Dx → Rx → Follow-up first; Labs/Vax/Cert/Fee behind “Show occasional”.
-            </div>
-            {SECTION_ORDER.filter((i) => showOccasional || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number])).map((i, displayIdx) => {
+        <div className="space-y-md pb-28 pb-[max(7rem,env(safe-area-inset-bottom))]">
+            {/* JJQR - AI (Oct 31, 2026) — F-026 */}
+            {mode !== "complete" && (
+            <p className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
+              Optional sections — labs, medical certificate, and professional fee — appear when you choose
+              &ldquo;Show occasional sections&rdquo;. Vaccinations stay in the main flow.
+            </p>
+            )}
+            {/* JJQR - END */}
+            {/* JJQR - AI (Oct 31, 2026) — F-011 mobile section progress */}
+            <ConsultMobileSectionStepper
+              sections={SECTIONS}
+              sectionOrder={visibleSectionOrder}
+              sectionStatus={visibleSectionOrder.map((i) => sectionStatus(i))}
+              openSection={openSection}
+              onSelect={setOpenSection}
+            />
+            {/* JJQR - END */}
+            {visibleSectionOrder.map((i, displayIdx) => {
               const section = SECTIONS[i];
               const isOpen = openSection === i;
               return (
@@ -1585,7 +1892,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   <button
                     type="button"
                     onClick={() => setOpenSection(isOpen ? -1 : i)}
-                    className="-m-lg flex w-[calc(100%+2*var(--spacing-lg))] cursor-pointer items-center justify-between rounded-xl p-lg text-left transition-colors hover:bg-surface-container-low"
+                    className="-m-lg flex min-h-[44px] w-[calc(100%+2*var(--spacing-lg))] cursor-pointer items-center justify-between rounded-xl p-lg text-left transition-colors hover:bg-surface-container-low"
                   >
                     <h3 className="flex items-center gap-sm text-headline-sm text-on-surface">
                       {renderSectionIndicator(i, "text-[18px]")}
@@ -1742,15 +2049,19 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         </select>
                       )}
 
-                      <div className="flex gap-sm">
-                        <input
-                          placeholder="Diagnosis (free text)*"
-                          value={newDiagnosisText}
-                          onChange={(e) => setNewDiagnosisText(e.target.value)}
-                          className="flex-1 rounded-lg border border-outline-variant px-md py-sm"
+                      <div className="flex flex-col gap-sm sm:flex-row sm:items-end">
+                        <Icd10DiagnosisField
+                          className="flex-1"
+                          description={newDiagnosisText}
+                          icd10Code={newDiagnosisIcd}
+                          onChange={({ description, icd10Code }) => {
+                            setNewDiagnosisText(description);
+                            setNewDiagnosisIcd(icd10Code);
+                          }}
                         />
-                        <Button variant="secondary" onClick={addDiagnosis}>Add</Button>
+                        <Button variant="secondary" className="min-h-[44px]" onClick={addDiagnosis}>Add</Button>
                       </div>
+                      {/* JJQR - END — replaced free-text-only diagnosis input (F-007) */}
                       <div className="flex items-center justify-between text-label-sm">
                         <button
                           type="button"
@@ -1760,7 +2071,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         >
                           Save typed text as a template
                         </button>
-                        <Link href="/doctor/settings" className="text-on-surface-variant hover:underline">Manage templates</Link>
+                        <Link href="/doctor/templates" className="text-on-surface-variant hover:underline">Manage templates</Link>
                       </div>
                     </div>
                   )}
@@ -1768,7 +2079,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   {isOpen && i === 3 && (
                     <div className="mt-md space-y-md">
                       {rxSavedAt && <Toast key={rxSavedAt} variant="success" message={`Prescription saved at ${rxSavedAt}.`} />}
-                      <label className="flex items-start gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-md text-on-surface">
+                      <label className="flex min-h-[44px] items-start gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-md text-on-surface">
                         <input
                           type="checkbox"
                           className="mt-xs"
@@ -1790,6 +2101,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         bookingId={bookingId}
                         group={prescriptionGroup}
                         embedded
+                        patientAllergies={patientAllergies.filter((a) => !a.is_nkda)}
                         onSaved={async () => {
                           const supabase = null as never;
                           const rows = await queryRxGroups(supabase, { bookingId });
@@ -1807,6 +2119,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
                       {labOrders.length > 0 && (
                         <div className="flex flex-wrap items-center justify-end gap-sm">
+                          <Button variant="secondary" loading={printingLabs} disabled={!booking} onClick={() => void runPrintLabOrders()}>
+                            <Icon name="print" className="text-[16px]" />
+                            Print Lab Orders
+                          </Button>
                           <Button loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(true)}>
                             Save & Print Lab Request
                           </Button>
@@ -1953,7 +2269,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                         >
                           Save as Template
                         </button>
-                        <Link href="/doctor/settings" className="text-label-sm text-on-surface-variant hover:underline">
+                        <Link href="/doctor/templates" className="text-label-sm text-on-surface-variant hover:underline">
                           Manage templates
                         </Link>
                         <Button loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(true)}>
@@ -2107,17 +2423,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               );
             })}
 
-            {!showOccasional && (
+            {mode !== "complete" && !showOccasional && (
               <Button
                 type="button"
                 variant="secondary"
                 className="w-full"
                 onClick={() => setShowOccasional(true)}
               >
-                Show occasional sections (Labs · Vaccinations · Med cert · Fee)
+                Show occasional sections (Labs · Med cert · Fee)
               </Button>
             )}
-            {showOccasional && (
+            {mode !== "complete" && showOccasional && (
               <Button
                 type="button"
                 variant="ghost"
@@ -2489,6 +2805,18 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             <p><strong>Objective:</strong> {lastVisitSoap.objective}</p>
             <p><strong>Assessment:</strong> {lastVisitSoap.assessment}</p>
             <p><strong>Plan:</strong> {lastVisitSoap.plan}</p>
+            {/* JJQR - AI (Oct 31, 2026) — F-021 prior vitals in last-visit modal */}
+            {lastVisitVitalReadings.length > 0 && (
+              <div className="rounded-lg bg-surface-container-low p-sm">
+                <p className="text-label-md font-medium text-on-surface">Vitals</p>
+                <p className="text-body-md">
+                  {defaultVitalTemplates
+                    .map((t) => `${t.description}: ${lastVisitVitalReadings.find((r) => r.templateId === t.id)?.value ?? "—"}${t.unit ? ` ${t.unit}` : ""}`)
+                    .join(" · ")}
+                </p>
+              </div>
+            )}
+            {/* JJQR - END */}
           </div>
         )}
       </Modal>
@@ -2505,7 +2833,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         className="fixed left-md top-1/2 z-30 hidden max-h-[70vh] w-44 -translate-y-1/2 flex-col gap-xs overflow-y-auto rounded-xl border border-outline-variant bg-surface-container-lowest p-sm shadow-lg lg:flex"
       >
         <p className="px-xs pb-xs text-label-sm text-on-surface-variant">Sections</p>
-        {SECTION_ORDER.filter((i) => showOccasional || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number])).map((i, displayIdx) => (
+        {visibleSectionOrder.map((i, displayIdx) => (
           <button
             key={SECTIONS[i]}
             type="button"
@@ -2522,12 +2850,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           </button>
         ))}
       </nav>
-      <div className="fixed bottom-md right-md z-40 flex items-center gap-xs sm:bottom-lg sm:right-lg sm:gap-sm">
+      <div className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-md z-40 flex items-center gap-xs sm:right-lg sm:gap-sm">
         <Button
           variant="secondary"
           onClick={() => setHistoryOpen(true)}
           aria-label="Show History"
-          className="whitespace-nowrap px-sm shadow-lg sm:px-lg"
+          className="min-h-[44px] whitespace-nowrap px-sm shadow-lg sm:px-lg"
         >
           <Icon name="history" className="text-[18px]" />
           <span className="hidden sm:inline">Show History</span>
@@ -2537,7 +2865,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             disabled={!canComplete}
             onClick={() => setChecklistOpen(true)}
             aria-label="Complete Consultation"
-            className="whitespace-nowrap px-sm shadow-lg sm:px-lg"
+            className="min-h-[44px] whitespace-nowrap px-sm shadow-lg sm:px-lg"
           >
             <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
               {sectionSatisfied.filter(Boolean).length}/{SECTIONS.length}
@@ -2551,9 +2879,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   );
 }
 
-// CONSULT2 — parallel experiment. Original lives at /doctor/consultation/[bookingId].
-// Ideas: Grace Complete gates (Rx + follow-up), section rail, occasional sections
-// collapsed behind a reveal. Does not replace the production consult page.
+//JJQR - AI (Oct 31, 2026)
+// Canonical doctor consultation page (/doctor/consultation/[bookingId] redirects here).
+//JJQR - END
 export default function Consultation2Page({ params }: { params: Promise<{ bookingId: string }> }) {
   const { bookingId } = use(params);
   return (

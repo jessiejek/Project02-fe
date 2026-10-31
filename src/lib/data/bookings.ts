@@ -260,6 +260,19 @@ export async function updateBookingStatus(
   await api.put(`/api/bookings/${bookingId}/status`, { status, reason: opts.reason ?? null });
 }
 
+//JJQR - AI (Oct 31, 2026)
+export async function rescheduleBooking(
+  bookingId: string,
+  appointmentDate: string,
+  reason?: string,
+): Promise<{ old_booking_id: string; new_booking_id: string }> {
+  return api.put(`/api/bookings/${bookingId}/reschedule`, {
+    appointment_date: appointmentDate,
+    reason: reason ?? null,
+  });
+}
+//JJQR - END
+
 export async function queryBookingById(_supabase: unknown, bookingId: string): Promise<BookingRow | null> {
   try {
     return projectBooking(await api.get<Raw>(`/api/bookings/${bookingId}`));

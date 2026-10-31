@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Button } from "@/components/ui/Button";
 import { DataTable } from "@/components/ui/DataTable";
@@ -19,6 +20,7 @@ interface DoctorPatientRow {
 // Stitch patients_list_doctor — de-duplicated roster from booking history,
 // paginated per Addendum D10 (fixes the original's hard 50-item cap).
 export default function DoctorPatientsPage() {
+  const router = useRouter();
   const { session, loading } = useSession();
   const [search, setSearch] = useState("");
   const [rows, setRows] = useState<DoctorPatientRow[]>([]);
@@ -82,11 +84,19 @@ export default function DoctorPatientsPage() {
               align: "right",
               render: (p) => (
                 <div className="flex justify-end gap-sm">
-                  <Link href={`/doctor/patients/${p.id}`}>
-                    <Button variant="secondary" className="!px-sm !py-xs text-label-sm">
+                  {/*JJQR - AI (Oct 31, 2026)*/}
+                  <Link
+                    href={`/doctor/patients/${p.id}`}
+                    className="relative z-10 inline-flex min-h-[44px] items-center"
+                  >
+                    <Button
+                      variant="secondary"
+                      className="pointer-events-none min-h-[44px] !px-sm !py-xs text-label-sm"
+                    >
                       View Chart
                     </Button>
                   </Link>
+                  {/*JJQR - END*/}
                   {p.latestBookingId && (
                     <Link href={`/doctor/appointments/${p.latestBookingId}`}>
                       <Button className="!px-sm !py-xs text-label-sm">Open Appointment</Button>
@@ -107,11 +117,15 @@ export default function DoctorPatientsPage() {
                 {p.latestVisitDate && ` · Latest appointment: ${p.latestVisitDate}`}
               </p>
               <div className="flex gap-sm">
-                <Link href={`/doctor/patients/${p.id}`} className="flex-1">
-                  <Button variant="secondary" className="w-full">
-                    View Chart
-                  </Button>
-                </Link>
+                {/*JJQR - AI (Oct 31, 2026) — button avoids hidden mobile <a> winning Playwright .first() on desktop */}
+                <Button
+                  variant="secondary"
+                  className="min-h-[44px] flex-1"
+                  onClick={() => router.push(`/doctor/patients/${p.id}`)}
+                >
+                  View Chart
+                </Button>
+                {/*JJQR - END*/}
                 {p.latestBookingId && (
                   <Link href={`/doctor/appointments/${p.latestBookingId}`} className="flex-1">
                     <Button className="w-full">Open Appointment</Button>

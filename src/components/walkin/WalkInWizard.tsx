@@ -104,21 +104,29 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
   // Auto-tag Senior from the patient's own date of birth (RA 9994, 60+) the
   // moment they're picked/registered — staff can still change it (e.g. PWD
   // instead, or the patient doesn't want to claim the discount).
-  useEffect(() => {
-    if (patient?.dateOfBirth) {
-      setDiscountCategory(isSeniorCitizen(patient.dateOfBirth) ? "Senior" : "");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patientId]);
+  const [discountPatientId, setDiscountPatientId] = useState<string | null>(null);
+  //JJQR - AI (Oct 31, 2026)
+  if (patientId !== discountPatientId) {
+    setDiscountPatientId(patientId);
+    const dob = patient?.dateOfBirth;
+    setDiscountCategory(dob && isSeniorCitizen(dob) ? "Senior" : "");
+  }
+  //JJQR - END
 
   const filteredPatients = patients.filter((p) =>
     `${p.fullName} ${p.patientCode} ${p.contactNumber} ${p.email}`.toLowerCase().includes(patientSearch.toLowerCase()),
   );
   const PATIENTS_PAGE_SIZE = 10;
   const [patientPage, setPatientPage] = useState(1);
+  const [patientPageSearch, setPatientPageSearch] = useState(patientSearch);
   // Back to page 1 whenever the search narrows/widens the list — staying on
   // page 6 of a 2-result search would just show an empty page.
-  useEffect(() => setPatientPage(1), [patientSearch]);
+  //JJQR - AI (Oct 31, 2026)
+  if (patientSearch !== patientPageSearch) {
+    setPatientPageSearch(patientSearch);
+    setPatientPage(1);
+  }
+  //JJQR - END
   const pagedPatients = clientPage(filteredPatients, { page: patientPage }, PATIENTS_PAGE_SIZE);
   const patientPageCount = Math.max(1, Math.ceil(pagedPatients.totalCount / PATIENTS_PAGE_SIZE));
   const canQuickRegister =

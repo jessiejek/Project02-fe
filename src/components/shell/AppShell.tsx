@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { VersionFooter } from "./VersionFooter";
@@ -28,15 +28,15 @@ export function AppShell({ role, roleBadge, children }: AppShellProps) {
   // this doesn't persist across navigations as component state — it has to
   // round-trip through localStorage instead, same as any other per-viewer
   // UI preference).
-  const [collapsed, setCollapsed] = useState(false);
-
-  useEffect(() => {
+  //JJQR - AI (Oct 31, 2026)
+  const [collapsed, setCollapsed] = useState(() => {
     try {
-      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
+      return typeof window !== "undefined" && localStorage.getItem(COLLAPSE_KEY) === "1";
     } catch {
-      // Private browsing / storage blocked — just stay expanded.
+      return false;
     }
-  }, []);
+  });
+  //JJQR - END
 
   function toggleCollapsed() {
     setCollapsed((prev) => {

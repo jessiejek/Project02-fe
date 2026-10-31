@@ -83,8 +83,12 @@ export default function DoctorDashboardPage() {
     const today = todayManila();
     const monthStart = `${today.slice(0, 7)}-01`;
     const in7Days = addDaysToDate(today, 7);
+    // One bounded bookings fetch covers both the month counters and the
+    // "recent" list — an unbounded doctor-wide fetch grew with every visit
+    // ever recorded just to show 20 rows.
+    const windowStart = [monthStart, addDaysToDate(today, -31)].sort()[0];
     try {
-      const [dailySummary, unpaidRes, followUpsRes, monthBookings, recent] = await Promise.all([
+      const [dailySummary, unpaidRes, followUpsRes, recent] = await Promise.all([
         queryReport<Record<string, unknown>>(supabase, "v_daily_booking_summary"),
         queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits").then((rows) =>
           rows.filter((r) => (r.doctor_id as string) === meDoctorId && (r.appointment_date as string) >= monthStart),
@@ -97,9 +101,9 @@ export default function DoctorDashboardPage() {
               (r.follow_up_date as string) <= in7Days,
           ),
         ),
-        queryBookings(supabase, { doctorId: meDoctorId, from: monthStart, to: today }),
-        queryBookings(supabase, { doctorId: meDoctorId }),
+        queryBookings(supabase, { doctorId: meDoctorId, from: windowStart }),
       ]);
+      const monthBookings = recent.filter((b) => b.appointment_date >= monthStart && b.appointment_date <= today);
 
       // v_daily_booking_summary has no doctor_id (clinic-wide per day) — fine
       // for a single-doctor clinic, where "the clinic's day" and "this
@@ -195,15 +199,18 @@ export default function DoctorDashboardPage() {
     async function load() {
       const supabase = null as never;
       const today = todayManila();
-      const statusRow = await queryDayStatus(supabase, meDoctorId, today);
       setName(session?.displayName ?? "");
-      setDayStatus((statusRow?.status as DayStatus) ?? "Available");
-      try {
-        setEarnings(await queryDoctorEarnings(supabase, meDoctorId));
-      } catch {
-        setEarnings([]);
-      }
-      await Promise.all([loadQueue(), loadAttention(), loadClinicOverview()]);
+      // All independent — fire together instead of day-status → earnings →
+      // the rest, which stacked three full round trips before first paint.
+      await Promise.all([
+        queryDayStatus(supabase, meDoctorId, today).then((statusRow) =>
+          setDayStatus((statusRow?.status as DayStatus) ?? "Available"),
+        ),
+        queryDoctorEarnings(supabase, meDoctorId).then(setEarnings, () => setEarnings([])),
+        loadQueue(),
+        loadAttention(),
+        loadClinicOverview(),
+      ]);
       setLoaded(true);
     }
     load();
@@ -296,6 +303,24 @@ export default function DoctorDashboardPage() {
       ? Math.round(((monthTotals.collected - prevMonthEntry.collected) / prevMonthEntry.collected) * 100)
       : null;
 
+  // doctor@clinic.test (and other identity-only seeds) can authenticate with
+  // role Doctor but have no staff_accounts row, so staffId stays null and the
+  // data load never runs. Show that instead of an infinite "Loading…".
+  if (session && !session.staffId) {
+    return (
+      <AppShell role="doctor">
+        <div className="space-y-sm">
+          <p className="text-title-md text-on-surface">No doctor profile linked</p>
+          <p className="text-body-md text-on-surface-variant">
+            This login can sign in as Doctor but has no staff profile on the server, so the
+            dashboard cannot load. Sign out and use the clinic doctor account that owns the
+            doctor row (for example gavino@clinic.test), not doctor@clinic.test.
+          </p>
+        </div>
+      </AppShell>
+    );
+  }
+
   if (!loaded) {
     return (
       <AppShell role="doctor">
@@ -306,14 +331,14 @@ export default function DoctorDashboardPage() {
 
   return (
     <AppShell role="doctor" roleBadge={<StatusPill status={dayStatus} />}>
-      <div className="space-y-lg">
+      <div className="min-w-0 space-y-lg overflow-x-hidden">
         <div className="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-headline-lg text-on-surface">Good morning, {name}</h2>
             <p className="text-body-md text-on-surface-variant">Shift: 8:00 AM - 5:00 PM</p>
           </div>
           <Link href="/doctor/appointments">
-            <Button>
+            <Button className="min-h-[44px]">
               Go to My Appointments
               <Icon name="chevron_right" className="text-[18px]" />
             </Button>
@@ -350,8 +375,10 @@ export default function DoctorDashboardPage() {
                       {e.status === "CheckedIn" ? ` · Waiting ${elapsedMinutes(e.checked_in_at)}m` : " · In progress"}
                     </p>
                   </div>
-                  <Link href={`/doctor/consultation/${e.booking_id}`}>
-                    <Button className="!px-sm !py-xs text-label-sm">
+                  {/* JJQR - AI (Oct 31, 2026) */}
+                  <Link href={`/doctor/consultation2/${e.booking_id}`}>
+                  {/* JJQR - END */}
+                    <Button className="min-h-[44px] !px-sm !py-xs text-label-sm">
                       {e.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}
                     </Button>
                   </Link>
@@ -376,7 +403,7 @@ export default function DoctorDashboardPage() {
               {consultationsToday.slice(0, 5).map((c) => (
                 <Link
                   key={`incomplete-${c.consultation_id}`}
-                  href={`/doctor/consultation/${c.booking_id}?mode=amend`}
+                  href={`/doctor/consultation2/${c.booking_id}?mode=amend`}
                   className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
                   <span className="text-body-sm text-on-surface">Chart missing Assessment/Plan</span>
@@ -386,7 +413,7 @@ export default function DoctorDashboardPage() {
               {followUpsDueToday.slice(0, 5).map((c) => (
                 <Link
                   key={`followup-${c.consultation_id}`}
-                  href={`/doctor/consultation/${c.booking_id}?mode=view`}
+                  href={`/doctor/consultation2/${c.booking_id}?mode=view`}
                   className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
                   <span className="text-body-sm text-on-surface">Follow-up due today</span>

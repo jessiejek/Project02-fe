@@ -78,7 +78,9 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
               const active = pathname === item.href;
               return (
                 <Link
-                  key={item.href}
+                  //JJQR - AI (Oct 31, 2026) — unique key when two items share href (Templates+Settings)
+                  key={`${item.label}:${item.href}`}
+                  //JJQR - END
                   href={item.href}
                   onClick={onNavigate}
                   title={collapsed ? item.label : undefined}

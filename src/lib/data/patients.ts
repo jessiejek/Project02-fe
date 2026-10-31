@@ -35,7 +35,42 @@ export interface PatientRow {
   consent_version: number;
   created_at: string;
   updated_at: string;
+  //JJQR - AI (Oct 31, 2026)
+  patient_allergies?: PatientAllergyRow[];
+  //JJQR - END
 }
+
+//JJQR - AI (Oct 31, 2026)
+export interface PatientAllergyRow {
+  id: string;
+  patient_id: string;
+  allergen: string;
+  reaction: string | null;
+  severity: string | null;
+  is_nkda: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type PatientAllergyInput = {
+  allergen: string;
+  reaction?: string | null;
+  severity?: string | null;
+  is_nkda: boolean;
+};
+
+export async function queryPatientAllergies(_supabase: unknown, patientId: string): Promise<PatientAllergyRow[]> {
+  return api.get<PatientAllergyRow[]>(`/api/patients/${patientId}/allergies`);
+}
+
+export async function replacePatientAllergies(
+  _supabase: unknown,
+  patientId: string,
+  items: PatientAllergyInput[],
+): Promise<PatientAllergyRow[]> {
+  return api.put<PatientAllergyRow[]>(`/api/patients/${patientId}/allergies`, items);
+}
+//JJQR - END
 
 export type { PagedResult, PageOpts } from "./paging";
 /** @deprecated use PageOpts from ./paging */
@@ -112,6 +147,32 @@ export async function createPatient(
   return api.post<PatientRow>("/api/patients", row);
 }
 
+//JJQR - AI (Oct 31, 2026)
+/** Keys returned on GET but must not be sent on PUT (nav collections, identity, audit). */
+const PATIENT_PUT_READONLY_KEYS = [
+  "patient_allergies",
+  "allergies",
+  "patient_id",
+  "user_id",
+  "patient_code",
+  "created_at",
+  "updated_at",
+  "is_guest",
+  "is_email_verified",
+  "consented_at",
+  "consent_version",
+  "email",
+] as const;
+
+function stripPatientPutReadonly(body: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...body };
+  for (const key of PATIENT_PUT_READONLY_KEYS) {
+    delete out[key];
+  }
+  return out;
+}
+//JJQR - END
+
 /** Partial update — fetch-merge-put (PUT replaces the row). */
 export async function updatePatient(
   _supabase: unknown,
@@ -119,7 +180,10 @@ export async function updatePatient(
   patch: PatientPatch,
 ): Promise<void> {
   const current = await api.get<Record<string, unknown>>(`/api/patients/${patientId}`);
-  await api.put(`/api/patients/${patientId}`, { ...current, ...patch });
+  //JJQR - AI (Oct 31, 2026)
+  const body = stripPatientPutReadonly({ ...current, ...patch });
+  await api.put(`/api/patients/${patientId}`, body);
+  //JJQR - END
 }
 
 /** Consent acceptance. .NET: PUT /api/patients/{id}/consent with the version int. */

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
@@ -8,7 +9,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
-import { queryConsultations, queryRxGroups, queryVitalReadings } from "@/lib/data/clinical";
+import { formatConsultationDiagnosisLabel, queryConsultations, queryRxGroups, queryVitalReadings, shortRxSummaryForItems } from "@/lib/data/clinical";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { queryPatientById } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
@@ -41,13 +42,18 @@ interface HeaderInfo {
 
 interface ConsultationEntry {
   id: string;
+  bookingId: string;
   appointmentDate: string;
+  doctorName: string;
   chiefComplaint: string;
   subjective: string;
   objective: string;
   assessment: string;
   plan: string;
-  diagnosisDescriptions: string[];
+  diagnosisLabels: string[];
+  rxSummary: string;
+  followUpDate: string | null;
+  followUpReason: string | null;
 }
 
 interface VitalReadingEntry {
@@ -106,11 +112,13 @@ export function PatientHistoryModal({
       const supabase = null as never;
       const [patientRow, consultsRes, templates, vitalRows, bookingRows, rxRes, labRows, docRows, vaxRows] = await Promise.all([
         queryPatientById(supabase, patientId),
-        queryConsultations(supabase, { patientId, doctorId }),
+        //JJQR - AI (Oct 31, 2026) — patient-wide consult + Rx history (no doctorId filter)
+        queryConsultations(supabase, { patientId }),
         queryVitalFieldTemplates(supabase),
         queryVitalReadings(supabase, { patientId }),
         queryBookings(supabase, { patientId, doctorId }),
-        queryRxGroups(supabase, { patientId, doctorId }),
+        queryRxGroups(supabase, { patientId }),
+        //JJQR - END
         queryPatientLabResults(supabase, { patientId }),
         queryPatientDocuments(supabase, { patientId }),
         queryVaccinations(supabase, patientId),
@@ -127,17 +135,26 @@ export function PatientHistoryModal({
         });
       }
 
+      const rxByBookingId = new Map(rxRes.map((g) => [g.booking_id, g]));
+
       setConsultations(
         consultsRes
           .map((c) => ({
             id: c.consultation_id,
+            bookingId: c.booking_id,
             appointmentDate: c.bookings?.appointment_date ?? "",
+            doctorName: c.doctors?.staff_accounts?.full_name ?? "—",
             chiefComplaint: c.chief_complaint ?? "",
             subjective: c.subjective ?? "",
             objective: c.objective ?? "",
             assessment: c.assessment ?? "",
             plan: c.plan ?? "",
-            diagnosisDescriptions: (c.consultation_diagnoses ?? []).map((d) => d.custom_description ?? "").filter(Boolean),
+            diagnosisLabels: (c.consultation_diagnoses ?? [])
+              .map((d) => formatConsultationDiagnosisLabel(d))
+              .filter(Boolean),
+            rxSummary: shortRxSummaryForItems(rxByBookingId.get(c.booking_id)?.prescription_line_items),
+            followUpDate: c.follow_ups?.follow_up_date ?? null,
+            followUpReason: c.follow_ups?.instructions ?? null,
           }))
           .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate)),
       );
@@ -230,6 +247,7 @@ export function PatientHistoryModal({
                   consultations.map((c) => {
                     const expanded = expandedConsultationId === c.id;
                     const hasSoap = [c.subjective, c.objective, c.assessment, c.plan].some((f) => f.trim() !== "");
+                    const summaryLine = [c.chiefComplaint, c.assessment].filter(Boolean).join(" · ");
                     return (
                       <div key={c.id} className="rounded-xl border border-outline-variant p-md">
                         <button
@@ -238,20 +256,24 @@ export function PatientHistoryModal({
                           className="flex w-full flex-wrap items-baseline justify-between gap-sm text-left"
                           aria-expanded={expanded}
                         >
-                          <span className="flex items-center gap-xs">
-                            <Icon name={expanded ? "expand_less" : "expand_more"} className="text-[18px] text-on-surface-variant" />
-                            <span className="text-body-md font-medium text-on-surface">{c.chiefComplaint || "Consultation"}</span>
+                          <span className="flex min-w-0 flex-1 items-center gap-xs">
+                            <Icon name={expanded ? "expand_less" : "expand_more"} className="shrink-0 text-[18px] text-on-surface-variant" />
+                            <span className="text-body-md font-medium text-on-surface">{summaryLine || c.chiefComplaint || "Consultation"}</span>
                           </span>
                           <span className="text-label-sm text-on-surface-variant">{c.appointmentDate}</span>
                         </button>
-                        {c.diagnosisDescriptions.length > 0 && (
-                          <div className="mt-sm flex flex-wrap gap-xs">
-                            {c.diagnosisDescriptions.map((d, i) => (
-                              <span key={i} className="rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
-                                {d}
-                              </span>
-                            ))}
-                          </div>
+                        <p className="mt-xs text-label-sm text-on-surface-variant">{c.doctorName}</p>
+                        {c.diagnosisLabels.length > 0 && (
+                          <p className="mt-xs text-label-sm text-on-surface-variant">
+                            ICD-10: {c.diagnosisLabels.join("; ")}
+                          </p>
+                        )}
+                        <p className="mt-xs text-label-sm text-on-surface-variant">Rx: {c.rxSummary}</p>
+                        {(c.followUpDate || c.followUpReason) && (
+                          <p className="mt-xs text-label-sm text-on-surface-variant">
+                            Follow-up: {c.followUpDate ?? "—"}
+                            {c.followUpReason ? ` — ${c.followUpReason}` : ""}
+                          </p>
                         )}
                         {expanded && (
                           <div className="mt-md space-y-sm border-t border-outline-variant pt-md text-body-md text-on-surface-variant">
@@ -264,6 +286,15 @@ export function PatientHistoryModal({
                               </>
                             ) : (
                               <p>No SOAP notes recorded for this visit.</p>
+                            )}
+                            {c.bookingId && (
+                              <Link
+                                href={`/doctor/consultation2/${c.bookingId}?mode=view`}
+                                className="inline-block text-label-md text-primary hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Open full consult
+                              </Link>
                             )}
                           </div>
                         )}

@@ -35,7 +35,11 @@ export default function AdminPatientsPage() {
   // whenever the search term changes.
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    //JJQR - AI (Oct 31, 2026)
+    queueMicrotask(() => {
+      if (!cancelled) setLoading(true);
+    });
+    //JJQR - END
     const handle = setTimeout(async () => {
       const supabase = null as never;
       const res = await queryPatientsPaged(supabase, {

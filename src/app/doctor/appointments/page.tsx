@@ -33,30 +33,49 @@ export default function DoctorAppointmentsPage() {
   // which only gets worse as visit history piles up. "All" is one click away.
   const [scope, setScope] = useState<"today" | "all">("today");
 
+  const mapRows = useCallback(
+    (rows: Awaited<ReturnType<typeof queryDoctorBookings>>) =>
+      rows.map((b) => ({
+        id: b.booking_id,
+        patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
+        slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+        queueNumber: b.queue_number,
+        status: b.status,
+        paymentStatus: b.payments?.status ?? "Unpaid",
+      })),
+    [],
+  );
+
   const load = useCallback(async () => {
     if (!meDoctorId) return;
-    setLoading(true);
     const supabase = null as never;
     try {
       const rows = await queryDoctorBookings(supabase, meDoctorId, { today: scope === "today" });
-      setBookings(
-        rows.map((b) => ({
-          id: b.booking_id,
-          patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
-          slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
-          queueNumber: b.queue_number,
-          status: b.status,
-          paymentStatus: b.payments?.status ?? "Unpaid",
-        })),
-      );
+      setBookings(mapRows(rows));
     } finally {
       setLoading(false);
     }
-  }, [meDoctorId, scope]);
+  }, [meDoctorId, scope, mapRows]);
 
+  //JJQR - AI (Oct 31, 2026)
   useEffect(() => {
-    load();
-  }, [load]);
+    if (!meDoctorId) return;
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      const supabase = null as never;
+      try {
+        const rows = await queryDoctorBookings(supabase, meDoctorId, { today: scope === "today" });
+        if (!cancelled) setBookings(mapRows(rows));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [meDoctorId, scope, mapRows]);
+  //JJQR - END
 
   // Only meaningful in "today" scope — a full-history pull doesn't need to
   // react to a new check-in the way the day's live list does.
@@ -141,7 +160,8 @@ export default function DoctorAppointmentsPage() {
               align: "right",
               render: (r) =>
                 ["CheckedIn", "InProgress"].includes(r.status) ? (
-                  <Link href={`/doctor/consultation/${r.id}`}>
+                  // JJQR - AI (Oct 31, 2026) — Grace consult path
+                  <Link href={`/doctor/consultation2/${r.id}`}>
                     <Button>{r.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}</Button>
                   </Link>
                 ) : (
@@ -167,7 +187,7 @@ export default function DoctorAppointmentsPage() {
               </div>
               <StatusPill status={r.paymentStatus} />
               {["CheckedIn", "InProgress"].includes(r.status) ? (
-                <Link href={`/doctor/consultation/${r.id}`} className="block">
+                <Link href={`/doctor/consultation2/${r.id}`} className="block">
                   <Button className="w-full">{r.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}</Button>
                 </Link>
               ) : (

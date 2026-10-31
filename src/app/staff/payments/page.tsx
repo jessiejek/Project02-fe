@@ -102,7 +102,11 @@ export default function PaymentsQueuePage() {
   }
 
   useEffect(() => {
-    load();
+    //JJQR - AI (Oct 31, 2026)
+    queueMicrotask(() => {
+      void load();
+    });
+    //JJQR - END
   }, []);
 
   // A visit going Completed is what makes it show up here; a payment

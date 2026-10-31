@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth/cookies";
-import { decodeJwt, isExpired } from "@/lib/auth/jwt";
+import { verifyJwt } from "@/lib/auth/jwt";
 import { dotnetAuth } from "@/lib/auth/dotnet";
 
 // Role segments match the URL prefix exactly (/patient, /staff, /doctor,
@@ -46,30 +46,33 @@ function gate(request: NextRequest, role: string | undefined, response: NextResp
 
 // Auth is the .NET JWT cookie pair (clinic_at / clinic_rt); token refresh
 // happens here so every downstream RSC/route sees a fresh access token.
+// Role gating only trusts verifyJwt (HMAC + iss + aud) — never raw decode.
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const response = NextResponse.next({ request });
 
   let token = request.cookies.get(ACCESS_COOKIE)?.value;
-  let claims = token ? decodeJwt(token) : null;
+  let claims = token ? await verifyJwt(token) : null;
 
-  // Silent refresh when the access token is missing/expired but a refresh token exists.
-  if ((!claims || isExpired(claims)) && request.cookies.get(REFRESH_COOKIE)?.value) {
-    const refreshed = await dotnetAuth.refresh(request.cookies.get(REFRESH_COOKIE)!.value);
+  // Silent refresh when access is missing/invalid/expired but a refresh token exists.
+  // Tampered access tokens never grant a role; refresh may still succeed.
+  const refresh = request.cookies.get(REFRESH_COOKIE)?.value;
+  if (!claims && refresh) {
+    const refreshed = await dotnetAuth.refresh(refresh);
     if (refreshed.ok) {
       token = refreshed.data.accessToken;
-      claims = decodeJwt(token);
-      response.cookies.set(ACCESS_COOKIE, refreshed.data.accessToken, {
-        httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60,
-      });
-      response.cookies.set(REFRESH_COOKIE, refreshed.data.refreshToken, {
-        httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 7,
-      });
-    } else {
-      claims = null;
+      claims = await verifyJwt(token);
+      if (claims) {
+        response.cookies.set(ACCESS_COOKIE, refreshed.data.accessToken, {
+          httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60,
+        });
+        response.cookies.set(REFRESH_COOKIE, refreshed.data.refreshToken, {
+          httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 7,
+        });
+      }
     }
   }
 
-  const role = claims && !isExpired(claims) ? (claims.role as string | undefined) : undefined;
+  const role = claims ? (claims.role as string | undefined) : undefined;
   return gate(request, role, response);
 }
 

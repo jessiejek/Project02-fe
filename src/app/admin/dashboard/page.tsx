@@ -53,9 +53,11 @@ export default function AdminDashboardPage() {
       const in7Days = addDaysToDate(today, 7);
 
       const [dailySummary, unpaidRes, followUpsRes, doctorsRes, allBookings] = await Promise.all([
-        queryReport<Record<string, any>>(supabase, "v_daily_booking_summary"),
-        queryReport<Record<string, any>>(supabase, "v_unpaid_completed_visits").then((rows) => ({ count: rows.length })),
-        queryReport<Record<string, any>>(supabase, "v_pending_follow_ups").then((rows) => ({
+        //JJQR - AI (Oct 31, 2026)
+        queryReport<Record<string, unknown>>(supabase, "v_daily_booking_summary"),
+        queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits").then((rows) => ({ count: rows.length })),
+        queryReport<Record<string, unknown>>(supabase, "v_pending_follow_ups").then((rows) => ({
+        //JJQR - END
           count: rows.filter(
             (r) => (r.follow_up_date as string) >= today && (r.follow_up_date as string) <= in7Days,
           ).length,
@@ -69,8 +71,10 @@ export default function AdminDashboardPage() {
       const monthBookings = allBookings.filter((b) => b.appointment_date >= monthStart);
       const recent = [...allBookings].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")).slice(0, 20);
 
-      setTodaysCount(todaySummary?.total_bookings ?? 0);
-      setNoShowsToday(todaySummary?.no_show_count ?? 0);
+      //JJQR - AI (Oct 31, 2026)
+      setTodaysCount(Number(todaySummary?.total_bookings ?? 0));
+      setNoShowsToday(Number(todaySummary?.no_show_count ?? 0));
+      //JJQR - END
       setRevenueToday(Number(todaySummary?.revenue ?? 0));
       setMonthlyCount(monthBookings.length);
       setRevenueThisMonth(monthSummary.reduce((sum, d) => sum + Number(d.revenue ?? 0), 0));

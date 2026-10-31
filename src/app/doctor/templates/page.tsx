@@ -1,7 +1,22 @@
-import { redirect } from "next/navigation";
+"use client";
 
-// The diagnosis-templates screen was folded into /doctor/settings, which now
-// manages every kind of doctor template. Kept as a redirect for bookmarks.
-export default function DoctorTemplatesRedirect() {
-  redirect("/doctor/settings");
+import { AppShell } from "@/components/shell/AppShell";
+import { DoctorTemplatesPanel } from "@/components/doctor/DoctorTemplatesPanel";
+
+//JJQR - AI (Oct 31, 2026)
+export default function DoctorTemplatesPage() {
+  return (
+    <AppShell role="doctor">
+      <div className="mx-auto max-w-[46rem] space-y-lg">
+        <div>
+          <h1 className="text-headline-lg text-on-surface">Templates</h1>
+          <p className="mt-xs text-body-md text-on-surface-variant">
+            SOAP phrases, diagnoses, prescriptions, and certificates you reuse during consultations.
+          </p>
+        </div>
+        <DoctorTemplatesPanel />
+      </div>
+    </AppShell>
+  );
 }
+//JJQR - END

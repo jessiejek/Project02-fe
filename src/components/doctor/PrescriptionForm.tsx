@@ -22,6 +22,7 @@ import {
 import { queryClinicSettings } from "@/lib/data/admin";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryPatientById } from "@/lib/data/patients";
+import type { PatientAllergyRow } from "@/lib/data/patients";
 import { printPrescription } from "@/lib/print-forms";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
@@ -159,19 +160,6 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
   const [durationValue, setDurationValue] = useState(item?.durationValue ? String(item.durationValue) : "");
   const [indication, setIndication] = useState(item?.indication ?? "");
   const [instruction, setInstruction] = useState(item?.instruction ?? "");
-
-  // Re-seed every field when a different item is opened for editing.
-  useEffect(() => {
-    setGenericName(item?.genericName ?? "");
-    setDosage(item?.dosage ?? "");
-    setQuantity(item?.quantity ?? "");
-    setMealRelation(item?.mealRelation ?? null);
-    setTimingSlots(item?.timing ? item.timing.split(",").map((s) => s.trim()).filter(Boolean) : []);
-    setDurationKind(item?.durationKind ?? null);
-    setDurationValue(item?.durationValue ? String(item.durationValue) : "");
-    setIndication(item?.indication ?? "");
-    setInstruction(item?.instruction ?? "");
-  }, [item]);
 
   if (!item) return null;
 
@@ -320,12 +308,16 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   const [indication, setIndication] = useState("");
   const [instructions, setInstructions] = useState("");
   const [addToFavorites, setAddToFavorites] = useState(false);
+  //JJQR - AI (Oct 31, 2026)
+  const [route, setRoute] = useState("PO");
+  //JJQR - END
 
   const matches = query.length >= 3 && !selectedMedicine ? medicines.filter((m) => m.genericName.toLowerCase().includes(query.toLowerCase())).slice(0, 8) : [];
-  // Free-text is allowed — the paper Rx pad isn't limited to a catalog. A picked
-  // catalog match just also carries its medicine id.
   const effectiveGenericName = (selectedMedicine?.genericName ?? query).trim();
   const canAdd = effectiveGenericName !== "" && quantity.trim() !== "";
+  //JJQR - AI (Oct 31, 2026) — F-014 catalog soft warning
+  const showCatalogWarning = effectiveGenericName !== "" && !selectedMedicine && !medicines.some((m) => m.genericName.toLowerCase() === effectiveGenericName.toLowerCase());
+  //JJQR - END
 
   function reset() {
     setQuery("");
@@ -339,6 +331,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
     setIndication("");
     setInstructions("");
     setAddToFavorites(false);
+    setRoute("PO");
   }
 
   function toggleSlot(slot: string) {
@@ -359,6 +352,9 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
         durationKind,
         durationValue: durationKind === "Days" || durationKind === "Weeks" ? Number(durationValue) || null : null,
         indication: indication.trim() || null,
+        //JJQR - AI (Oct 31, 2026)
+        route: route.trim() || "PO",
+        //JJQR - END
       },
       addToFavorites,
     );
@@ -375,8 +371,15 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
             setSelectedMedicine(null);
           }}
           placeholder="Medication — pick from the list or just type it"
-          className="w-full rounded-lg border border-outline-variant px-md py-sm"
+          className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
         />
+        {/* JJQR - AI (Oct 31, 2026) */}
+        {showCatalogWarning && (
+          <p className="mt-xs text-label-sm text-amber-700">
+            Not in catalog — prefer picking a generic from the list (RA 6675).
+          </p>
+        )}
+        {/* JJQR - END */}
         {matches.length > 0 && (
           <div className="absolute z-10 mt-1 w-full rounded-lg border border-outline-variant bg-surface-container-lowest shadow-md">
             {matches.map((m) => (
@@ -400,8 +403,11 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
           Will be added as typed: <strong>{query.trim()}</strong>
         </p>
       )}
-      <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-      <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+      <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" />
+      <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" />
+      {/* JJQR - AI (Oct 31, 2026) — F-008 route */}
+      <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route (e.g. PO)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" />
+      {/* JJQR - END */}
 
       {/* §16.8 Form 1 — before/after meals */}
       <div>
@@ -636,6 +642,7 @@ function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave
         </Button>
       </div>
       <EditLineItemModal
+        key={editingItem?.id ?? "closed"}
         item={editingItem}
         onClose={() => setEditingItem(null)}
         onSave={(updated) => {
@@ -662,13 +669,16 @@ export interface PrescriptionFormProps {
   embedded?: boolean;
   /** Called after a successful save — used in embedded mode so the parent can re-key/remount this form with the freshly-saved group. */
   onSaved?: () => void;
+  //JJQR - AI (Oct 31, 2026)
+  patientAllergies?: PatientAllergyRow[];
+  //JJQR - END
 }
 
 // Shared by .../prescriptions/create, .../prescriptions/[prescriptionId], and
 // the consultation page's Prescription section (embedded) —
 // clinic-prescriptions-fe.md §2's two-column create/edit layout, following
 // the same create/edit-sharing pattern as DoctorForm.tsx.
-export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved }: PrescriptionFormProps) {
+export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, patientAllergies }: PrescriptionFormProps) {
   const router = useRouter();
   const seedItems = group?.items ?? copyFromGroup?.items.map((i) => ({ ...i, id: newId("rxi") })) ?? [];
 
@@ -689,6 +699,21 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   const [templateDeleteTarget, setTemplateDeleteTarget] = useState<PrescriptionTemplate | null>(null);
   // Rarely changes — fetch once per mount (Implementation-Phases/03-reference-clinic-data.md §3d).
   const [medicines, setMedicines] = useState<Medicine[]>([]);
+  //JJQR - AI (Oct 31, 2026)
+  const [allergyConfirm, setAllergyConfirm] = useState<{ item: Omit<PrescriptionLineItem, "id">; addToFavorites: boolean } | null>(null);
+  // DECISION F-020: defer tall-man lettering map — no curated pair list in this batch.
+  //JJQR - END
+
+  function allergenConflict(genericName: string): string | null {
+    if (!patientAllergies?.length) return null;
+    const g = genericName.toLowerCase();
+    for (const a of patientAllergies) {
+      if (a.is_nkda) continue;
+      const al = a.allergen.toLowerCase();
+      if (al && (g.includes(al) || al.includes(g))) return a.allergen;
+    }
+    return null;
+  }
 
   function toTemplate(t: { template_id: string; doctor_id: string; title: string; is_system_template: boolean; prescription_template_items: DbTemplateItem[] }): PrescriptionTemplate {
     return {
@@ -740,21 +765,39 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     setToast({ key: Date.now(), variant, message });
   }
 
-  function isDuplicate(genericName: string, dosage: string) {
-    return items.some((i) => i.genericName === genericName && i.dosage === dosage);
+  function isDuplicate(genericName: string, _dosage: string) {
+    //JJQR - AI (Oct 31, 2026) — F-019: warn on same generic regardless of dose
+    return items.some((i) => i.genericName.toLowerCase() === genericName.toLowerCase());
+    //JJQR - END
   }
 
-  function addLineItem(item: Omit<PrescriptionLineItem, "id">) {
+  function addLineItem(item: Omit<PrescriptionLineItem, "id">, skipAllergyCheck?: boolean) {
     if (isDuplicate(item.genericName, item.dosage)) {
       showToast("error", "Item already exist.");
       return;
     }
+    //JJQR - AI (Oct 31, 2026)
+    if (!skipAllergyCheck) {
+      const conflict = allergenConflict(item.genericName);
+      if (conflict) {
+        setAllergyConfirm({ item, addToFavorites: false });
+        return;
+      }
+    }
+    //JJQR - END
     setItems((prev) => [...prev, { ...item, id: newId("rxi") }]);
   }
 
-  async function handleNewRxAdd(item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean) {
+  async function handleNewRxAdd(item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean, skipAllergyCheck = false) {
+    if (!skipAllergyCheck) {
+      const conflict = allergenConflict(item.genericName);
+      if (conflict) {
+        setAllergyConfirm({ item, addToFavorites });
+        return;
+      }
+    }
     const wasDuplicate = isDuplicate(item.genericName, item.dosage);
-    addLineItem(item);
+    addLineItem(item, skipAllergyCheck);
     if (addToFavorites && !wasDuplicate) {
       const supabase = null as never;
       const data = await addFavoriteMedicine(supabase, doctorId, {
@@ -811,6 +854,9 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           duration_kind: i.durationKind ?? null,
           duration_value: i.durationValue ?? null,
           indication: i.indication ?? null,
+          //JJQR - AI (Oct 31, 2026)
+          route: i.route ?? null,
+          //JJQR - END
         })),
       });
 
@@ -869,6 +915,9 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           full_name: doctor?.staff_accounts?.full_name ?? "",
           license_number: doctor?.license_number ?? null,
           ptr_number: doctor?.ptr_number ?? null,
+          //JJQR - AI (Oct 31, 2026)
+          s2_number: doctor?.s2_number ?? null,
+          //JJQR - END
         },
         patient: {
           full_name: patient ? `${patient.first_name} ${patient.last_name}`.trim() : "",
@@ -888,6 +937,9 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           duration_value: i.durationValue,
           indication: i.indication,
           is_controlled_substance: i.isControlledSubstance,
+          //JJQR - AI (Oct 31, 2026)
+          route: i.route ?? null,
+          //JJQR - END
         })),
       });
     } finally {
@@ -973,6 +1025,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       </div>
 
       <EditLineItemModal
+        key={editingItem?.id ?? "closed"}
         item={editingItem}
         onClose={() => setEditingItem(null)}
         onSave={(updated) => {
@@ -1046,15 +1099,61 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           </>
         }
       >
-        <ul className="space-y-xs text-body-md">
+        <ul className="space-y-sm text-body-md">
           {items.map((item, i) => (
-            <li key={item.id} className="text-on-surface">
-              {i + 1}. {item.genericName} {item.dosage} — #{item.quantity}
+            <li key={item.id} className="rounded-lg border border-outline-variant p-sm text-on-surface">
+              <p>
+                {i + 1}. {item.genericName} {item.dosage} — #{item.quantity}
+                {item.route ? <span className="text-on-surface-variant"> · {item.route}</span> : null}
+              </p>
+              {/* JJQR - AI (Oct 31, 2026) — F-018 stronger sig preview */}
+              {directionsLine(item) && (
+                <p className="text-label-md text-on-surface-variant">
+                  Sig preview: {directionsLine(item)}
+                </p>
+              )}
+              {/* JJQR - END */}
               {item.instruction ? <span className="text-on-surface-variant"> · {item.instruction}</span> : null}
             </li>
           ))}
         </ul>
       </Modal>
+
+      {/* JJQR - AI (Oct 31, 2026) — F-003 drug–allergy confirm */}
+      <Modal
+        isOpen={allergyConfirm !== null}
+        onClose={() => setAllergyConfirm(null)}
+        title="Possible allergy conflict"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setAllergyConfirm(null)}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (!allergyConfirm) return;
+                const { item, addToFavorites } = allergyConfirm;
+                setAllergyConfirm(null);
+                void handleNewRxAdd(item, addToFavorites, true);
+              }}
+            >
+              Add anyway
+            </Button>
+          </>
+        }
+      >
+        <p className="text-body-md text-on-surface-variant">
+          {allergyConfirm ? (
+            <>
+              <strong>{allergyConfirm.item.genericName}</strong> may match documented allergen{" "}
+              <strong>{allergenConflict(allergyConfirm.item.genericName) ?? "allergy"}</strong>. Confirm only if you
+              intend to prescribe despite the allergy record.
+            </>
+          ) : (
+            "This medicine may match a documented allergen. Confirm you still want to add it."
+          )}
+        </p>
+      </Modal>
+      {/* JJQR - END */}
     </div>
   );
 }
