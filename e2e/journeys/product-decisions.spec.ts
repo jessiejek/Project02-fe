@@ -18,7 +18,9 @@ test.describe("Product decisions regression", () => {
     const page = await as("doctor");
     await page.goto("/doctor/templates");
     await expect(page.getByRole("heading", { name: "Templates" })).toBeVisible();
-    await expect(page.getByText("Full note templates")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: /SOAP \(\d+\)/ })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByPlaceholder("Search this tab…")).toBeVisible();
+    await expect(page.getByRole("button", { name: "General", exact: true })).toBeVisible();
   });
 
   test("doctor topbar search opens results", async ({ as, api }) => {
@@ -114,14 +116,22 @@ test.describe("Product decisions regression", () => {
 
     const allergen = `E2E allergen ${tag}`;
     await doctor.goto(`/doctor/consultation2/${ticket.booking_id}?mode=view`);
+    //JJQR - AI (Oct 31, 2026) — allergy editor opens from sticky chip
+    const allergyChip = doctor.locator("button[aria-controls='consult-allergy-editor-panel']");
+    await allergyChip.click();
     const allergyInput = doctor.locator("#consult-allergy-draft");
     await expect(allergyInput).toBeVisible({ timeout: 15_000 });
     await allergyInput.fill(allergen);
-    await allergyInput.press("Enter");
-    await expect(doctor.getByText(allergen, { exact: true }).first()).toBeVisible();
+    await doctor.getByRole("button", { name: "Add allergy" }).click();
+    await expect(allergyChip).toContainText(/E2E allergen/i, { timeout: 15_000 });
+    await allergyChip.click();
+    await expect(doctor.locator("#consult-allergy-editor-panel")).toContainText(allergen, { timeout: 15_000 });
 
     await doctor.reload();
-    await expect(doctor.getByText(allergen, { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(allergyChip).toContainText(/E2E allergen/i, { timeout: 15_000 });
+    await allergyChip.click();
+    await expect(doctor.locator("#consult-allergy-editor-panel")).toContainText(allergen, { timeout: 15_000 });
+    //JJQR - END
   });
 });
 //JJQR - END

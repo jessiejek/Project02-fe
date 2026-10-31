@@ -71,7 +71,9 @@ function getConnection(): signalR.HubConnection {
         withCredentials: false,
       })
       .withAutomaticReconnect()
-      .configureLogging(signalR.LogLevel.Warning)
+      //JJQR - AI (Oct 31, 2026) — Warning-level reconnect/timeout noise floods Next.js Issues panel
+      .configureLogging(signalR.LogLevel.Error)
+      //JJQR - END
       .build();
     // Covers the case where SignalR's own automatic-reconnect exhausts its
     // attempts and permanently closes the connection — hand it back to our

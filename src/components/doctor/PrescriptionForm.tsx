@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -22,10 +22,11 @@ import {
 import { queryClinicSettings } from "@/lib/data/admin";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryPatientById } from "@/lib/data/patients";
-import type { PatientAllergyRow } from "@/lib/data/patients";
 import { printPrescription } from "@/lib/print-forms";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
+import { checkDrugSafety } from "@/lib/clinical/drug-safety";
+import { mgPerKgDose, mlFromConcentration } from "@/lib/clinical/peds-dosing";
 
 type DbTemplateItem = Database["public"]["Tables"]["prescription_template_items"]["Row"];
 
@@ -64,6 +65,28 @@ export function directionsLine(item: PrescriptionLineItem): string {
   const s = parts.join(", ");
   return s.charAt(0).toUpperCase() + s.slice(1) + ".";
 }
+
+//JJQR - AI (Oct 31, 2026) — print-ready sig checks
+function instructionHasFrequencyLike(text: string): boolean {
+  const t = text.toLowerCase();
+  return /\b(bd|bid|tid|qid|qd|q\d+h|daily|every|\d+\s*x|\d+x|times?\s*(a|per)\s*day|once|twice|thrice|hourly|weekly|prn)\b/.test(t);
+}
+function instructionHasDurationLike(text: string): boolean {
+  const t = text.toLowerCase();
+  return /\b(day|days|week|weeks|month|months|ongoing|maintenance|maintain)\b/.test(t);
+}
+export function itemPrintSigComplete(item: PrescriptionLineItem): boolean {
+  if (!item.dosage?.trim()) return false;
+  if (!item.route?.trim()) return false;
+  const hasFreq = !!(item.timing?.trim()) || instructionHasFrequencyLike(item.instruction ?? "");
+  if (!hasFreq) return false;
+  return (
+    item.durationKind === "Maintain" ||
+    ((item.durationKind === "Days" || item.durationKind === "Weeks") && !!item.durationValue) ||
+    instructionHasDurationLike(item.instruction ?? "")
+  );
+}
+//JJQR - END
 
 interface LineItemListProps {
   items: PrescriptionLineItem[];
@@ -670,7 +693,14 @@ export interface PrescriptionFormProps {
   /** Called after a successful save — used in embedded mode so the parent can re-key/remount this form with the freshly-saved group. */
   onSaved?: () => void;
   //JJQR - AI (Oct 31, 2026)
-  patientAllergies?: PatientAllergyRow[];
+  patientAllergies?: string[];
+  allergyAckRequired?: boolean;
+  allergyAcked?: boolean;
+  onNeedAllergyAck?: () => void;
+  priorRxItems?: PrescriptionLineItem[];
+  patientPregnant?: boolean;
+  patientAgeYears?: number | null;
+  weightKg?: number | null;
   //JJQR - END
 }
 
@@ -678,7 +708,7 @@ export interface PrescriptionFormProps {
 // the consultation page's Prescription section (embedded) —
 // clinic-prescriptions-fe.md §2's two-column create/edit layout, following
 // the same create/edit-sharing pattern as DoctorForm.tsx.
-export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, patientAllergies }: PrescriptionFormProps) {
+export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, patientAllergies, allergyAckRequired, allergyAcked, onNeedAllergyAck, priorRxItems, patientPregnant, patientAgeYears, weightKg }: PrescriptionFormProps) {
   const router = useRouter();
   const seedItems = group?.items ?? copyFromGroup?.items.map((i) => ({ ...i, id: newId("rxi") })) ?? [];
 
@@ -700,19 +730,63 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   // Rarely changes — fetch once per mount (Implementation-Phases/03-reference-clinic-data.md §3d).
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   //JJQR - AI (Oct 31, 2026)
-  const [allergyConfirm, setAllergyConfirm] = useState<{ item: Omit<PrescriptionLineItem, "id">; addToFavorites: boolean } | null>(null);
-  // DECISION F-020: defer tall-man lettering map — no curated pair list in this batch.
+  const [printSigError, setPrintSigError] = useState(false);
+  const [pedsMgPerKg, setPedsMgPerKg] = useState("");
+  const [pedsMaxMg, setPedsMaxMg] = useState("");
+  const [pedsConcMgMl, setPedsConcMgMl] = useState("");
+  const [pedsWeightInput, setPedsWeightInput] = useState("");
+  const safetyToastRef = useRef("");
   //JJQR - END
 
-  function allergenConflict(genericName: string): string | null {
+  const safetyAlerts = useMemo(
+    () =>
+      checkDrugSafety(
+        items.map((i) => i.genericName),
+        { pregnant: patientPregnant },
+      ),
+    [items, patientPregnant],
+  );
+
+  function safetyForProspective(extraGeneric?: string) {
+    const names = [...items.map((i) => i.genericName), ...(extraGeneric ? [extraGeneric] : [])];
+    return checkDrugSafety(names, { pregnant: patientPregnant });
+  }
+
+  function applySafetyBeforeAdd(genericName: string): boolean {
+    const alerts = safetyForProspective(genericName);
+    const block = alerts.find((a) => a.level === "block");
+    if (block) {
+      showToast("error", block.message);
+      return false;
+    }
+    const warn = alerts.find((a) => a.level === "warn");
+    if (warn) showToast("warning", warn.message);
+    return true;
+  }
+
+  function allergyBlockReason(genericName: string): string | null {
     if (!patientAllergies?.length) return null;
-    const g = genericName.toLowerCase();
-    for (const a of patientAllergies) {
-      if (a.is_nkda) continue;
-      const al = a.allergen.toLowerCase();
-      if (al && (g.includes(al) || al.includes(g))) return a.allergen;
+    const g = genericName.trim().toLowerCase();
+    if (!g) return null;
+    for (const raw of patientAllergies) {
+      const al = raw.trim().toLowerCase();
+      if (!al) continue;
+      if (g.includes(al) || al.includes(g)) return raw.trim();
     }
     return null;
+  }
+
+  function requireAllergyAckBeforeAdd(): boolean {
+    if (allergyAckRequired && !allergyAcked && items.length === 0) {
+      onNeedAllergyAck?.();
+      return false;
+    }
+    return true;
+  }
+
+  function reportAllergyConflict(genericName: string, allergen: string) {
+    const message = `Allergy conflict: ${genericName} ↔ ${allergen}`;
+    showToast("error", message);
   }
 
   function toTemplate(t: { template_id: string; doctor_id: string; title: string; is_system_template: boolean; prescription_template_items: DbTemplateItem[] }): PrescriptionTemplate {
@@ -765,39 +839,51 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     setToast({ key: Date.now(), variant, message });
   }
 
+  useEffect(() => {
+    const warns = safetyAlerts.filter((a) => a.level === "warn").map((a) => a.message);
+    const key = warns.join("|");
+    if (!key || key === safetyToastRef.current) return;
+    safetyToastRef.current = key;
+    showToast("warning", warns[0]);
+  }, [safetyAlerts]);
+
   function isDuplicate(genericName: string, _dosage: string) {
     //JJQR - AI (Oct 31, 2026) — F-019: warn on same generic regardless of dose
     return items.some((i) => i.genericName.toLowerCase() === genericName.toLowerCase());
     //JJQR - END
   }
 
-  function addLineItem(item: Omit<PrescriptionLineItem, "id">, skipAllergyCheck?: boolean) {
+  function addLineItem(item: Omit<PrescriptionLineItem, "id">) {
+    if (!requireAllergyAckBeforeAdd()) return;
+    const blocked = allergyBlockReason(item.genericName);
+    if (blocked) {
+      reportAllergyConflict(item.genericName, blocked);
+      return;
+    }
+    if (!applySafetyBeforeAdd(item.genericName)) return;
     if (isDuplicate(item.genericName, item.dosage)) {
       showToast("error", "Item already exist.");
       return;
     }
-    //JJQR - AI (Oct 31, 2026)
-    if (!skipAllergyCheck) {
-      const conflict = allergenConflict(item.genericName);
-      if (conflict) {
-        setAllergyConfirm({ item, addToFavorites: false });
-        return;
-      }
-    }
-    //JJQR - END
     setItems((prev) => [...prev, { ...item, id: newId("rxi") }]);
+    setPrintSigError(false);
   }
 
-  async function handleNewRxAdd(item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean, skipAllergyCheck = false) {
-    if (!skipAllergyCheck) {
-      const conflict = allergenConflict(item.genericName);
-      if (conflict) {
-        setAllergyConfirm({ item, addToFavorites });
-        return;
-      }
+  async function handleNewRxAdd(item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean) {
+    if (!requireAllergyAckBeforeAdd()) return;
+    const blocked = allergyBlockReason(item.genericName);
+    if (blocked) {
+      reportAllergyConflict(item.genericName, blocked);
+      return;
     }
+    if (!applySafetyBeforeAdd(item.genericName)) return;
     const wasDuplicate = isDuplicate(item.genericName, item.dosage);
-    addLineItem(item, skipAllergyCheck);
+    if (wasDuplicate) {
+      showToast("error", "Item already exist.");
+      return;
+    }
+    setItems((prev) => [...prev, { ...item, id: newId("rxi") }]);
+    setPrintSigError(false);
     if (addToFavorites && !wasDuplicate) {
       const supabase = null as never;
       const data = await addFavoriteMedicine(supabase, doctorId, {
@@ -815,11 +901,39 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   }
 
   function handleTemplateAddAll(template: PrescriptionTemplate) {
+    if (!requireAllergyAckBeforeAdd()) return;
     template.items.forEach((item) => {
+      const blocked = allergyBlockReason(item.genericName);
+      if (blocked) {
+        reportAllergyConflict(item.genericName, blocked);
+        return;
+      }
+      if (!applySafetyBeforeAdd(item.genericName)) return;
       if (!isDuplicate(item.genericName, item.dosage)) {
-        setItems((prev) => [...prev, { ...item, id: newId("rxi") }]);
+        setItems((prev) => [...prev, { ...item, id: newId("rxi"), route: item.route ?? "PO" }]);
       }
     });
+    setPrintSigError(false);
+  }
+
+  function handleRefillLastVisit() {
+    if (!priorRxItems?.length) return;
+    if (!requireAllergyAckBeforeAdd()) return;
+    const toAdd: PrescriptionLineItem[] = [];
+    for (const item of priorRxItems) {
+      const blocked = allergyBlockReason(item.genericName);
+      if (blocked) {
+        reportAllergyConflict(item.genericName, blocked);
+        continue;
+      }
+      if (!applySafetyBeforeAdd(item.genericName)) continue;
+      if (isDuplicate(item.genericName, item.dosage)) continue;
+      toAdd.push({ ...item, id: newId("rxi") });
+    }
+    if (toAdd.length) {
+      setItems((prev) => [...prev, ...toAdd]);
+      setPrintSigError(false);
+    }
   }
 
   function handleSaveClick() {
@@ -899,6 +1013,12 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       showToast("error", "Select Prescriptions to continue this process!");
       return;
     }
+    if (!items.every(itemPrintSigComplete)) {
+      setPrintSigError(true);
+      showToast("error", "Complete dose, route, frequency, and duration (sig) before printing.");
+      return;
+    }
+    setPrintSigError(false);
     setPrinting(true);
     try {
       const supabase = null as never;
@@ -947,6 +1067,31 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
     }
   }
 
+  const printReady = items.length > 0 && items.every(itemPrintSigComplete);
+
+  //JJQR - AI (Oct 31, 2026) — peds weight: override state or derive from weightKg
+  const effectiveWeight =
+    pedsWeightInput !== ""
+      ? pedsWeightInput
+      : weightKg != null && Number.isFinite(weightKg)
+        ? String(weightKg)
+        : "";
+  //JJQR - END
+
+  const pedsWeightNum = Number.parseFloat(effectiveWeight.replace(/[^\d.]/g, ""));
+  const pedsMgPerKgNum = Number.parseFloat(pedsMgPerKg);
+  const pedsMaxNum = pedsMaxMg.trim() ? Number.parseFloat(pedsMaxMg) : undefined;
+  const pedsConcNum = Number.parseFloat(pedsConcMgMl);
+  const pedsDose =
+    Number.isFinite(pedsMgPerKgNum) && Number.isFinite(pedsWeightNum) && pedsWeightNum > 0
+      ? mgPerKgDose(pedsMgPerKgNum, pedsWeightNum, pedsMaxNum)
+      : null;
+  const pedsMl =
+    pedsDose && Number.isFinite(pedsConcNum) && pedsConcNum > 0
+      ? mlFromConcentration(pedsDose.mg, pedsConcNum)
+      : null;
+  const showPedsHelper = patientAgeYears != null && patientAgeYears < 18;
+
   return (
     <div className={cn(!embedded && "mx-auto max-w-[64rem]", "space-y-lg")}>
       {toast && <Toast key={toast.key} variant={toast.variant} message={toast.message} />}
@@ -957,7 +1102,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       <div className="flex items-center justify-between gap-sm">
         {!embedded && <h1 className="text-headline-md text-on-surface">Prescriptions</h1>}
         <div className={cn("flex items-center gap-sm", embedded && "ml-auto")}>
-          <Button variant="secondary" loading={printing} onClick={handlePrint}>
+          <Button variant="secondary" loading={printing} disabled={!printReady} onClick={handlePrint}>
             <Icon name="print" className="text-[16px]" />
             Print
           </Button>
@@ -967,9 +1112,65 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           </Button>
         </div>
       </div>
+      {printSigError && (
+        <p className="text-label-md text-error">Complete dose, route, frequency, and duration (sig) before printing.</p>
+      )}
+      {safetyAlerts.length > 0 && (
+        <ul className="space-y-xs rounded-lg border border-amber-400 bg-amber-50 px-md py-sm text-label-sm text-amber-900">
+          {safetyAlerts.map((a, idx) => (
+            <li key={`${a.level}-${idx}`}>{a.message}</li>
+          ))}
+        </ul>
+      )}
+      {showPedsHelper && (
+        <div className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-sm text-on-surface-variant">
+          <p className="font-medium text-on-surface">Pediatric dose helper (mg/kg)</p>
+          <div className="mt-sm grid grid-cols-2 gap-sm sm:grid-cols-4">
+            <input
+              placeholder="mg/kg"
+              value={pedsMgPerKg}
+              onChange={(e) => setPedsMgPerKg(e.target.value)}
+              className="rounded-lg border border-outline-variant px-sm py-xs"
+            />
+            {/* JJQR - AI (Oct 31, 2026) — effectiveWeight display */}
+            <input
+              placeholder="Weight kg"
+              value={effectiveWeight}
+              onChange={(e) => setPedsWeightInput(e.target.value)}
+              className="rounded-lg border border-outline-variant px-sm py-xs"
+            />
+            {/* JJQR - END */}
+            <input
+              placeholder="Max mg (opt)"
+              value={pedsMaxMg}
+              onChange={(e) => setPedsMaxMg(e.target.value)}
+              className="rounded-lg border border-outline-variant px-sm py-xs"
+            />
+            <input
+              placeholder="mg/mL (opt)"
+              value={pedsConcMgMl}
+              onChange={(e) => setPedsConcMgMl(e.target.value)}
+              className="rounded-lg border border-outline-variant px-sm py-xs"
+            />
+          </div>
+          {pedsDose && (
+            <p className="mt-sm">
+              ≈ {pedsDose.mg} mg{pedsDose.capped ? " (max cap applied)" : ""}
+              {pedsMl != null ? ` · ≈ ${pedsMl} mL` : ""}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
         <Card className="space-y-md">
+          {/* JJQR - AI (Oct 31, 2026) */}
+          {priorRxItems && priorRxItems.length > 0 && (
+            <Button variant="secondary" className="w-full" onClick={handleRefillLastVisit}>
+              Refill last visit Rx
+            </Button>
+          )}
+          {/* JJQR - END */}
           <div className="flex items-center justify-between">
             <span className="text-label-md text-on-surface-variant">Add to Template</span>
             <button
@@ -1005,7 +1206,15 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         <Card>
           <Tabs tabs={RX_TABS} activeId={rxTab} onChange={setRxTab} className="mb-md" />
           {rxTab === "new" && <NewRxTab medicines={medicines} onAdd={handleNewRxAdd} />}
-          {rxTab === "favorites" && <FavoritesTab favorites={favorites} onAdd={addLineItem} />}
+          {rxTab === "favorites" && (
+            <FavoritesTab
+              favorites={favorites}
+              onAdd={(item) => {
+                const { id: _omit, ...rest } = item;
+                addLineItem(rest);
+              }}
+            />
+          )}
           {rxTab === "templates" && (
             <TemplatesTab
               templates={templates}
@@ -1118,42 +1327,6 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           ))}
         </ul>
       </Modal>
-
-      {/* JJQR - AI (Oct 31, 2026) — F-003 drug–allergy confirm */}
-      <Modal
-        isOpen={allergyConfirm !== null}
-        onClose={() => setAllergyConfirm(null)}
-        title="Possible allergy conflict"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setAllergyConfirm(null)}>Cancel</Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                if (!allergyConfirm) return;
-                const { item, addToFavorites } = allergyConfirm;
-                setAllergyConfirm(null);
-                void handleNewRxAdd(item, addToFavorites, true);
-              }}
-            >
-              Add anyway
-            </Button>
-          </>
-        }
-      >
-        <p className="text-body-md text-on-surface-variant">
-          {allergyConfirm ? (
-            <>
-              <strong>{allergyConfirm.item.genericName}</strong> may match documented allergen{" "}
-              <strong>{allergenConflict(allergyConfirm.item.genericName) ?? "allergy"}</strong>. Confirm only if you
-              intend to prescribe despite the allergy record.
-            </>
-          ) : (
-            "This medicine may match a documented allergen. Confirm you still want to add it."
-          )}
-        </p>
-      </Modal>
-      {/* JJQR - END */}
     </div>
   );
 }

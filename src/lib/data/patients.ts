@@ -37,6 +37,16 @@ export interface PatientRow {
   updated_at: string;
   //JJQR - AI (Oct 31, 2026)
   patient_allergies?: PatientAllergyRow[];
+  is_pregnant?: boolean | null;
+  lmp_date?: string | null;
+  gravida?: number | null;
+  para?: number | null;
+  rh_factor?: string | null;
+  guardian_name?: string | null;
+  guardian_relationship?: string | null;
+  last_creatinine_mg_dl?: number | null;
+  last_egfr?: number | null;
+  last_renal_labs_date?: string | null;
   //JJQR - END
 }
 
