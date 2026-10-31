@@ -202,10 +202,44 @@ const BLANK_VAX: VaccinationDraft = { vaccineName: "", doseNumber: "", route: ""
 
 const KEYBOARD_SHORTCUTS = [
   { keys: "Ctrl+1 – Ctrl+8", description: "Jump to that numbered section" },
-  { keys: "Ctrl+S", description: "Save Draft (or Save Changes in amend mode)" },
+  { keys: "Ctrl+S", description: "Save Draft (complete mode) or save progress in amend (stays in amend)" },
   { keys: "Ctrl+Enter", description: "Complete Consultation (when required fields are valid)" },
   { keys: "?", description: "Show this help" },
 ];
+
+//JJQR - AI (Oct 31, 2026) — soft hint when assessment text omits primary diagnosis wording
+const ASSESSMENT_DX_STOPWORDS = new Set([
+  "acute",
+  "the",
+  "a",
+  "an",
+  "of",
+  "and",
+  "or",
+  "in",
+  "on",
+  "with",
+  "without",
+  "unspecified",
+  "other",
+]);
+
+function assessmentOmitsPrimaryDiagnosis(primaryDescription: string, assessmentText: string): boolean {
+  const hay = assessmentText.toLowerCase();
+  const significant = primaryDescription
+    .toLowerCase()
+    .split(/\W+/)
+    .filter((w) => w.length > 2 && !ASSESSMENT_DX_STOPWORDS.has(w));
+  if (significant.length === 0) return false;
+  return !significant.some((w) => hay.includes(w));
+}
+
+function showAssessmentDiagnosisMismatchHint(diagnoses: Diagnosis[], assessmentText: string): boolean {
+  if (!assessmentText.trim() || diagnoses.length === 0) return false;
+  const primary = diagnoses.find((d) => d.type === "Primary") ?? diagnoses[0];
+  return assessmentOmitsPrimaryDiagnosis(primary.description, assessmentText);
+}
+//JJQR - END
 
 function toLabDraft(items: Consultation["labOrders"]): LabOrderDraft[] {
   return (items ?? []).map((i) => ({ labTestId: null, testName: i.testName, reason: i.reason ?? "", specimenType: i.specimenType ?? "", notes: i.notes ?? "" }));
@@ -295,6 +329,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [rxVersion, setRxVersion] = useState(0);
   const [rxSavedAt, setRxSavedAt] = useState<string | null>(null);
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  //JJQR - AI (Oct 31, 2026)
+  const [amendSavedAt, setAmendSavedAt] = useState<string | null>(null);
+  //JJQR - END
   const [savingDraft, setSavingDraft] = useState(false);
   const [savingChanges, setSavingChanges] = useState(false);
   // Save Draft / Complete / Save Changes all funnel through persistConsultation,
@@ -636,7 +673,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setSavingLabs(true);
     const supabase = null as never;
     try {
-      const consultId = consultationId ?? (await persistConsultation("Draft"));
+      //JJQR - AI (Oct 31, 2026) — amend section saves persist as Amended, stay in amend
+      const consultId =
+        consultationId ?? (await persistConsultation(mode === "amend" ? "Amended" : "Draft"));
       if (!consultId) return;
       await replaceLabOrdersByConsultation(
         supabase,
@@ -652,7 +691,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           })),
       );
       setLabsSavedAt(new Date().toLocaleTimeString());
+      if (mode === "amend") setAmendSnapshot(currentFormSnapshot());
       if (printAfter) await runPrintLabOrders();
+      //JJQR - END
     } finally {
       setSavingLabs(false);
     }
@@ -971,6 +1012,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
       if (rxRes.data) {
         setPrescriptionGroup(mapRxGroup(rxRes.data));
+      } else if (
+        consultRes.data &&
+        (consultRes.data.status === "Completed" || consultRes.data.status === "Amended")
+      ) {
+        //JJQR - AI (Oct 31, 2026) — completed no-Rx visits already passed the no-meds gate
+        setNoMedsConfirmed(true);
+        //JJQR - END
       }
 
       setVitalTemplates(
@@ -1083,6 +1131,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         if (consultRes.data.status === "Completed" || consultRes.data.status === "Amended") {
           //JJQR - AI (Oct 31, 2026) — F-010: no beforeunload on finalized records
           consultationFinalizedRef.current = true;
+          // Completed/amended records open in read-only view unless URL forces another mode.
+          if (!searchParams.get("mode")) {
+            setMode("view");
+          }
           //JJQR - END
           const logs = await queryAuditLogs(supabase, {
             entityType: "Consultation",
@@ -1346,6 +1398,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     rxSatisfied &&
     followUpSatisfied;
 
+  //JJQR - AI (Oct 31, 2026)
+  const assessmentDiagnosisMismatch = useMemo(
+    () => showAssessmentDiagnosisMismatchHint(diagnoses, assessment),
+    [diagnoses, assessment],
+  );
+  //JJQR - END
+
   // Shared header-row Save for every section that has no save of its own
   // (Vitals, Prescription, Lab Orders and Medical Certificate already have
   // one) — saves everything currently on the page as a Draft (or, in amend
@@ -1361,6 +1420,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       <div className="space-y-sm">
         {draftSavedAt && mode === "complete" && (
           <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
+        )}
+        {amendSavedAt && mode === "amend" && (
+          <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
         )}
         <div className="flex items-center justify-end gap-sm">
           <Button
@@ -1574,7 +1636,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setIssuingCert(true);
     const supabase = null as never;
     try {
-      const consultId = consultationId ?? (await persistConsultation("Draft"));
+      //JJQR - AI (Oct 31, 2026)
+      const consultId =
+        consultationId ?? (await persistConsultation(mode === "amend" ? "Amended" : "Draft"));
       if (!consultId) return;
       const today = todayManila();
       const cert = {
@@ -1594,7 +1658,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setCertExists(true);
       setMedCertRequested(true);
       setCertSavedAt(new Date().toLocaleTimeString());
+      if (mode === "amend") setAmendSnapshot(currentFormSnapshot());
       if (!printAfter) return;
+      //JJQR - END
       const [doc, pat] = await Promise.all([
         queryDoctorById(supabase, booking.doctorId),
         queryPatientById(supabase, booking.patientId),
@@ -1669,29 +1735,38 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     else finishCancelAmend();
   }
 
-  async function handleSaveChanges() {
-    if (!canComplete || !booking) return;
+  //JJQR - AI (Oct 31, 2026) — section/Ctrl+S saves persist without leaving amend
+  async function persistAmendProgress(): Promise<boolean> {
+    if (!canComplete || !booking) return false;
     setSaveError("");
     setSavingChanges(true);
     try {
       const savedId = await persistConsultation("Amended");
       if (!savedId) throw new Error("Could not save your changes. Check your connection and try again.");
-      // The server writes the audit_logs row itself (with a real diff of what
-      // changed) as part of the PUT above — this just reflects that locally so
-      // the history list updates without waiting on a refetch.
       setSavedConsultation(buildConsultationRecord());
       setAmendmentHistory((prev) => [
         { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: "Consultation amended" },
         ...prev,
       ]);
-      setAmendSnapshot(null);
-      setMode("view");
+      setAmendSnapshot(currentFormSnapshot());
+      setAmendSavedAt(new Date().toLocaleTimeString());
+      return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save your changes. Try again.");
+      return false;
     } finally {
       setSavingChanges(false);
     }
   }
+
+  async function handleSaveChanges() {
+    const ok = await persistAmendProgress();
+    if (ok) {
+      setAmendSnapshot(null);
+      setMode("view");
+    }
+  }
+  //JJQR - END
 
   // Per-section "Save" button (Diagnosis, Vaccinations, Follow-up, PF Decision,
   // SOAP & Chief Complaint) — every section's data already travels together in
@@ -1703,7 +1778,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // already have their own local Save.
   function saveCurrentProgress() {
     if (mode === "complete") handleSaveDraft();
-    else handleSaveChanges();
+    else void persistAmendProgress();
   }
 
   // Doctor.md §4: Ctrl+1..8 jump, Ctrl+S save, Ctrl+Enter complete, `?` help.
@@ -1719,7 +1794,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (mode === "complete") handleSaveDraft();
-        else handleSaveChanges();
+        else void persistAmendProgress();
       } else if (mod && e.key === "Enter") {
         e.preventDefault();
         if (mode === "complete" && canComplete) setChecklistOpen(true);
@@ -1901,7 +1976,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const sc = savedConsultation;
     return (
       <AppShell role="doctor">
-        {/* JJQR - AI (Oct 31, 2026) — allergies editable on completed view */}
+        {/* JJQR - AI (Oct 31, 2026) — completed view: banner in same 40rem column as cards */}
+        <div className="mx-auto w-full max-w-[40rem] space-y-lg">
         <ConsultPatientBanner
           patientName={booking.patientName}
           patientCode={booking.patientCode}
@@ -1911,6 +1987,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           allergies={patientAllergies}
           nkda={nkda}
           mode="view"
+          contentClassName="max-w-none w-full"
           onToggleNkda={(next) => {
             setNkda(next);
             void persistAllergies(next ? [] : patientAllergies.filter((a) => !a.is_nkda), next);
@@ -1941,7 +2018,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           }}
           {...clinicalBannerProps}
         />
-        <div className="mx-auto max-w-[40rem] space-y-lg">
+        <div className="space-y-lg">
           <div className="flex flex-wrap items-center justify-between gap-md">
             <div>
               <div className="flex flex-wrap items-center gap-sm">
@@ -2047,6 +2124,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             </>
           )}
         </div>
+        </div>
+        {/* JJQR - END */}
 
         <Drawer isOpen={amendHistoryOpen} onClose={() => setAmendHistoryOpen(false)} title="Amendment History">
           {amendmentHistory.length === 0 ? (
@@ -2117,6 +2196,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         {saveError && <Toast key={saveError} variant="error" message={saveError} />}
         {draftSavedAt && mode === "complete" && (
           <Toast key={draftSavedAt} variant="success" message={`Draft saved at ${draftSavedAt}.`} />
+        )}
+        {amendSavedAt && mode === "amend" && (
+          <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-md">
@@ -2255,7 +2337,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             ))}
           </nav>
 
-        <div className="min-w-0 space-y-md pb-[max(14rem,env(safe-area-inset-bottom))] lg:pb-28 lg:pb-[max(7rem,env(safe-area-inset-bottom))]">
+        <div className="min-w-0 space-y-md pb-[max(16rem,env(safe-area-inset-bottom))] lg:pb-28 lg:pb-[max(7rem,env(safe-area-inset-bottom))]">
             {/* JJQR - AI (Oct 31, 2026) — F-026 */}
             {mode !== "complete" && (
             <p className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
@@ -2411,6 +2493,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                           <SoapFieldToolbar doctorId={booking.doctorId} field="assessment" fieldLabel="Assessment" value={assessment} onInsert={setAssessment} />
                         </div>
                         <textarea placeholder="Assessment" value={assessment} onChange={(e) => setAssessment(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
+                        {assessmentDiagnosisMismatch && (
+                          <p className="mt-xs text-label-sm text-amber-800">
+                            Assessment text doesn&apos;t mention the primary diagnosis — update Diagnosis if the visit reason changed.
+                          </p>
+                        )}
                       </div>
                       <div>
                         <div className="mb-xs flex items-center justify-between">
@@ -2448,6 +2535,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   {isOpen && i === 2 && (
                     <div className="mt-md space-y-md">
                       {renderSectionSaveHeader(2)}
+                      {assessmentDiagnosisMismatch && (
+                        <p className="rounded-lg border border-amber-300 bg-amber-50 px-md py-sm text-label-sm text-amber-900">
+                          Assessment text doesn&apos;t mention the primary diagnosis — update Diagnosis if the visit reason changed.
+                        </p>
+                      )}
                       <div className="space-y-sm">
                         {diagnoses.map((d, idx) => (
                           <div key={idx} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
