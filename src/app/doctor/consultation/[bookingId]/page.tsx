@@ -13,7 +13,7 @@ function ConsultationRedirect({ params }: { params: Promise<{ bookingId: string 
     const q = search.toString();
     router.replace(`/doctor/consultation2/${bookingId}${q ? `?${q}` : ""}`);
   }, [bookingId, router, search]);
-  return null;
+  return <p role="status" className="p-lg text-body-md text-on-surface-variant">Opening consultation…</p>;
 }
 
 export default function ConsultationRedirectPage({ params }: { params: Promise<{ bookingId: string }> }) {

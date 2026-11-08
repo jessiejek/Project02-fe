@@ -47,7 +47,7 @@ export default async function CreatePrescriptionPage({
 
   return (
     <AppShell role="doctor">
-      <PrescriptionForm mode="create" patientId={patient.patient_id} doctorId={session.staffId} bookingId={bookingId} copyFromGroup={copyFromGroup} />
+      <PrescriptionForm patientName={[patient.first_name, patient.last_name].filter(Boolean).join(" ")} mode="create" patientId={patient.patient_id} doctorId={session.staffId} bookingId={bookingId} copyFromGroup={copyFromGroup} />
     </AppShell>
   );
 }

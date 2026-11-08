@@ -3,6 +3,7 @@
 import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import { todayManila } from "@/lib/clock";
 import Link from "next/link";
+import { buttonStyles } from "@/components/ui/buttonStyles";
 import { useSearchParams, notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -979,7 +980,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         doctorName: bookingRow.doctors?.staff_accounts?.full_name ?? "",
         appointmentDate: bookingRow.appointment_date,
         totalFee: Number(bookingRow.total_fee),
-        paymentStatus: bookingRow.payments?.status ?? "Unpaid",
+        paymentStatus: bookingRow.payments?.status ?? "Not recorded",
         visitType: bookingRow.visit_type ?? "New",
         discountCategory: bookingRow.discount_category ?? "",
         medCertRequested: bookingRow.med_cert_requested ?? false,
@@ -1890,12 +1891,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             </span>
             <div className="flex flex-col gap-sm sm:flex-row sm:items-center">
               {consultPrintButtons("flex flex-col gap-sm sm:flex-row")}
-              <Link href="/doctor/dashboard">
-                <Button variant="secondary" className="min-h-[44px] w-full sm:w-auto">Back to Queue</Button>
-              </Link>
-              <Link href="/doctor/dashboard">
-                <Button className="min-h-[44px] w-full sm:w-auto">Next Patient →</Button>
-              </Link>
+              <Link href="/doctor/dashboard" className={buttonStyles("secondary", "min-h-[44px] w-full sm:w-auto")}>
+Back to Queue
+</Link>
+              <Link href="/doctor/dashboard" className={buttonStyles("primary", "min-h-[44px] w-full sm:w-auto")}>
+Return to patient queue
+</Link>
             </div>
           </div>
           <Card className="space-y-sm text-body-md text-on-surface-variant">
@@ -1977,7 +1978,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     return (
       <AppShell role="doctor">
         {/* JJQR - AI (Oct 31, 2026) — completed view: banner in same 40rem column as cards */}
-        <div className="mx-auto w-full max-w-[40rem] space-y-lg">
+        <div className="mx-auto w-full max-w-doctor-record space-y-lg">
         <ConsultPatientBanner
           patientName={booking.patientName}
           patientCode={booking.patientCode}
@@ -2022,8 +2023,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           <div className="flex flex-wrap items-center justify-between gap-md">
             <div>
               <div className="flex flex-wrap items-center gap-sm">
-                <h1 className="text-headline-sm text-on-surface">{booking.patientName || "Patient"}</h1>
-                <StatusPill status={booking.paymentStatus} />
+                <h1 className="text-balance text-headline-lg font-semibold text-on-surface">Consultation record</h1>
               </div>
               {patientIdentifierLine(booking) && (
                 <p className="text-label-sm text-on-surface-variant">{patientIdentifierLine(booking)}</p>
@@ -2042,7 +2042,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           </div>
           {sc && (
             <>
-              <Card className="space-y-sm text-body-md text-on-surface-variant">
+              <Card className="space-y-md text-body-md leading-relaxed text-on-surface">
+                <h2 className="text-headline-md font-semibold">Clinical note</h2>
                 <p><strong>Chief Complaint:</strong> {sc.chiefComplaint || "Not recorded."}</p>
                 <p><strong>Subjective:</strong> {sc.subjective || "Not recorded."}</p>
                 <p><strong>Objective:</strong> {sc.objective || "Not recorded."}</p>
@@ -2050,21 +2051,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 <p><strong>Plan:</strong> {sc.plan || "Not recorded."}</p>
               </Card>
               <Card>
-                <h4 className="mb-sm text-headline-sm text-on-surface">Vital Signs</h4>
-                <p className="text-body-md text-on-surface-variant">
-                  {vitalReadings.length > 0
-                    ? defaultVitalTemplates.map((t) => `${t.description} ${filledVitals[t.formKey] || "—"}${t.unit ? ` ${t.unit}` : ""}`).join(" · ")
-                    : "No vitals recorded."}
-                </p>
+                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Vital Signs</h2>
+                {vitalReadings.length > 0 ? <dl className="grid grid-cols-2 gap-lg sm:grid-cols-3">{defaultVitalTemplates.map(t => <div key={t.id}><dt className="text-label-md text-on-surface-variant">{t.description}</dt><dd className="mt-xs text-body-lg font-medium tabular-nums text-on-surface">{filledVitals[t.formKey] ? `${filledVitals[t.formKey]}${t.unit ? ` ${t.unit}` : ""}` : "Not recorded"}</dd></div>)}</dl> : <p className="text-body-md text-on-surface-variant">No vitals recorded.</p>}
               </Card>
               <Card>
-                <h4 className="mb-sm text-headline-sm text-on-surface">Diagnoses</h4>
+                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Diagnoses</h2>
                 <p className="text-body-md text-on-surface-variant">
                   {sc.diagnoses.length > 0 ? sc.diagnoses.map((d) => `${d.description} (${d.type})`).join(", ") : "No diagnoses recorded."}
                 </p>
               </Card>
               <Card>
-                <h4 className="mb-sm text-headline-sm text-on-surface">Prescriptions</h4>
+                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Prescriptions</h2>
                 {prescriptionGroup && prescriptionGroup.items.length > 0 ? (
                   <div className="space-y-xs">
                     {prescriptionGroup.items.map((rx, i) => (
@@ -2078,7 +2075,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 )}
               </Card>
               <Card>
-                <h4 className="mb-sm text-headline-sm text-on-surface">Lab Orders</h4>
+                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Lab Orders</h2>
                 {sc.labOrders && sc.labOrders.length > 0 ? (
                   <div className="space-y-xs">
                     {sc.labOrders.map((lab, i) => (
@@ -2092,7 +2089,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 )}
               </Card>
               <Card>
-                <h4 className="mb-sm text-headline-sm text-on-surface">Vaccinations</h4>
+                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Vaccinations</h2>
                 {sc.vaccinationsAdministered && sc.vaccinationsAdministered.length > 0 ? (
                   <div className="space-y-xs">
                     {sc.vaccinationsAdministered.map((v, i) => (
@@ -2106,13 +2103,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 )}
               </Card>
               <Card>
-                <h4 className="mb-sm text-headline-sm text-on-surface">Follow-up</h4>
+                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Follow-up</h2>
                 <p className="text-body-md text-on-surface-variant">
                   {sc.followUpDate ? `${sc.followUpDate} — ${sc.followUpReason ?? ""}${sc.followUpInstructions ? ` (${sc.followUpInstructions})` : ""}${sc.followUpReminder ? " · reminder on" : ""}` : "No follow-up recorded."}
                 </p>
               </Card>
               <Card>
-                <h4 className="mb-sm text-headline-sm text-on-surface">Professional Fee</h4>
+                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Professional Fee</h2>
                 <p className="text-body-md text-on-surface-variant">
                   {sc.feeDecision?.type === "Waive"
                     ? `Waived — ${sc.feeDecision.waiveReason ?? ""}`
@@ -2205,7 +2202,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           <div>
             {/* JJQR - AI (Oct 31, 2026) — patient identity moved to ConsultPatientBanner */}
             <div className="flex flex-wrap items-center gap-sm">
-              <h1 className="text-headline-md text-on-surface">Consultation</h1>
+              <h1 className="text-balance text-headline-lg font-semibold text-on-surface">{mode === "amend" ? "Amend consultation" : "Document consultation"}</h1>
             </div>
             {/* JJQR - END */}
             {/* Noticeable, and reversible — staff's New/Follow-up tag from
@@ -2221,13 +2218,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                   className={cn(
                     "min-h-[44px] rounded-full border px-md py-xs text-label-md font-medium",
                     visitType === vt
-                      ? vt === "New"
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-tertiary bg-tertiary/10 text-tertiary"
+                      ? "border-primary bg-primary/10 text-primary"
                       : "border-outline-variant text-on-surface-variant",
                   )}
                 >
-                  {vt === "New" ? "New Appointment" : "Follow-up Appointment"}
+                  {vt === "New" ? "New visit" : "Follow-up visit"}
                 </button>
               ))}
               {staffVisitType && visitType !== staffVisitType && (
@@ -3535,7 +3530,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 onClick={() => setNeedHintExpanded((v) => !v)}
               >
                 <span className="font-medium">
-                  Need {missingRequiredSections.length}
+                  {missingRequiredSections.length} required section{missingRequiredSections.length === 1 ? "" : "s"} left
                 </span>
                 <Icon name={needHintExpanded ? "expand_less" : "expand_more"} className="text-[20px]" aria-hidden />
               </button>
@@ -3577,7 +3572,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
                 aria-label="Complete Consultation"
                 className="min-h-[44px] flex-[1.2] whitespace-nowrap px-sm sm:flex-none sm:px-lg"
               >
-                <span className="rounded-full bg-on-primary/20 px-xs text-label-sm">
+                <span className="tabular-nums text-label-sm">
                   {doneRequired}/{REQUIRED_SECTIONS.length}
                 </span>
                 <span className="sm:hidden">Complete</span>
@@ -3598,7 +3593,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 export default function Consultation2Page({ params }: { params: Promise<{ bookingId: string }> }) {
   const { bookingId } = use(params);
   return (
-    <Suspense>
+    <Suspense fallback={<div role="status" className="p-lg text-on-surface-variant">Loading consultation…</div>}>
       <ConsultationWorkflow bookingId={bookingId} />
     </Suspense>
   );

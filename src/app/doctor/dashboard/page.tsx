@@ -1,8 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { buttonStyles } from "@/components/ui/buttonStyles";
 import { addDaysToDate, previousMonth, todayManila } from "@/lib/clock";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DoctorPageHeader } from "@/components/doctor/DoctorPageHeader";
+import { visitDate } from "@/components/doctor/appointments/model";
+import { Toast } from "@/components/ui/Toast";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card, StatCard } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -51,6 +56,11 @@ export default function DoctorDashboardPage() {
   const { session } = useSession();
   const meDoctorId = session?.staffId ?? "";
   const [loaded, setLoaded] = useState(false);
+  const [queueError, setQueueError] = useState(false);
+  const [overviewError, setOverviewError] = useState(false);
+  const [earningsError, setEarningsError] = useState(false);
+  const [statusError, setStatusError] = useState("");
+  const [statusSaving, setStatusSaving] = useState<DayStatus | null>(null);
   const [name, setName] = useState("");
   const [dayStatus, setDayStatus] = useState<DayStatus>("Available");
   const [earnings, setEarnings] = useState<DoctorEarningsRow[]>([]);
@@ -59,6 +69,7 @@ export default function DoctorDashboardPage() {
   const [customTo, setCustomTo] = useState("");
   const [customTotals, setCustomTotals] = useState<typeof EMPTY_TOTALS | null>(null);
   const [loadingCustom, setLoadingCustom] = useState(false);
+  const [customError, setCustomError] = useState(false);
 
   const [board, setBoard] = useState<QueueBoard>(EMPTY_BOARD);
   const [consultationsToday, setConsultationsToday] = useState<ConsultationRow[]>([]);
@@ -109,6 +120,7 @@ export default function DoctorDashboardPage() {
       // for a single-doctor clinic, where "the clinic's day" and "this
       // doctor's day" are the same thing.
       const todaySummary = dailySummary.find((r) => r.appointment_date === today) ?? null;
+      setOverviewError(false);
       setRevenueToday(Number(todaySummary?.revenue ?? 0));
       setNoShowsToday(Number(todaySummary?.no_show_count ?? 0));
       setPendingVerifications(monthBookings.filter((b) => b.status === "ProofSubmitted").length);
@@ -129,6 +141,7 @@ export default function DoctorDashboardPage() {
           })),
       );
     } catch {
+      setOverviewError(true);
       // Non-critical widget — leave whatever was last loaded rather than
       // blanking the rest of the dashboard over a report-endpoint hiccup.
     }
@@ -138,8 +151,9 @@ export default function DoctorDashboardPage() {
     const supabase = null as never;
     try {
       setBoard(await queryQueue(supabase));
+      setQueueError(false);
     } catch {
-      setBoard(EMPTY_BOARD);
+      setQueueError(true);
     }
   }, []);
 
@@ -205,8 +219,8 @@ export default function DoctorDashboardPage() {
       await Promise.all([
         queryDayStatus(supabase, meDoctorId, today).then((statusRow) =>
           setDayStatus((statusRow?.status as DayStatus) ?? "Available"),
-        ),
-        queryDoctorEarnings(supabase, meDoctorId).then(setEarnings, () => setEarnings([])),
+        ).catch(() => setStatusError("Your availability could not be loaded. Check it before changing your status.")),
+        queryDoctorEarnings(supabase, meDoctorId).then(rows => { setEarnings(rows); setEarningsError(false); }, () => setEarningsError(true)),
         loadQueue(),
         loadAttention(),
         loadClinicOverview(),
@@ -246,6 +260,7 @@ export default function DoctorDashboardPage() {
     let cancelled = false;
     async function load() {
       setLoadingCustom(true);
+      setCustomError(false);
       try {
         const supabase = null as never;
         const rows = await queryBookings(supabase, { doctorId: meDoctorId, from: customFrom, to: customTo, status: "Completed" });
@@ -261,6 +276,8 @@ export default function DoctorDashboardPage() {
             EMPTY_TOTALS,
           ),
         );
+      } catch {
+        if (!cancelled) setCustomError(true);
       } finally {
         if (!cancelled) setLoadingCustom(false);
       }
@@ -274,7 +291,7 @@ export default function DoctorDashboardPage() {
   const totals = range === "month" ? monthTotals : range === "year" ? yearTotals : (customTotals ?? EMPTY_TOTALS);
   const rangeLabel =
     range === "month"
-      ? new Date(`${currentMonth}-01`).toLocaleDateString("en-PH", { month: "long", year: "numeric" })
+      ? new Date(`${currentMonth}-01`).toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "Asia/Manila" })
       : range === "year"
         ? currentYear
         : customFrom && customTo
@@ -284,8 +301,11 @@ export default function DoctorDashboardPage() {
   async function setStatus(status: DayStatus) {
     const supabase = null as never;
     const today = todayManila();
-    await saveDayStatus(supabase, meDoctorId, today, status);
-    setDayStatus(status);
+    if (statusSaving) return;
+    setStatusSaving(status); setStatusError("");
+    try { await saveDayStatus(supabase, meDoctorId, today, status); setDayStatus(status); }
+    catch { setStatusError("Your availability could not be updated. Please try again."); }
+    finally { setStatusSaving(null); }
   }
 
   // Only what the doctor can act on right now — a Confirmed walk-in hasn't
@@ -293,7 +313,7 @@ export default function DoctorDashboardPage() {
   // queue number so "who's actually next" reads the same as the physical line.
   const upNext = board.items
     .filter((e) => e.status === "CheckedIn" || e.status === "InProgress")
-    .sort((a, b) => Number(a.queue_number) - Number(b.queue_number))
+    .sort((a, b) => String(a.queue_number ?? "").localeCompare(String(b.queue_number ?? ""), "en", { numeric: true }))
     .slice(0, 3);
   const unpaidCompleted = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
 
@@ -313,8 +333,7 @@ export default function DoctorDashboardPage() {
           <p className="text-title-md text-on-surface">No doctor profile linked</p>
           <p className="text-body-md text-on-surface-variant">
             This login can sign in as Doctor but has no staff profile on the server, so the
-            dashboard cannot load. Sign out and use the clinic doctor account that owns the
-            doctor row (for example gavino@clinic.test), not doctor@clinic.test.
+            dashboard cannot load. Ask your clinic administrator to link your account to a doctor profile.
           </p>
         </div>
       </AppShell>
@@ -324,7 +343,7 @@ export default function DoctorDashboardPage() {
   if (!loaded) {
     return (
       <AppShell role="doctor">
-        <p className="text-body-md text-on-surface-variant">Loading your dashboard…</p>
+        <SkeletonCard lines={5} />
       </AppShell>
     );
   }
@@ -332,43 +351,33 @@ export default function DoctorDashboardPage() {
   return (
     <AppShell role="doctor" roleBadge={<StatusPill status={dayStatus} />}>
       <div className="min-w-0 space-y-lg overflow-x-hidden">
-        <div className="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-headline-lg text-on-surface">Good morning, {name}</h2>
-            <p className="text-body-md text-on-surface-variant">Shift: 8:00 AM - 5:00 PM</p>
-          </div>
-          <Link href="/doctor/appointments">
-            <Button className="min-h-[44px]">
-              Go to My Appointments
-              <Icon name="chevron_right" className="text-[18px]" />
-            </Button>
-          </Link>
-        </div>
+        <DoctorPageHeader title="Your clinic today" description={<>{name} · <span className="tabular-nums">{visitDate(todayManila())}</span></>} actions={<Link href="/doctor/appointments" className={buttonStyles("primary")}>Open appointments<Icon name="arrow_forward" className="h-4 w-4" /></Link>} />
+        {statusError && <Toast variant="error" key={statusError} message={statusError} />}
 
-        <Card className="!p-md">
+        <Card className="!p-lg sm:!p-xl">
           <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
-            <h3 className="text-label-lg font-semibold text-on-surface">Right now</h3>
+            <h3 className="text-label-lg font-semibold text-on-surface">Your patient queue</h3>
             <div className="flex flex-wrap gap-sm text-label-sm text-on-surface-variant">
-              <span>{board.summary.waiting} waiting</span>
-              <span>{board.summary.in_progress} in progress</span>
-              <span>{board.summary.completed} completed today</span>
+              <span>{queueError ? "—" : board.summary.waiting} waiting</span>
+              <span>{queueError ? "—" : board.summary.in_progress} in progress</span>
+              <span>{queueError ? "—" : board.summary.completed} completed today</span>
             </div>
           </div>
 
-          {upNext.length === 0 ? (
+          {queueError ? <div role="alert" className="space-y-md"><p className="text-body-md text-on-surface-variant">Your queue is unavailable. No waiting-patient totals are shown.</p><Button variant="secondary" onClick={loadQueue}>Reload queue</Button></div> : upNext.length === 0 ? (
             <p className="text-body-sm text-on-surface-variant">
               {board.summary.total === 0 ? "No one's checked in yet today." : `Queue's clear — ${board.summary.completed} seen today.`}
             </p>
           ) : (
-            <div className="space-y-xs">
+            <div className="space-y-md">
               {upNext.map((e) => (
                 <div
                   key={e.booking_id}
-                  className="flex flex-wrap items-center justify-between gap-sm rounded-lg border border-outline-variant px-sm py-xs"
+                  className="flex flex-wrap items-center justify-between gap-md rounded-lg border border-outline-variant p-md"
                 >
                   <div>
-                    <p className="text-body-sm font-medium text-on-surface">
-                      Q#{e.queue_number} · {e.patient_name}
+                    <p className="text-body-lg font-semibold tabular-nums text-on-surface">
+                      Queue {e.queue_number} · {e.patient_name}
                     </p>
                     <p className="text-label-sm text-on-surface-variant">
                       {e.visit_type === "FollowUp" ? "Follow-up" : "New"}
@@ -376,11 +385,8 @@ export default function DoctorDashboardPage() {
                     </p>
                   </div>
                   {/* JJQR - AI (Oct 31, 2026) */}
-                  <Link href={`/doctor/consultation2/${e.booking_id}`}>
-                  {/* JJQR - END */}
-                    <Button className="min-h-[44px] !px-sm !py-xs text-label-sm">
-                      {e.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}
-                    </Button>
+                  <Link href={`/doctor/consultation2/${e.booking_id}`} className={buttonStyles("secondary", "min-h-11 text-label-md")}>
+                    {e.status === "InProgress" ? "Resume consultation" : "Start consultation"}
                   </Link>
                 </div>
               ))}
@@ -393,7 +399,7 @@ export default function DoctorDashboardPage() {
               {unpaidCompleted.slice(0, 5).map((e) => (
                 <Link
                   key={`unpaid-${e.booking_id}`}
-                  href="/staff/payments"
+                  href={`/doctor/appointments/${e.booking_id}`}
                   className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
                   <span className="text-body-sm text-on-surface">{e.patient_name} — completed, unpaid</span>
@@ -427,24 +433,25 @@ export default function DoctorDashboardPage() {
         <Card className="!p-md">
           <h3 className="mb-sm text-label-lg font-semibold text-on-surface">Availability</h3>
           <p className="mb-sm text-label-md text-on-surface-variant">
-            {board.summary.waiting > 0
-              ? `${board.summary.waiting} waiting${
+            {queueError ? "Queue information is unavailable." : board.summary.waiting > 0
+              ? `${queueError ? "—" : board.summary.waiting} waiting${
                   upNext[0]?.status === "CheckedIn" ? ` · longest wait ${elapsedMinutes(upNext[0].checked_in_at)}m` : ""
                 }`
               : "No one waiting right now."}
           </p>
           <div className="flex flex-wrap gap-sm">
-            <Button variant={dayStatus === "Available" ? "primary" : "secondary"} onClick={() => setStatus("Available")}>Available</Button>
-            <Button variant={dayStatus === "RunningLate" ? "primary" : "secondary"} onClick={() => setStatus("RunningLate")}>Running Late</Button>
-            <Button variant={dayStatus === "UnavailableToday" ? "primary" : "secondary"} onClick={() => setStatus("UnavailableToday")}>Unavailable Today</Button>
+            <Button variant={dayStatus === "Available" ? "primary" : "secondary"} disabled={!!statusSaving} loading={statusSaving === "Available"} onClick={() => setStatus("Available")}>Available</Button>
+            <Button variant={dayStatus === "RunningLate" ? "primary" : "secondary"} disabled={!!statusSaving} loading={statusSaving === "RunningLate"} onClick={() => setStatus("RunningLate")}>Running Late</Button>
+            <Button variant={dayStatus === "UnavailableToday" ? "primary" : "secondary"} disabled={!!statusSaving} loading={statusSaving === "UnavailableToday"} onClick={() => setStatus("UnavailableToday")}>Unavailable Today</Button>
           </div>
         </Card>
 
         {/* Clinic Overview — the Admin Dashboard's own stat cards + recent
             bookings, surfaced here too so a solo doctor running the clinic
             doesn't need a separate admin login just to see these. */}
-        <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Clinic Overview</h3>
+        <details className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
+          <summary className="text-headline-sm font-semibold text-on-surface">Clinic reports & recent bookings</summary>
+          {overviewError ? <p role="alert" className="mt-md text-body-md text-on-surface-variant">Reports are unavailable. <button type="button" onClick={loadClinicOverview} className="text-primary underline">Try again</button></p> : <div className="mt-lg space-y-lg">
           <div className="grid grid-cols-1 gap-lg sm:grid-cols-2 md:grid-cols-3">
             <StatCard icon="payments" value={peso(revenueToday)} label="Revenue Today" />
             <StatCard icon="event_busy" value={noShowsToday} label="No Shows Today" />
@@ -480,19 +487,20 @@ export default function DoctorDashboardPage() {
               )}
             />
           </div>
-        </Card>
+          </div>}
+        </details>
 
         <Card>
           <div className="mb-md flex flex-wrap items-center justify-between gap-md">
             <h3 className="text-headline-sm text-on-surface">Practice Analytics — {rangeLabel}</h3>
             <div className="flex gap-xs">
-              <Button variant={range === "month" ? "primary" : "secondary"} onClick={() => setRange("month")}>
+              <Button aria-pressed={range === "month"} variant={range === "month" ? "primary" : "secondary"} onClick={() => setRange("month")}>
                 This Month
               </Button>
-              <Button variant={range === "year" ? "primary" : "secondary"} onClick={() => setRange("year")}>
+              <Button aria-pressed={range === "year"} variant={range === "year" ? "primary" : "secondary"} onClick={() => setRange("year")}>
                 This Year
               </Button>
-              <Button variant={range === "custom" ? "primary" : "secondary"} onClick={() => setRange("custom")}>
+              <Button aria-pressed={range === "custom"} variant={range === "custom" ? "primary" : "secondary"} onClick={() => setRange("custom")}>
                 Custom Range
               </Button>
             </div>
@@ -506,22 +514,22 @@ export default function DoctorDashboardPage() {
             </div>
           )}
 
-          {range === "custom" && (!customFrom || !customTo) ? (
+          {(earningsError || (range === "custom" && customError)) ? <p role="alert" className="text-body-md text-on-surface-variant">Practice totals could not be loaded. No estimated figures are shown.</p> : range === "custom" && (!customFrom || !customTo) ? (
             <p className="text-body-md text-on-surface-variant">Pick a start and end date to see totals for that range.</p>
           ) : range === "custom" && loadingCustom ? (
             <p className="text-body-md text-on-surface-variant">Loading…</p>
           ) : (
             <div className="grid grid-cols-1 gap-lg sm:grid-cols-3">
               <div>
-                <p className="text-headline-lg text-on-surface">{totals.completed_visits}</p>
-                <p className="text-label-md text-on-surface-variant">Appointments</p>
+                <p className="text-headline-lg tabular-nums text-on-surface">{totals.completed_visits}</p>
+                <p className="text-label-md text-on-surface-variant">Completed visits</p>
               </div>
               <div>
-                <p className="text-headline-lg text-on-surface">{peso(totals.collected)}</p>
+                <p className="text-headline-lg tabular-nums text-on-surface">{peso(totals.collected)}</p>
                 <p className="text-label-md text-on-surface-variant">
                   Collected
                   {collectedDelta !== null && (
-                    <span className={collectedDelta >= 0 ? " text-green-700" : " text-red-700"}>
+                    <span className={collectedDelta >= 0 ? " text-status-success" : " text-status-danger"}>
                       {" "}
                       ({collectedDelta >= 0 ? "+" : ""}
                       {collectedDelta}% vs last month)
@@ -530,24 +538,24 @@ export default function DoctorDashboardPage() {
                 </p>
               </div>
               <div>
-                <p className="text-headline-lg text-on-surface">{peso(totals.waived)}</p>
+                <p className="text-headline-lg tabular-nums text-on-surface">{peso(totals.waived)}</p>
                 <p className="text-label-md text-on-surface-variant">Waived</p>
               </div>
             </div>
           )}
 
-          {range !== "custom" && earnings.length === 0 && (
+          {!earningsError && range !== "custom" && earnings.length === 0 && (
             <p className="mt-md text-body-md text-on-surface-variant">No completed appointments yet.</p>
           )}
 
-          {range !== "custom" && earnings.length > 1 && (
+          {!earningsError && range !== "custom" && earnings.length > 1 && (
             <div className="mt-lg overflow-x-auto border-t border-outline-variant/30 pt-md">
               <p className="mb-sm text-label-md uppercase tracking-wide text-on-surface-variant">Monthly trend</p>
               <table className="w-full text-body-sm">
                 <thead>
                   <tr className="text-left text-label-md text-on-surface-variant">
                     <th className="py-xs pr-md">Month</th>
-                    <th className="py-xs pr-md text-right">Appointments</th>
+                    <th className="py-xs pr-md text-right">Completed visits</th>
                     <th className="py-xs text-right">Collected</th>
                   </tr>
                 </thead>
@@ -566,11 +574,10 @@ export default function DoctorDashboardPage() {
         </Card>
 
         <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Working Schedule</h3>
-          <p className="text-body-md text-on-surface-variant">Today: 8:00 AM - 5:00 PM</p>
-          <p className="text-body-md text-on-surface-variant">Tomorrow: 8:00 AM - 5:00 PM</p>
+          <h3 className="mb-md text-headline-sm text-on-surface">Clinic hours & days away</h3>
+          <p className="text-body-md text-on-surface-variant">Review your saved weekly hours and blocked dates before changing your availability.</p>
           <Link href="/doctor/schedule" className="mt-sm inline-block text-label-md text-primary hover:underline">
-            Go to Schedule
+            Manage availability
           </Link>
         </Card>
       </div>

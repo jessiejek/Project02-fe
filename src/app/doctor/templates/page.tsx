@@ -10,7 +10,7 @@ export default function DoctorTemplatesPage() {
       {/* JJQR - AI (Oct 31, 2026) */}
       <div className="mx-auto max-w-5xl space-y-lg">
         <div>
-          <h1 className="text-headline-lg text-on-surface">Templates</h1>
+          <h1 className="text-headline-lg text-on-surface">Consultation templates</h1>
           <p className="mt-xs text-body-md text-on-surface-variant">
             SOAP phrases, diagnoses, prescriptions, and certificates you reuse during consultations.
           </p>

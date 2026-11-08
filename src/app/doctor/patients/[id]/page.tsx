@@ -2,7 +2,9 @@
 
 import { Suspense, use, useEffect, useState } from "react";
 import Link from "next/link";
+import { buttonStyles } from "@/components/ui/buttonStyles";
 import { useSearchParams, notFound } from "next/navigation";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
@@ -115,6 +117,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   const doctorId = session?.staffId ?? "";
   const referredBookingId = searchParams.get("bookingId");
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [patient, setPatient] = useState<RealPatientHeader | null>(null);
   const [patientConsultations, setPatientConsultations] = useState<DoctorConsultationEntry[]>([]);
   const [prescriptionGroups, setPrescriptionGroups] = useState<PrescriptionGroup[]>([]);
@@ -135,7 +139,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   useEffect(() => {
     if (!doctorId) return;
 
+    let cancelled = false;
     async function load() {
+      try {
       const supabase = null as never;
       const [patientRow, consultsRes, rxRes, bookingRows, templates, vitalRows, labRows, docRows, vaxRows] = await Promise.all([
         queryPatientById(supabase, id),
@@ -149,6 +155,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         queryVaccinations(supabase, id),
       ]);
 
+      if (cancelled) return;
       if (patientRow) {
         setPatient({
           id: patientRow.patient_id,
@@ -260,9 +267,13 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
       );
 
       setLoaded(true);
+      } catch { if (!cancelled) setLoadError(true); }
     }
     load();
-  }, [id, doctorId]);
+    return () => { cancelled = true; };
+  }, [id, doctorId, loadAttempt]);
+
+  if (loadError) return <AppShell role="doctor"><ErrorState title="Patient chart unavailable" message="This chart could not be loaded. Please try again." onRetry={() => { setLoadError(false); setLoaded(false); setLoadAttempt(n => n+1); }} /></AppShell>;
 
   if (!doctorId || !loaded) {
     return (
@@ -307,8 +318,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-sm">
-                <h1 className="text-headline-md text-on-surface">{patient.fullName}</h1>
-                <span className="text-label-md text-on-surface-variant">{patient.patientCode}</span>
+                <h1 className="text-balance text-headline-lg font-semibold text-on-surface">{patient.fullName}</h1>
+                <span className="font-mono text-label-md text-on-surface-variant">{patient.patientCode}</span>
               </div>
               <p className="mt-xs text-body-md text-on-surface-variant">
                 {patient.sex} · {computeAge(patient.dateOfBirth)} yrs · Born {patient.dateOfBirth}
@@ -329,10 +340,6 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         <Card>
           <div className="mb-md flex flex-wrap items-center justify-between gap-md">
             <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="flex-1" />
-            <span className="mb-md inline-flex shrink-0 items-center gap-xs rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
-              <Icon name="lock" className="text-[12px]" />
-              Read-only
-            </span>
           </div>
 
           {tab === "timeline" && (
@@ -480,12 +487,12 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                     </select>
                   )}
                   {referredBookingId && (
-                    <Link href={`/doctor/consultation/${referredBookingId}/vitals`}>
-                      <Button>
+                    <Link href={`/doctor/consultation/${referredBookingId}/vitals`} className={buttonStyles("primary", "")}>
+
                         <Icon name="add_circle" className="text-[16px]" />
                         Add Vitals
-                      </Button>
-                    </Link>
+
+</Link>
                   )}
                 </div>
               </div>
@@ -569,12 +576,12 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                   <span />
                 )}
                 {referredBookingId && (
-                  <Link href={`/doctor/patients/${patient.id}/prescriptions/create?bookingId=${referredBookingId}`}>
-                    <Button>
+                  <Link href={`/doctor/patients/${patient.id}/prescriptions/create?bookingId=${referredBookingId}`} className={buttonStyles("primary", "")}>
+
                       <Icon name="add_circle" className="text-[16px]" />
                       New Prescription
-                    </Button>
-                  </Link>
+
+</Link>
                 )}
               </div>
 

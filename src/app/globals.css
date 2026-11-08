@@ -136,6 +136,11 @@
 
   /* Content width cap -> max-w-content (was max-w-container-max in the export) */
   --container-content: 1440px;
+  /* Explicit container namespace: spacing-lg/xl must not collapse reading widths. */
+  --container-doctor-copy: 36rem;
+  --container-doctor-search: 32rem;
+  --container-doctor-heading: 48rem;
+  --container-doctor-record: 64rem;
 
   /* Sidebar width, used by AppShell + its layout math (single source of truth) */
   --spacing-sidebar: 260px;

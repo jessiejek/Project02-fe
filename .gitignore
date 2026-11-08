@@ -50,3 +50,6 @@ next-env.d.ts
 agent/
 .claude/skills/
 skills-lock.json
+
+# Local authenticated UI captures contain real development patient records.
+/test-results/

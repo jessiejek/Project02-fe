@@ -40,7 +40,7 @@ export default async function EditPrescriptionPage({
 
   return (
     <AppShell role="doctor">
-      <PrescriptionForm mode="edit" patientId={patient.patient_id} doctorId={session.staffId} group={group} />
+      <PrescriptionForm patientName={[patient.first_name, patient.last_name].filter(Boolean).join(" ")} mode="edit" patientId={patient.patient_id} doctorId={session.staffId} group={group} />
     </AppShell>
   );
 }

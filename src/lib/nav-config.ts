@@ -64,23 +64,19 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
     ],
   },
   doctor: {
-    role: "doctor",
-    subtitle: "Medical Practitioner",
-    accent: "on-secondary-fixed",
+    role: "doctor", subtitle: "Doctor workspace", accent: "primary",
     navGroups: [
-      {
-        items: [
-          { label: "Dashboard", href: "/doctor/dashboard", icon: "dashboard" },
-          { label: "My Appointments", href: "/doctor/appointments", icon: "event_note" },
-          { label: "Patients", href: "/doctor/patients", icon: "groups" },
-          { label: "Schedule", href: "/doctor/schedule", icon: "schedule" },
-          //JJQR - AI (Oct 31, 2026)
-          { label: "Templates", href: "/doctor/templates", icon: "description" },
-          //JJQR - END
-          { label: "Settings", href: "/doctor/settings", icon: "settings" },
-          { label: "Profile", href: "/doctor/profile", icon: "account_circle" },
-        ],
-      },
+      { label: "Patient care", items: [
+        { label: "Today", href: "/doctor/dashboard", icon: "dashboard" },
+        { label: "Appointments", href: "/doctor/appointments", icon: "event_note" },
+        { label: "Patient charts", href: "/doctor/patients", icon: "groups" },
+      ] },
+      { label: "Your practice", items: [
+        { label: "Availability", href: "/doctor/schedule", icon: "schedule" },
+        { label: "Templates", href: "/doctor/templates", icon: "description" },
+        { label: "Settings", href: "/doctor/settings", icon: "settings" },
+        { label: "Profile", href: "/doctor/profile", icon: "account_circle" },
+      ] },
     ],
   },
   admin: {

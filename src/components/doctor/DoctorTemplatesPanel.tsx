@@ -117,6 +117,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "shrink-0 rounded-full border px-md py-xs text-label-md transition-colors",
         active
@@ -1154,7 +1155,7 @@ export function DoctorTemplatesPanel() {
       {toast && <Toast key={toast.key} variant={toast.variant} message={toast.message} />}
       {/* JJQR - AI (Oct 31, 2026) */}
       {loadError && (
-        <p className="rounded-lg bg-error-container px-md py-sm text-body-md text-on-error-container">{loadError}</p>
+        <p role="alert" className="rounded-lg bg-error-container px-md py-sm text-body-md text-on-error-container">{loadError}</p>
       )}
 
       {loading ? (
@@ -1199,7 +1200,7 @@ export function DoctorTemplatesPanel() {
                   </div>
                 </label>
                 {showSourceChips && (
-                  <div className="flex gap-xs overflow-x-auto pb-xs">
+                  <div className="flex flex-wrap gap-xs">
                     <FilterChip active={sourceFilter === "all"} onClick={() => setSourceFilter("all")}>
                       All
                     </FilterChip>
@@ -1211,7 +1212,7 @@ export function DoctorTemplatesPanel() {
                     </FilterChip>
                   </div>
                 )}
-                <div className="flex gap-xs overflow-x-auto pb-xs">
+                <div className="flex flex-wrap gap-xs">
                   {SPECIALTY_CHIP_LABELS.map(({ id, label }) => (
                     <FilterChip key={id} active={specialtyFilter === id} onClick={() => setSpecialtyFilter(id)}>
                       {label}
@@ -1221,7 +1222,7 @@ export function DoctorTemplatesPanel() {
               </div>
               <Button className="shrink-0" onClick={() => openCreate(activeTab)}>
                 <Icon name="add" className="mr-xs text-[18px]" />
-                New
+                New {NEW_LABEL[activeTab]}
               </Button>
             </div>
 
@@ -1229,23 +1230,24 @@ export function DoctorTemplatesPanel() {
               <EmptyState
                 icon="clinical_notes"
                 message={
-                  search || sourceFilter !== "all"
+                  search || sourceFilter !== "all" || specialtyFilter !== "All"
                     ? "No templates match your search or filters."
                     : `No ${NEW_LABEL[activeTab]}s yet.`
                 }
                 action={
-                  search || sourceFilter !== "all" ? (
+                  search || sourceFilter !== "all" || specialtyFilter !== "All" ? (
                     <Button
                       variant="secondary"
                       onClick={() => {
                         setSearch("");
                         setSourceFilter("all");
+                        setSpecialtyFilter("All");
                       }}
                     >
                       Clear filters
                     </Button>
                   ) : (
-                    <Button onClick={() => openCreate(activeTab)}>Create one</Button>
+                    <Button onClick={() => openCreate(activeTab)}>Create {NEW_LABEL[activeTab]}</Button>
                   )
                 }
               />

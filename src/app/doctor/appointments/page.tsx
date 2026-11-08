@@ -1,208 +1,77 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
-import { DataTable } from "@/components/ui/DataTable";
-import { StatusPill } from "@/components/ui/StatusPill";
+import { DoctorPageHeader } from "@/components/doctor/DoctorPageHeader";
+import { AppointmentFocus } from "@/components/doctor/appointments/AppointmentFocus";
+import { AppointmentList } from "@/components/doctor/appointments/AppointmentList";
+import { filterAppointments, focusAppointment, mapAppointments, orderedAppointments, visitDate, type Appointment, type AppointmentFilter, type AppointmentScope } from "@/components/doctor/appointments/model";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctorBookings } from "@/lib/data/bookings";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
+import { todayManila } from "@/lib/clock";
+import { cn } from "@/lib/cn";
 
-interface AppointmentRow {
-  id: string;
-  patientName: string;
-  slotStartTime: string;
-  queueNumber: string | null;
-  status: string;
-  paymentStatus: string;
-}
-
-// Stitch appointments_list_doctor. Retiring mockBookings per
-// Implementation-Phases/06-booking-flow.md.
+const FILTERS: { id: AppointmentFilter; label: string }[] = [{ id: "active", label: "In clinic" }, { id: "waiting", label: "Waiting" }, { id: "in-progress", label: "In progress" }, { id: "completed", label: "Completed" }, { id: "all", label: "All statuses" }];
+const PAGE_SIZE = 20;
 export default function DoctorAppointmentsPage() {
   const { session } = useSession();
-  const meDoctorId = session?.staffId ?? "";
-  const [bookings, setBookings] = useState<AppointmentRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const doctorId = session?.staffId;
+  const [scope, setScope] = useState<AppointmentScope>("today");
+  const [snapshot, setSnapshot] = useState<{ scope: AppointmentScope; rows: Appointment[]; at: Date } | null>(null);
+  const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "waiting" | "in-progress" | "completed">("active");
-  // Defaults to today, like every other daily-queue view in the app — this
-  // page was pulling every booking ever made with no date scoping at all,
-  // which only gets worse as visit history piles up. "All" is one click away.
-  const [scope, setScope] = useState<"today" | "all">("today");
-
-  const mapRows = useCallback(
-    (rows: Awaited<ReturnType<typeof queryDoctorBookings>>) =>
-      rows.map((b) => ({
-        id: b.booking_id,
-        patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "—",
-        slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
-        queueNumber: b.queue_number,
-        status: b.status,
-        paymentStatus: b.payments?.status ?? "Unpaid",
-      })),
-    [],
-  );
-
+  const [filter, setFilter] = useState<AppointmentFilter>("active");
+  const [page, setPage] = useState(1);
+  const requestId = useRef(0);
   const load = useCallback(async () => {
-    if (!meDoctorId) return;
-    const supabase = null as never;
+    if (!doctorId) return;
+    const id = ++requestId.current;
+    setFetching(true);
     try {
-      const rows = await queryDoctorBookings(supabase, meDoctorId, { today: scope === "today" });
-      setBookings(mapRows(rows));
-    } finally {
-      setLoading(false);
-    }
-  }, [meDoctorId, scope, mapRows]);
-
-  //JJQR - AI (Oct 31, 2026)
-  useEffect(() => {
-    if (!meDoctorId) return;
-    let cancelled = false;
-    void (async () => {
-      setLoading(true);
-      const supabase = null as never;
-      try {
-        const rows = await queryDoctorBookings(supabase, meDoctorId, { today: scope === "today" });
-        if (!cancelled) setBookings(mapRows(rows));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [meDoctorId, scope, mapRows]);
-  //JJQR - END
-
-  // Only meaningful in "today" scope — a full-history pull doesn't need to
-  // react to a new check-in the way the day's live list does.
-  useClinicHubEvent("PatientCheckedIn", () => {
-    if (scope === "today") load();
-  });
+      const data = await queryDoctorBookings(null, doctorId, { today: scope === "today" });
+      if (id !== requestId.current) return;
+      setSnapshot({ scope, rows: orderedAppointments(mapAppointments(data), scope), at: new Date() });
+      setError("");
+    } catch {
+      if (id === requestId.current) setError("Appointments could not be refreshed. Please try again.");
+    } finally { if (id === requestId.current) setFetching(false); }
+  }, [doctorId, scope]);
+  useEffect(() => { let cancelled = false; queueMicrotask(() => { if (!cancelled) void load(); }); return () => { cancelled = true; requestId.current += 1; }; }, [load]);
+  useEffect(() => { const timer = setInterval(() => void load(), 60_000); return () => clearInterval(timer); }, [load]);
+  useClinicHubEvent("PatientCheckedIn", load);
   useClinicHubEvent("QueueUpdated", load);
-  // Without this, a payment staff confirms elsewhere never updates this
-  // page's Payment column until the doctor manually refreshes.
   useClinicHubEvent("PaymentUpdated", load);
 
-  // Fallback poll for a dropped/blocked SignalR connection (same pattern as
-  // /staff/queue) — self-corrects within a minute if push doesn't arrive.
-  useEffect(() => {
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
-  }, [load]);
+  const current = snapshot?.scope === scope ? snapshot : null;
+  const appointments = current?.rows ?? [];
+  const loading = fetching && !current;
+  const shown = filterAppointments(appointments, filter, search);
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pages);
+  const visible = shown.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  function changeScope(next: AppointmentScope) { if (scope === next) return; setScope(next); setError(""); setFetching(true); setPage(1); setSearch(""); setFilter(next === "all" ? "all" : "active"); }
+  const waiting = appointments.filter(row => row.status === "CheckedIn").length;
+  const inProgress = appointments.filter(row => row.status === "InProgress").length;
+  const completed = appointments.filter(row => row.status === "Completed").length;
 
-  const STATUS_FILTERS: Record<typeof statusFilter, string[] | null> = {
-    all: null,
-    active: ["CheckedIn", "InProgress"],
-    waiting: ["CheckedIn"],
-    "in-progress": ["InProgress"],
-    completed: ["Completed"],
-  };
-
-  const rows = bookings
-    .filter((b) => `${b.patientName} ${b.status}`.toLowerCase().includes(search.toLowerCase()))
-    .filter((b) => {
-      const allowed = STATUS_FILTERS[statusFilter];
-      return !allowed || allowed.includes(b.status);
-    });
-
-  return (
-    <AppShell role="doctor">
-      <div className="space-y-lg">
-        <div className="flex flex-wrap items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">My Appointments</h2>
-          <div className="flex overflow-hidden rounded-lg border border-outline-variant text-label-md">
-            <button
-              type="button"
-              onClick={() => setScope("today")}
-              className={scope === "today" ? "bg-primary px-md py-xs text-on-primary" : "px-md py-xs text-on-surface-variant"}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => setScope("all")}
-              className={scope === "all" ? "bg-primary px-md py-xs text-on-primary" : "px-md py-xs text-on-surface-variant"}
-            >
-              All
-            </button>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-sm">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search appointments..."
-            className="w-full rounded-lg border border-outline-variant px-md py-sm sm:w-80"
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="rounded-lg border border-outline-variant px-md py-sm text-body-md text-on-surface"
-          >
-            <option value="all">All statuses</option>
-            <option value="active">Active (Checked in / In progress)</option>
-            <option value="waiting">Waiting (Checked in)</option>
-            <option value="in-progress">In progress</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
-        <DataTable
-          columns={[
-            { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
-            { header: "Patient", render: (r) => r.patientName },
-            { header: "Time", render: (r) => r.slotStartTime },
-            { header: "Status", render: (r) => <StatusPill status={r.status} /> },
-            { header: "Payment", render: (r) => <StatusPill status={r.paymentStatus} /> },
-            {
-              header: "Actions",
-              align: "right",
-              render: (r) =>
-                ["CheckedIn", "InProgress"].includes(r.status) ? (
-                  // JJQR - AI (Oct 31, 2026) — Grace consult path
-                  <Link href={`/doctor/consultation2/${r.id}`}>
-                    <Button>{r.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}</Button>
-                  </Link>
-                ) : (
-                  <Link href={`/doctor/appointments/${r.id}`}>
-                    <Button variant="secondary">View</Button>
-                  </Link>
-                ),
-            },
-          ]}
-          rows={rows}
-          rowKey={(r) => r.id}
-          loading={loading}
-          renderMobileCard={(r) => (
-            <div className="space-y-sm">
-              <div className="flex items-start justify-between gap-md">
-                <div>
-                  <p className="text-body-md font-medium text-on-surface">{r.patientName}</p>
-                  <p className="text-label-sm text-on-surface-variant">
-                    {r.slotStartTime} · Q#{r.queueNumber ?? "—"}
-                  </p>
-                </div>
-                <StatusPill status={r.status} />
-              </div>
-              <StatusPill status={r.paymentStatus} />
-              {["CheckedIn", "InProgress"].includes(r.status) ? (
-                <Link href={`/doctor/consultation2/${r.id}`} className="block">
-                  <Button className="w-full">{r.status === "InProgress" ? "Resume Consultation" : "Start Consultation"}</Button>
-                </Link>
-              ) : (
-                <Link href={`/doctor/appointments/${r.id}`} className="block">
-                  <Button variant="secondary" className="w-full">
-                    View
-                  </Button>
-                </Link>
-              )}
-            </div>
-          )}
-        />
+  if (session && !session.staffId) return <AppShell role="doctor"><DoctorPageHeader title="Doctor profile not linked" description="Ask your clinic administrator to link your account to a doctor profile before opening patient records." /></AppShell>;
+  return <AppShell role="doctor"><div className="space-y-xl">
+    <DoctorPageHeader title={scope === "today" ? "Today's appointments" : "Appointment history"} description={scope === "today" ? <><span className="tabular-nums">{visitDate(todayManila())}</span> · Your patient queue and consultations</> : "Review your previous and upcoming visits, with the date of every appointment."} actions={<div className="flex rounded-xl border border-outline-variant bg-surface-container-lowest p-xs" role="group" aria-label="Appointment date range">{(["today", "all"] as const).map(value => <button key={value} type="button" aria-pressed={scope === value} onClick={() => changeScope(value)} className={cn("min-h-11 rounded-[calc(var(--radius-xl)-var(--spacing-xs))] px-lg text-label-md font-medium transition-colors motion-reduce:transition-none", scope === value ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-high")}>{value === "today" ? "Today" : "History"}</button>)}</div>} />
+    {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-md rounded-lg border border-status-danger-border bg-status-danger-surface p-md text-status-danger"><p className="text-body-md">{error}{current && " Showing the last loaded appointments."}</p><Button variant="secondary" loading={fetching} onClick={load}>Try again</Button></div>}
+    <section aria-label={scope === "today" ? "Today's queue summary" : "History summary"} className="flex flex-wrap gap-x-xl gap-y-md border-b border-outline-variant pb-lg">{[["Waiting", waiting], ["In progress", inProgress], ["Completed", completed]].map(([label, count]) => <div key={label} className="flex items-baseline gap-sm"><span className="text-headline-md font-semibold tabular-nums text-on-surface">{current ? count : "—"}</span><span className="text-body-md text-on-surface-variant">{label}</span></div>)}</section>
+    {scope === "today" && !error && (loading || appointments.length > 0) && <AppointmentFocus appointment={focusAppointment(appointments)} loading={loading} onHistory={() => changeScope("all")} />}
+    <section aria-labelledby="appointment-list-title" aria-busy={fetching || undefined} className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest">
+      <div className="space-y-lg p-lg"><div className="flex flex-wrap items-center justify-between gap-md"><div><h2 id="appointment-list-title" className="text-headline-md font-semibold text-on-surface">{scope === "today" ? "Patient queue" : "All appointments"}</h2><p className="mt-xs text-label-md text-on-surface-variant">{current ? `${shown.length} shown of ${appointments.length} appointments` : "Loading appointments…"}</p></div><Button variant="secondary" onClick={load} loading={fetching}><Icon name="refresh" className="h-4 w-4" />{fetching ? "Refreshing…" : "Refresh"}</Button></div>
+        <div className="relative max-w-doctor-search"><Icon name="search" className="pointer-events-none absolute left-md top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" /><label htmlFor="appointment-search" className="sr-only">Search patients, patient IDs or queue numbers</label><input id="appointment-search" type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(1); }} placeholder="Search patient or queue number" className="min-h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest py-sm pl-11 pr-md text-body-md text-on-surface" /></div>
+        <div role="group" aria-label="Filter appointment status" className="flex flex-wrap gap-xs">{FILTERS.map(item => <button type="button" key={item.id} aria-pressed={filter === item.id} onClick={() => { setFilter(item.id); setPage(1); }} className={cn("min-h-11 rounded-lg border px-md py-sm text-label-md font-medium transition-colors motion-reduce:transition-none", filter === item.id ? "border-primary bg-primary/10 text-primary" : "border-transparent text-on-surface-variant hover:bg-surface-container-low")}>{item.label}</button>)}</div>
       </div>
-    </AppShell>
-  );
+      {loading ? <div className="p-lg"><SkeletonTable rows={5} columns={4} /></div> : error && !current ? <div className="border-t border-outline-variant px-lg py-xl text-body-md text-on-surface-variant">Appointments are unavailable. Use Try again above to reload them.</div> : shown.length ? <AppointmentList rows={visible} scope={scope} /> : <div className="space-y-md border-t border-outline-variant px-lg py-xl text-center"><Icon name="event_note" className="mx-auto h-7 w-7 text-on-surface-variant" /><h3 className="text-headline-sm font-semibold text-on-surface">{search ? "No matching appointments" : appointments.length ? "No appointments in this view" : scope === "today" ? "No appointments today" : "No appointments yet"}</h3><p className="text-body-md text-on-surface-variant">{search ? "Try a different patient name or queue number." : appointments.length ? "Choose another status to see the rest of your appointments." : "Appointments will appear here when they are booked."}</p>{appointments.length > 0 && (search || filter !== "all") && <Button variant="secondary" onClick={() => { setSearch(""); setFilter("all"); setPage(1); }}>Clear filters</Button>}{!appointments.length && scope === "today" && <Button onClick={() => changeScope("all")}>Review appointment history<Icon name="arrow_forward" className="h-4 w-4" /></Button>}</div>}
+      {current && <footer className="flex flex-wrap items-center justify-between gap-md border-t border-outline-variant p-lg"><p className="text-label-sm tabular-nums text-on-surface-variant">Updated {current.at.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })} PHT · Auto-refresh every minute</p>{pages > 1 && <nav aria-label="Appointment pages" className="flex items-center gap-sm"><Button variant="secondary" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</Button><span className="text-label-md tabular-nums text-on-surface">{currentPage} / {pages}</span><Button variant="secondary" disabled={currentPage === pages} onClick={() => setPage(currentPage + 1)}>Next</Button></nav>}</footer>}
+    </section>
+  </div></AppShell>;
 }

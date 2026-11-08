@@ -1,4 +1,6 @@
 "use client";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
@@ -123,16 +125,23 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
   // vital_field_templates rarely changes — fetch once per mount rather than
   // re-querying on every keystroke (Implementation-Phases/03-reference-clinic-data.md
   // §3d).
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<VitalFieldTemplate[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [visibleOtherIds, setVisibleOtherIds] = useState<string[]>([]);
   useEffect(() => {
+    let cancelled = false;
     async function load() {
+      try {
       const supabase = null as never;
       const [templates, readings] = await Promise.all([
         queryVitalFieldTemplates(supabase),
         queryVitalReadings(supabase, { bookingId }),
       ]);
+      if (cancelled) return;
       const fetchedTemplates = templates.map((t) => ({
         id: t.template_id,
         description: t.description,
@@ -146,9 +155,12 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
       const otherTemplateIds = new Set(fetchedTemplates.filter((t) => !t.isDefault).map((t) => t.id));
       setValues(Object.fromEntries(existingReadings.map((r) => [r.templateId, r.value])));
       setVisibleOtherIds(existingReadings.filter((r) => otherTemplateIds.has(r.templateId)).map((r) => r.templateId));
+      } catch { if (!cancelled) setLoadError(true); }
+      finally { if (!cancelled) setLoading(false); }
     }
     load();
-  }, [bookingId]);
+    return () => { cancelled = true; };
+  }, [bookingId, loadAttempt]);
   const defaultTemplates = templates.filter((t) => t.isDefault);
   const otherTemplates = templates.filter((t) => !t.isDefault);
 
@@ -177,6 +189,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
 
   async function confirmSave() {
     setSaving(true);
+    setSaveError(null);
     try {
       // One row per template with a non-empty value; blank fields delete the
       // row (Implementation-Phases/07-consultations-vitals.md §7c).
@@ -188,15 +201,19 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
         patientId,
         relevantTemplateIds.map((templateId) => ({ template_id: templateId, value: (values[templateId] ?? "").trim() })),
       );
-      setSavedAt(new Date().toLocaleTimeString());
+      setSavedAt(new Date().toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }) + " PHT");
       onSaved?.();
       setConfirmOpen(false);
+    } catch {
+      setSaveError("The readings were not saved. Your entries are still here; please try again.");
     } finally {
       setSaving(false);
     }
   }
 
   const addableOthers = otherTemplates.filter((t) => !visibleOtherIds.includes(t.id));
+  if (loading) return <div role="status" aria-label="Loading vital signs"><SkeletonCard lines={4} /><SkeletonCard lines={4} /></div>;
+  if (loadError) return <ErrorState title="Vital signs unavailable" message="We could not load the current readings. Try again before entering or saving measurements." onRetry={() => { setLoading(true); setLoadError(false); setLoadAttempt(n => n + 1); }} />;
 
   return (
     <div className="space-y-lg">
@@ -208,9 +225,9 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
       <div className="flex justify-end gap-sm">
         <Button variant="secondary" onClick={() => setOthersModalOpen(true)}>
           <Icon name="add_circle" className="text-[16px]" />
-          Others
+          Add measurement
         </Button>
-        <Button loading={saving} onClick={() => setConfirmOpen(true)}>Save</Button>
+        <Button loading={saving} onClick={() => { setSaveError(null); setConfirmOpen(true); }}>Save vital signs</Button>
       </div>
 
       <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
@@ -255,16 +272,17 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
       <Modal
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Save Changes?"
+        title="Save vital signs?"
         footer={
           <>
             <Button variant="secondary" disabled={saving} onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button loading={saving} onClick={confirmSave}>Confirm</Button>
+            <Button loading={saving} onClick={confirmSave}>Save vital signs</Button>
           </>
         }
       >
+        {saveError && <p role="alert" className="mb-md text-status-danger">{saveError}</p>}
         <p className="text-body-md text-on-surface-variant">Save these vital sign readings for this appointment?</p>
       </Modal>
     </div>

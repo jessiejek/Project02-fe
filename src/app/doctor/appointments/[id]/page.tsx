@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { visitDate } from "@/components/doctor/appointments/model";
+import { buttonStyles } from "@/components/ui/buttonStyles";
 import { notFound, redirect } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { getServerSession } from "@/lib/auth/session";
 import { queryBookingById } from "@/lib/data/bookings";
@@ -46,7 +47,7 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
     appointmentDate: b.appointment_date,
     slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
     status: b.status,
-    paymentStatus: b.payments?.status ?? "Unpaid",
+    paymentStatus: b.payments?.status ?? "Not recorded",
     queueNumber: b.queue_number,
     totalFee: Number(b.total_fee),
     amountDue: Number(b.amount_due),
@@ -67,25 +68,25 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
 
   return (
     <AppShell role="doctor">
-      <div className="mx-auto max-w-[40rem] space-y-lg">
-        <Link href="/doctor/appointments" className="text-label-md text-primary hover:underline">
-          ← Back to appointments
+      <div className="mx-auto max-w-doctor-heading space-y-lg">
+        <Link href="/doctor/appointments" className="inline-flex min-h-11 items-center gap-xs text-label-md text-primary hover:underline">
+          <Icon name="chevron_left" className="h-4 w-4" />Back to appointments
         </Link>
 
         {/* Doctor.md §3: "Hero shows patient/date/queue/status/payment/service
             chips, patient contact chips, fee breakdown" — patient identity
             was previously missing entirely from this page. */}
         <Card>
-          <div className="mb-md flex items-start justify-between">
+          <div className="mb-lg flex flex-wrap items-start justify-between gap-md">
             <div>
-              <h1 className="text-headline-md text-on-surface">{booking.patientName}</h1>
-              <p className="text-body-md text-on-surface-variant">{booking.appointmentDate} · {booking.slotStartTime}</p>
+              <h1 className="text-balance text-headline-lg font-semibold text-on-surface">{booking.patientName}</h1>
+              <p className="text-body-md text-on-surface-variant">{visitDate(booking.appointmentDate)}{booking.slotStartTime && booking.slotStartTime !== "00:00" ? ` · ${booking.slotStartTime}` : ""}</p>
             </div>
             <StatusPill status={booking.status} />
           </div>
           <div className="mb-md flex flex-wrap gap-md text-label-md text-on-surface-variant">
-            {booking.queueNumber && <span>Queue #{booking.queueNumber}</span>}
-            <StatusPill status={booking.paymentStatus} />
+            {booking.queueNumber && <span className="tabular-nums">Queue {booking.queueNumber}</span>}
+            <span>Payment: {booking.paymentStatus}</span>
           </div>
           <div className="flex flex-wrap gap-md border-t border-outline-variant pt-md text-label-md text-on-surface-variant">
             <span className="flex items-center gap-xs">
@@ -105,20 +106,20 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
 
         <Card>
           {isActive && (
-            <Link href={`/doctor/consultation2/${booking.id}?mode=complete`}>
-              <Button className="w-full">Open Consultation</Button>
-            </Link>
+            <Link href={`/doctor/consultation2/${booking.id}?mode=complete`} className={buttonStyles("primary", "w-full")}>
+Open Consultation
+</Link>
           )}
           {isCompleted && (
             <div className="flex flex-col gap-md sm:flex-row">
-              <Link href={`/doctor/consultation2/${booking.id}?mode=view`} className="flex-1">
-                <Button variant="secondary" className="w-full">
+              <Link href={`/doctor/consultation2/${booking.id}?mode=view`} className={buttonStyles("secondary", "flex-1 w-full")}>
+
                   View Consultation
-                </Button>
-              </Link>
-              <Link href={`/doctor/consultation2/${booking.id}?mode=amend`} className="flex-1">
-                <Button className="w-full">Edit / Amend</Button>
-              </Link>
+
+</Link>
+              <Link href={`/doctor/consultation2/${booking.id}?mode=amend`} className={buttonStyles("primary", "flex-1 w-full")}>
+Edit / Amend
+</Link>
             </div>
           )}
           {isCompleted && (
@@ -131,9 +132,6 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
                   ? "This appointment was rescheduled — open the new booking from your appointments list."
                   : "This appointment is closed (cancelled or no-show)."}
               </p>
-              <Button disabled className="mt-md w-full">
-                Appointment Closed
-              </Button>
             </>
           )}
           {!isActive && !isCompleted && !isClosed && (
@@ -141,9 +139,6 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
               <p className="text-body-md text-on-surface-variant">
                 This booking is still {booking.status} — open the consultation after staff confirms or checks the patient in.
               </p>
-              <Button disabled className="w-full" variant="secondary">
-                Open Consultation (unavailable)
-              </Button>
             </div>
           )}
           {/*JJQR - END*/}

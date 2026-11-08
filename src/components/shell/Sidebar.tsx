@@ -40,12 +40,12 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
   const config = ROLE_CONFIG[role];
 
   return (
-    <div className="flex h-full flex-col bg-inverse-surface py-lg">
+    <div className={cn("flex h-full flex-col py-lg", role === "doctor" ? "border-r border-outline-variant bg-surface-container-lowest" : "bg-inverse-surface")}>
       <div className={cn("mb-md flex items-center gap-sm", collapsed ? "justify-center px-xs" : "px-lg")}>
         {!collapsed && (
           <div className="min-w-0">
-            <h1 className="truncate text-headline-sm font-bold text-primary-fixed">Dr. Grace Gavino</h1>
-            <p className="truncate text-label-sm uppercase tracking-widest text-surface-variant/70">
+            <p className={cn("truncate text-headline-sm font-semibold", role === "doctor" ? "text-primary" : "text-primary-fixed")}>Dr. Grace Gavino</p>
+            <p className={cn("text-label-sm", role === "doctor" ? "mt-xs text-on-surface-variant" : "truncate uppercase tracking-widest text-surface-variant/70")}>
               {config.subtitle}
             </p>
           </div>
@@ -57,7 +57,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
-              "shrink-0 rounded-full p-xs text-outline-variant transition-colors hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
+              role === "doctor" ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-low" : "shrink-0 rounded-full p-xs text-outline-variant transition-colors hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
               !collapsed && "ml-auto",
             )}
           >
@@ -66,33 +66,34 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
         )}
       </div>
 
-      <nav className={cn("custom-scrollbar flex-1 space-y-md overflow-y-auto", collapsed ? "px-xs" : "px-sm")}>
+      <nav aria-label={role === "doctor" ? "Doctor workspace" : config.subtitle} className={cn("custom-scrollbar flex-1 space-y-lg overflow-y-auto", collapsed ? "px-xs" : "px-sm")}>
         {config.navGroups.map((group, i) => (
           <div key={group.label ?? i} className="space-y-xs">
             {group.label && !collapsed && (
-              <p className="px-md pt-sm text-label-sm uppercase tracking-widest text-outline-variant">
+              <p className={cn("px-md pt-sm text-label-sm font-medium", role === "doctor" ? "text-on-surface-variant" : "uppercase tracking-widest text-outline-variant")}>
                 {group.label}
               </p>
             )}
             {group.items.map((item) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href || (role === "doctor" && (pathname.startsWith(item.href + "/") || (item.href === "/doctor/appointments" && pathname.startsWith("/doctor/consultation"))));
               return (
                 <Link
                   //JJQR - AI (Oct 31, 2026) — unique key when two items share href (Templates+Settings)
                   key={`${item.label}:${item.href}`}
                   //JJQR - END
                   href={item.href}
+                  aria-current={active ? "page" : undefined}
                   onClick={onNavigate}
                   title={collapsed ? item.label : undefined}
                   className={cn(
-                    "flex items-center gap-md rounded-lg py-sm text-label-md transition-all",
+                    "flex min-h-11 items-center gap-md rounded-lg py-sm text-label-md transition-colors motion-reduce:transition-none",
                     collapsed ? "justify-center px-sm" : "px-md",
-                    active
+                    role === "doctor" ? cn("border-l-4", active ? "border-primary bg-primary/10 font-semibold text-primary" : "border-transparent text-on-surface-variant hover:bg-surface-container-low") : active
                       ? cn("border-l-4 bg-on-secondary-fixed-variant", ACCENT_BORDER[config.accent], ACCENT_TEXT[config.accent])
                       : "text-outline-variant hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
                   )}
                 >
-                  <Icon name={item.icon} />
+                  <Icon name={item.icon} className="h-4 w-4 shrink-0" />
                   {!collapsed && item.label}
                 </Link>
               );
@@ -109,7 +110,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
           href="/logout"
           title={collapsed ? "Logout" : undefined}
           className={cn(
-            "flex items-center gap-md rounded-lg py-sm text-label-md text-outline-variant transition-all hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
+            role === "doctor" ? "flex min-h-11 items-center gap-md rounded-lg py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low" : "flex items-center gap-md rounded-lg py-sm text-label-md text-outline-variant transition-all hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
             collapsed ? "justify-center px-sm" : "px-md",
           )}
         >

@@ -1,0 +1,10 @@
+/* Doctor-only clinical workspace: readable forms and reliable touch targets. */
+.doctor-workspace :is(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select) { min-height: 2.75rem; }
+.doctor-workspace :is(input, textarea)::placeholder { color: var(--color-on-surface-variant); opacity: 1; }
+.doctor-workspace :is(td, th) { vertical-align: middle; font-variant-numeric: tabular-nums; }
+.doctor-workspace :is(h1, h2, h3) { text-wrap: balance; }
+.doctor-workspace header button[aria-label="Open navigation menu"] { min-height: 2.75rem; min-width: 2.75rem; }
+.doctor-workspace summary { cursor: pointer; min-height: 2.75rem; }
+@media (prefers-reduced-motion: reduce) {
+  .doctor-workspace .animate-pulse { animation: none !important; }
+}

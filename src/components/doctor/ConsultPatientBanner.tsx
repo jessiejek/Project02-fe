@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { StatusPill } from "@/components/ui/StatusPill";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
@@ -64,17 +63,6 @@ function allergyBannerText(allergies: PatientAllergyRow[], nkda: boolean): { tex
   };
 }
 
-function allergyChipShortLabel(allergies: PatientAllergyRow[], nkda: boolean): string {
-  if (nkda) return "NKDA";
-  const active = allergies.filter((a) => !a.is_nkda);
-  if (active.length === 0) return "Not reviewed";
-  if (active.length === 1) {
-    const label = formatAllergenDisplay(active[0].allergen);
-    return label.length > 18 ? `${label.slice(0, 16)}…` : label;
-  }
-  return `${active.length} allergies`;
-}
-
 function compactMetaLine(patientSex: string, ageYears: number | null | undefined, patientCode: string): string {
   const parts: string[] = [];
   if (patientSex) parts.push(patientSex);
@@ -106,7 +94,7 @@ export interface ConsultPatientBannerProps {
   guardianName?: string | null;
   guardianRelationship?: string | null;
   ageYears?: number | null;
-  /** When set, replaces the default inner `max-w-[64rem]` (e.g. completed view column). */
+  /** When set, replaces the default inner `max-w-doctor-record` (e.g. completed view column). */
   contentClassName?: string;
   //JJQR - END
 }
@@ -119,7 +107,6 @@ export function ConsultPatientBanner({
   paymentStatus,
   allergies,
   nkda,
-  mode: _mode,
   readOnly,
   onToggleNkda,
   onAddAllergy,
@@ -142,29 +129,21 @@ export function ConsultPatientBanner({
   const obEdd = lmpDate ? eddFromLmp(lmpDate) : null;
   const showGuardian = ageYears != null && ageYears < 18 && !!guardianName?.trim();
   const allergyInfo = allergyBannerText(allergies, nkda);
-  const allergyChipLabel = allergyChipShortLabel(allergies, nkda);
   const activeAllergenCount = allergies.filter((a) => !a.is_nkda).length;
   const allergyChipStrong = !nkda && activeAllergenCount > 0 && !allergyInfo.amber;
   const canEditAllergies = !readOnly && !!(onToggleNkda || onAddAllergy);
   const metaCompact = compactMetaLine(patientSex, ageYears, patientCode);
   const guardianShort =
     showGuardian && guardianName
-      ? `G: ${guardianName.split(/\s+/)[0]}${guardianRelationship ? ` (${guardianRelationship.slice(0, 1)})` : ""}`
+      ? `Guardian: ${guardianName}${guardianRelationship ? ` (${guardianRelationship})` : ""}`
       : null;
-  const initials = patientName
-    .trim()
-    .split(/\s+/)
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
 
   const allergyChipClassName = cn(
-    "inline-flex min-h-[44px] max-w-[11rem] shrink-0 items-center gap-xs rounded-full border px-sm text-label-sm",
+    "inline-flex min-h-11 max-w-full items-center gap-sm rounded-lg border px-md py-xs text-left text-label-md",
     allergyChipStrong
-      ? "border-red-400 bg-red-50 text-red-900"
+      ? "border-status-danger-border bg-status-danger-surface text-status-danger"
       : allergyInfo.amber
-        ? "border-amber-400 bg-amber-50 text-amber-900"
+        ? "border-status-warning-border bg-status-warning-surface text-status-warning"
         : "border-outline-variant bg-surface-container-low text-on-surface",
   );
 
@@ -180,66 +159,60 @@ export function ConsultPatientBanner({
         {/* JJQR - AI (Oct 31, 2026) — compact sticky identity at all breakpoints */}
         <div
           className={cn(
-            "mx-auto flex min-h-[44px] max-w-[64rem] items-center gap-xs",
+            "mx-auto flex min-h-14 max-w-doctor-record flex-wrap items-center gap-x-lg gap-y-sm py-sm",
             contentClassName,
           )}
         >
-          <span
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-medium text-primary"
-            aria-hidden
-          >
-            {initials || "?"}
-          </span>
-          <p className="min-w-0 flex-1 truncate text-label-sm text-on-surface">
-            <span className="font-medium">{patientName || "—"}</span>
+          <p className="min-w-[12rem] flex-1 text-body-md text-on-surface">
+            <span className="break-words font-semibold">{patientName || "—"}</span>
             {metaCompact ? <span className="text-on-surface-variant"> · {metaCompact}</span> : null}
           </p>
-          <div className="flex min-w-0 max-w-[65%] shrink items-center gap-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-0 flex-wrap items-center gap-sm">
             {isPregnant && obAog && (
-              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-xs py-[2px] text-[11px] leading-tight text-primary">
+              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-xs py-[2px] text-label-sm leading-normal text-primary">
                 Preg {obAog.weeks}w
               </span>
             )}
             {!isPregnant && showObStrip && obAog && (
-              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-xs py-[2px] text-[11px] leading-tight text-primary">
+              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-xs py-[2px] text-label-sm leading-normal text-primary">
                 LMP {obAog.weeks}w
               </span>
             )}
             {(gravida != null || para != null) && (
-              <span className="shrink-0 rounded-full border border-outline-variant bg-surface-container-low px-xs py-[2px] text-[11px] leading-tight text-on-surface-variant">
+              <span className="shrink-0 rounded-full border border-outline-variant bg-surface-container-low px-xs py-[2px] text-label-sm leading-normal text-on-surface-variant">
                 G{gravida ?? "?"}/P{para ?? "?"}
               </span>
             )}
             {guardianShort && (
-              <span className="max-w-[4.5rem] shrink-0 truncate rounded-full border border-outline-variant bg-surface-container-low px-xs py-[2px] text-[11px] leading-tight text-on-surface-variant">
+              <span className="max-w-full rounded-full border border-outline-variant bg-surface-container-low px-xs py-[2px] text-label-sm leading-normal text-on-surface-variant">
                 {guardianShort}
               </span>
             )}
             {canEditAllergies ? (
               <button
                 type="button"
-                className={cn(allergyChipClassName, "min-h-[32px] max-w-[6.5rem] rounded-full px-xs py-[2px] text-[11px]")}
+                className={allergyChipClassName}
                 aria-expanded={allergyEditorOpen}
                 aria-controls="consult-allergy-editor-panel"
                 onClick={() => setAllergyEditorOpen((open) => !open)}
               >
-                <Icon name="warning" className="shrink-0 text-[12px]" aria-hidden />
-                <span className="truncate">{allergyChipLabel}</span>
+                <Icon name="warning" className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 break-words">Allergies: {allergyInfo.text}</span>
               </button>
             ) : (
-              <span className={cn(allergyChipClassName, "min-h-[32px] max-w-[6.5rem] rounded-full px-xs py-[2px] text-[11px]")}>
-                <Icon name="warning" className="shrink-0 text-[12px]" aria-hidden />
-                <span className="truncate">{allergyChipLabel}</span>
+              <span className={allergyChipClassName}>
+                <Icon name="warning" className="h-4 w-4 shrink-0" aria-hidden />
+                <span className="min-w-0 break-words">Allergies: {allergyInfo.text}</span>
               </span>
             )}
-            <span className="shrink-0"><StatusPill status={paymentStatus === "Paid" ? "Paid" : "Unpaid"} /></span>
+            <span className="text-label-sm text-on-surface-variant">Payment: {paymentStatus || "Not recorded"}</span>
           </div>
         </div>
         {/* JJQR - END */}
       </div>
       {showObStrip && (
         <div className="hidden border-b border-outline-variant/60 bg-surface px-md py-sm lg:block">
-          <p className="mx-auto max-w-[64rem] text-label-sm text-primary">
+          <p className="mx-auto max-w-doctor-record text-label-sm text-primary">
             OB: {isPregnant ? "Pregnant" : "LMP recorded"}
             {obAog ? ` · AOG ${obAog.label}` : ""}
             {obEdd ? ` · EDD ${obEdd}` : ""}
@@ -311,7 +284,7 @@ function AllergyEditor({
       {/* JJQR - AI (Oct 31, 2026) — NKDA full row on narrow viewports */}
       <div
         className={cn(
-          "mx-auto flex max-w-[64rem] flex-col gap-sm",
+          "mx-auto flex max-w-doctor-record flex-col gap-sm",
           showClose ? "" : "mt-sm border-t border-outline-variant/50 pt-sm",
         )}
       >

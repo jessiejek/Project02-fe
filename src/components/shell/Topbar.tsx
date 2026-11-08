@@ -149,6 +149,7 @@ export function Topbar({ onMenuClick, roleBadge }: TopbarProps) {
           <input
             type="text"
             role="combobox"
+            aria-label="Search patients, doctors or appointments"
             aria-expanded={open}
             aria-controls="topbar-search-listbox"
             aria-autocomplete="list"

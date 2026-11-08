@@ -217,9 +217,9 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
       }
     >
       <div className="space-y-md">
-        <input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Medication — pick from the list or just type it" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-        <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-        <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+        <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Medication</span><input value={genericName} onChange={(e) => setGenericName(e.target.value)} placeholder="Medication — pick from the list or just type it" className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+        <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Dosage / strength</span><input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+        <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Quantity</span><input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
 
         <div>
           <p className="mb-xs text-label-sm text-on-surface-variant">Meals</p>
@@ -387,7 +387,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   return (
     <div className="space-y-md">
       <div className="relative">
-        <input
+        <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Medication</span><input
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -395,7 +395,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
           }}
           placeholder="Medication — pick from the list or just type it"
           className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
-        />
+        /></label>
         {/* JJQR - AI (Oct 31, 2026) */}
         {showCatalogWarning && (
           <p className="mt-xs text-label-sm text-amber-700">
@@ -426,10 +426,10 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
           Will be added as typed: <strong>{query.trim()}</strong>
         </p>
       )}
-      <input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" />
-      <input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" />
+      <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Dosage / strength</span><input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+      <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Quantity</span><input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
       {/* JJQR - AI (Oct 31, 2026) — F-008 route */}
-      <input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route (e.g. PO)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" />
+      <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Route</span><input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route (e.g. PO)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
       {/* JJQR - END */}
 
       {/* §16.8 Form 1 — before/after meals */}
@@ -542,7 +542,7 @@ function FavoritesTab({ favorites, onAdd }: FavoritesTabProps) {
   const filtered = favorites.filter((f) => f.item.genericName.toLowerCase().includes(search.toLowerCase()));
   return (
     <div className="space-y-sm">
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Favorite" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+      <input aria-label="Search Favorite" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Favorite" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
       {filtered.length === 0 ? (
         <p className="text-body-md text-on-surface-variant">No favorites yet.</p>
       ) : (
@@ -578,7 +578,7 @@ function TemplatesTab({ templates, onAddAll, onAddNew, onEdit, onDelete }: Templ
         <Icon name="add_circle" className="text-[16px]" />
         Add Template
       </Button>
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Templates" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+      <input aria-label="Search Templates" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Templates" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
       {filtered.length === 0 ? (
         <p className="text-body-md text-on-surface-variant">No templates yet.</p>
       ) : (
@@ -638,7 +638,7 @@ function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={template ? "Edit Template" : "Add Template"}>
-      <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-xl lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <div className="space-y-md">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Template Title" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
           <LineItemList
@@ -690,6 +690,7 @@ export interface PrescriptionFormProps {
    * stays in place instead of redirecting to the patient's Prescriptions tab.
    */
   embedded?: boolean;
+  patientName?: string;
   /** Called after a successful save — used in embedded mode so the parent can re-key/remount this form with the freshly-saved group. */
   onSaved?: () => void;
   //JJQR - AI (Oct 31, 2026)
@@ -708,7 +709,7 @@ export interface PrescriptionFormProps {
 // the consultation page's Prescription section (embedded) —
 // clinic-prescriptions-fe.md §2's two-column create/edit layout, following
 // the same create/edit-sharing pattern as DoctorForm.tsx.
-export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, patientAllergies, allergyAckRequired, allergyAcked, onNeedAllergyAck, priorRxItems, patientPregnant, patientAgeYears, weightKg }: PrescriptionFormProps) {
+export function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, patientAllergies, allergyAckRequired, allergyAcked, onNeedAllergyAck, priorRxItems, patientPregnant, patientAgeYears, weightKg }: PrescriptionFormProps) {
   const router = useRouter();
   const seedItems = group?.items ?? copyFromGroup?.items.map((i) => ({ ...i, id: newId("rxi") })) ?? [];
 
@@ -1093,14 +1094,14 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
   const showPedsHelper = patientAgeYears != null && patientAgeYears < 18;
 
   return (
-    <div className={cn(!embedded && "mx-auto max-w-[64rem]", "space-y-lg")}>
+    <div className={cn(!embedded && "mx-auto max-w-doctor-record", "space-y-lg")}>
       {toast && <Toast key={toast.key} variant={toast.variant} message={toast.message} />}
 
       {/* Top-right, same slot as every other consultation section's Save
           (SOAP's "Use Template…"/"Save as Template" row, etc.) — visible
           only while this section is open. */}
-      <div className="flex items-center justify-between gap-sm">
-        {!embedded && <h1 className="text-headline-md text-on-surface">Prescriptions</h1>}
+      <div className="flex flex-wrap items-start justify-between gap-lg">
+        {!embedded && <div className="space-y-xs"><h1 className="text-balance text-headline-lg font-semibold text-on-surface">{mode === "edit" ? "Edit prescription" : "New prescription"}</h1>{patientName && <p className="text-body-md text-on-surface-variant">For {patientName}</p>}</div>}
         <div className={cn("flex items-center gap-sm", embedded && "ml-auto")}>
           <Button variant="secondary" loading={printing} disabled={!printReady} onClick={handlePrint}>
             <Icon name="print" className="text-[16px]" />
@@ -1108,7 +1109,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
           </Button>
           <Button loading={saving} onClick={handleSaveClick}>
             <Icon name="check" className="text-[16px]" />
-            Save
+            {embedded ? "Save medications" : "Save prescription"}
           </Button>
         </div>
       </div>
@@ -1126,32 +1127,32 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         <div className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-sm text-on-surface-variant">
           <p className="font-medium text-on-surface">Pediatric dose helper (mg/kg)</p>
           <div className="mt-sm grid grid-cols-2 gap-sm sm:grid-cols-4">
-            <input
+            <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Dose (mg/kg)</span><input
               placeholder="mg/kg"
               value={pedsMgPerKg}
               onChange={(e) => setPedsMgPerKg(e.target.value)}
               className="rounded-lg border border-outline-variant px-sm py-xs"
-            />
+            /></label>
             {/* JJQR - AI (Oct 31, 2026) — effectiveWeight display */}
-            <input
+            <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Weight (kg)</span><input
               placeholder="Weight kg"
               value={effectiveWeight}
               onChange={(e) => setPedsWeightInput(e.target.value)}
               className="rounded-lg border border-outline-variant px-sm py-xs"
-            />
+            /></label>
             {/* JJQR - END */}
-            <input
+            <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Maximum dose (mg, optional)</span><input
               placeholder="Max mg (opt)"
               value={pedsMaxMg}
               onChange={(e) => setPedsMaxMg(e.target.value)}
               className="rounded-lg border border-outline-variant px-sm py-xs"
-            />
-            <input
+            /></label>
+            <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Concentration (mg/mL, optional)</span><input
               placeholder="mg/mL (opt)"
               value={pedsConcMgMl}
               onChange={(e) => setPedsConcMgMl(e.target.value)}
               className="rounded-lg border border-outline-variant px-sm py-xs"
-            />
+            /></label>
           </div>
           {pedsDose && (
             <p className="mt-sm">
@@ -1163,7 +1164,8 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
       )}
 
       <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
-        <Card className="space-y-md">
+        <Card className="space-y-lg">
+          <h2 className="text-headline-sm font-semibold text-on-surface">Prescription items <span className="tabular-nums">({items.length})</span></h2>
           {/* JJQR - AI (Oct 31, 2026) */}
           {priorRxItems && priorRxItems.length > 0 && (
             <Button variant="secondary" className="w-full" onClick={handleRefillLastVisit}>
@@ -1177,6 +1179,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
               type="button"
               onClick={() => setIsAddToTemplate((v) => !v)}
               className={cn("h-6 w-11 rounded-full p-1 transition-colors", isAddToTemplate ? "bg-primary" : "bg-surface-container-high")}
+              aria-label="Save these medications as a reusable template"
               aria-pressed={isAddToTemplate}
             >
               <span className={cn("block h-4 w-4 rounded-full bg-white transition-transform", isAddToTemplate && "translate-x-5")} />
@@ -1204,6 +1207,7 @@ export function PrescriptionForm({ mode, patientId, doctorId, bookingId, group, 
         </Card>
 
         <Card>
+          <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Add medication</h2>
           <Tabs tabs={RX_TABS} activeId={rxTab} onChange={setRxTab} className="mb-md" />
           {rxTab === "new" && <NewRxTab medicines={medicines} onAdd={handleNewRxAdd} />}
           {rxTab === "favorites" && (
