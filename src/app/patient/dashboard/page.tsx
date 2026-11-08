@@ -4,6 +4,8 @@ import { todayManila } from "@/lib/clock";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SkeletonCard, SkeletonStats } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
 import { Toast } from "@/components/ui/Toast";
@@ -39,6 +41,7 @@ interface DoctorCard {
   specialization: string;
   rating: number;
   reviewCount: number;
+  reviewsUnavailable: boolean;
 }
 
 // Stitch screen_2_patient_dashboard. Was reading a single hardcoded
@@ -48,6 +51,9 @@ interface DoctorCard {
 export default function PatientDashboardPage() {
   const { session } = useSession();
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
+  const [resending, setResending] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [patientEmail, setPatientEmail] = useState("");
   const [isEmailVerified, setIsEmailVerified] = useState(true);
@@ -61,77 +67,92 @@ export default function PatientDashboardPage() {
   useEffect(() => {
     if (!session?.patientId) return;
     const patientId = session.patientId;
+    let cancelled = false;
     async function load() {
-      const supabase = null as never;
-      const [patientRow, bookingRows, rxRes, consultRes, doctorsRes, ratingsRes] = await Promise.all([
-        queryPatientById(supabase, patientId),
-        queryMyBookings(supabase, patientId),
-        queryRxGroups(supabase, { patientId }),
-        queryConsultations(supabase, { patientId }),
-        queryDoctors(supabase),
-        queryDoctorRatings(supabase).then((data) => ({ data })).catch(() => ({ data: [] as Awaited<ReturnType<typeof queryDoctorRatings>> })),
-      ]);
+      try {
+        const supabase = null as never;
+        const [patientRow, bookingRows, rxRes, consultRes, doctorsRes, ratingsRes] = await Promise.all([
+          queryPatientById(supabase, patientId),
+          queryMyBookings(supabase, patientId),
+          queryRxGroups(supabase, { patientId }),
+          queryConsultations(supabase, { patientId }),
+          queryDoctors(supabase),
+          queryDoctorRatings(supabase).then((data) => ({ data, unavailable: false })).catch(() => ({ data: [] as Awaited<ReturnType<typeof queryDoctorRatings>>, unavailable: true })),
+        ]);
 
-      if (patientRow) {
+        if (cancelled) return;
+        if (!patientRow) throw new Error("Patient profile unavailable");
         setFirstName(patientRow.first_name);
         setPatientEmail(patientRow.email);
         setIsEmailVerified(patientRow.is_email_verified);
         setConsentedAt(patientRow.consented_at);
+
+        const mappedBookings: BookingRow[] = bookingRows.map((b) => {
+          const payment = b.payments;
+          return {
+            id: b.booking_id,
+            doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+            appointmentDate: b.appointment_date,
+            slotStartTime: b.slot_start_time.slice(0, 5),
+            status: b.status,
+            paymentStatus: payment?.status ?? "Unpaid",
+          };
+        });
+        setBookings(mappedBookings);
+        setPrescriptionCount(rxRes.length);
+
+        const recordItems: RecentItem[] = consultRes.map((c) => {
+          const date = c.bookings?.appointment_date ?? "";
+          return { kind: "record" as const, date, title: c.chief_complaint ?? "", subtitle: `${c.doctors?.staff_accounts?.full_name ?? ""} • ${date}` };
+        });
+        const rxItems: RecentItem[] = rxRes.map((g) => {
+          const staff = g.bookings?.doctors?.staff_accounts;
+          const date = g.created_at.slice(0, 10);
+          return {
+            kind: "prescription" as const,
+            date,
+            title: (g.prescription_line_items ?? []).map((i) => i.generic_name).join(", "),
+            subtitle: `${staff?.full_name ?? ""} • ${date}`,
+          };
+        });
+        setRecentItems([...recordItems, ...rxItems].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 2));
+
+        const ratingByDoctor = new Map((ratingsRes.data ?? []).map((r) => [r.doctor_id, r]));
+        setDoctors(
+          doctorsRes
+            .filter((d) => d.staff_accounts?.status !== "Inactive")
+            .slice(0, 6)
+            .map((d) => ({
+              id: d.doctor_id,
+              name: d.staff_accounts?.full_name ?? "",
+              specialization: d.specialization,
+              rating: ratingByDoctor.get(d.doctor_id)?.average_rating ?? 0,
+              reviewCount: ratingByDoctor.get(d.doctor_id)?.review_count ?? 0,
+              reviewsUnavailable: ratingsRes.unavailable,
+            })),
+        );
+
+        setLoadError("");
+        setLoaded(true);
+      } catch {
+        if (!cancelled) { setLoadError("Your dashboard could not be loaded. Please try again."); setLoaded(true); }
       }
-
-      const mappedBookings: BookingRow[] = bookingRows.map((b) => {
-        const payment = b.payments;
-        return {
-          id: b.booking_id,
-          doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          appointmentDate: b.appointment_date,
-          slotStartTime: b.slot_start_time.slice(0, 5),
-          status: b.status,
-          paymentStatus: payment?.status ?? "Unpaid",
-        };
-      });
-      setBookings(mappedBookings);
-      setPrescriptionCount(rxRes.length);
-
-      const recordItems: RecentItem[] = consultRes.map((c) => {
-        const date = c.bookings?.appointment_date ?? "";
-        return { kind: "record" as const, date, title: c.chief_complaint ?? "", subtitle: `${c.doctors?.staff_accounts?.full_name ?? ""} • ${date}` };
-      });
-      const rxItems: RecentItem[] = rxRes.map((g) => {
-        const staff = g.bookings?.doctors?.staff_accounts;
-        const date = g.created_at.slice(0, 10);
-        return {
-          kind: "prescription" as const,
-          date,
-          title: (g.prescription_line_items ?? []).map((i) => i.generic_name).join(", "),
-          subtitle: `${staff?.full_name ?? ""} • ${date}`,
-        };
-      });
-      setRecentItems([...recordItems, ...rxItems].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 2));
-
-      const ratingByDoctor = new Map((ratingsRes.data ?? []).map((r) => [r.doctor_id, r]));
-      setDoctors(
-        doctorsRes
-          .filter((d) => d.staff_accounts?.status !== "Inactive")
-          .slice(0, 6)
-          .map((d) => ({
-            id: d.doctor_id,
-            name: d.staff_accounts?.full_name ?? "",
-            specialization: d.specialization,
-            rating: ratingByDoctor.get(d.doctor_id)?.average_rating ?? 0,
-            reviewCount: ratingByDoctor.get(d.doctor_id)?.review_count ?? 0,
-          })),
-      );
-
-      setLoaded(true);
     }
     load();
-  }, [session?.patientId]);
+    return () => { cancelled = true; };
+  }, [session?.patientId, retryKey]);
+
+  if (session && !session.patientId) return <AppShell role="patient"><ErrorState title="Patient profile unavailable" message="We could not find a patient profile for this session. Please reload or contact the clinic." onRetry={() => window.location.reload()} /></AppShell>;
+  if (loadError) return <AppShell role="patient"><ErrorState title="Dashboard unavailable" message={loadError} onRetry={() => { setLoadError(""); setLoaded(false); setRetryKey(key => key + 1); }} /></AppShell>;
 
   if (!loaded) {
     return (
       <AppShell role="patient">
-        <p className="text-body-md text-on-surface-variant">Loading your dashboard…</p>
+        <div className="space-y-xl">
+          <p role="status" className="text-body-md text-on-surface-variant">Loading your dashboard…</p>
+          <SkeletonCard lines={3} />
+          <SkeletonStats count={4} />
+        </div>
       </AppShell>
     );
   }
@@ -145,12 +166,18 @@ export default function PatientDashboardPage() {
   const nextBooking = upcoming[0];
 
   async function handleResendVerification() {
+    if (resending) return;
     if (!patientEmail) {
       setBannerToast({ variant: "error", message: "No email on file for this account." });
       return;
     }
-    await resendVerification(patientEmail);
-    setBannerToast({ variant: "success", message: "Verification email sent. Check your inbox." });
+    setResending(true);
+    try {
+      const accepted = await resendVerification(patientEmail);
+      setBannerToast(accepted
+        ? { variant: "success", message: "Verification requested. Check your inbox if your email needs verification." }
+        : { variant: "error", message: "The verification request could not be sent. Please try again." });
+    } finally { setResending(false); }
   }
 
   return (
@@ -171,6 +198,7 @@ export default function PatientDashboardPage() {
               message="Please verify the email address used for clinic messages."
               actionLabel="Resend Verification Email"
               onAction={handleResendVerification}
+              actionLoading={resending}
             />
           )}
           {!consentedAt && (
@@ -190,8 +218,7 @@ export default function PatientDashboardPage() {
           </p>
         </div>
 
-          <div className="space-y-lg">
-            {nextBooking && (
+        {nextBooking && (
               <div className="relative overflow-hidden rounded-xl bg-primary p-lg text-on-primary shadow-lg">
                 <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Next Appointment</h3>
                 <h4 className="text-headline-md">{nextBooking.doctorName}</h4>
@@ -209,8 +236,7 @@ export default function PatientDashboardPage() {
                     View Booking
                   </Link>
               </div>
-            )}
-          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
           <StatCard icon="calendar_today" value={upcoming.length} label="Active Appointments" href="/patient/bookings" />
@@ -263,6 +289,7 @@ export default function PatientDashboardPage() {
                 </Link>
               </div>
               <div className="flex gap-lg overflow-x-auto pb-md">
+                {doctors.length === 0 && <p className="text-body-md text-on-surface-variant">No doctors are listed yet.</p>}
                 {doctors.map((doc) => (
                   <div
                     key={doc.id}
@@ -274,13 +301,13 @@ export default function PatientDashboardPage() {
                     <h4 className="text-headline-sm text-on-surface">{doc.name}</h4>
                     <p className="mb-md text-label-md text-on-surface-variant">{doc.specialization}</p>
                     <div className="mb-lg flex items-center gap-xs">
-                      {doc.reviewCount > 0 ? <>
+                      {doc.reviewsUnavailable ? <span className="text-label-sm text-on-surface-variant">Reviews unavailable</span> : doc.reviewCount > 0 ? <>
                       <Icon name="star" className="text-sm text-tertiary" />
                       <span className="text-label-sm font-bold">{doc.rating}</span>
                       <span className="text-label-sm text-on-surface-variant">({doc.reviewCount} reviews)</span>
                       </> : <span className="text-label-sm text-on-surface-variant">No reviews yet</span>}
                     </div>
-                    <Link href={`/patient/doctors/${doc.id}`} className={buttonStyles("secondary", "w-full w-full")}>
+                    <Link href={`/patient/doctors/${doc.id}`} className={buttonStyles("secondary", "w-full")}>
                         Profile
                       </Link>
                   </div>

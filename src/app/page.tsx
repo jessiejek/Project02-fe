@@ -1,3 +1,4 @@
+import { RefreshButton } from "@/components/ui/RefreshButton";
 import { buttonStyles } from "@/components/ui/buttonStyles";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api/client";
@@ -31,13 +32,14 @@ async function load<T>(path: string): Promise<T | null> {
 }
 
 function fmtTime(t: string | null) {
-  if (!t) return "";
+  if (!t) return "Not provided";
   const [h, m] = t.split(":").map(Number);
+  if (!Number.isInteger(h) || !Number.isInteger(m) || h < 0 || h > 23 || m < 0 || m > 59) return "Not provided";
   const suffix = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-const peso = (n: number) => `₱${Number(n).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
+const peso = (n: number) => Number.isFinite(n) ? `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}` : "Not provided";
 
 const primaryLink = buttonStyles("primary");
 const secondaryLink = buttonStyles("secondary");
@@ -61,7 +63,7 @@ export default async function Home() {
       <header className="border-b border-outline-variant bg-surface-container-lowest">
         <div className="mx-auto flex max-w-[56rem] items-center justify-between gap-md px-md py-md">
           <span className="text-body-lg font-semibold text-primary">Dr. Grace Gavino Medical Clinic</span>
-          <Link href="/login" className="text-body-md text-on-surface-variant hover:underline">
+          <Link href="/login" className="shrink-0 whitespace-nowrap text-body-md text-on-surface-variant hover:underline">
             Log in
           </Link>
         </div>
@@ -102,8 +104,16 @@ export default async function Home() {
           </ol>
         </section>
 
+        {(!settings || !hours?.length) && (
+          <section role="status" className="space-y-md rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
+            <h2 className="text-headline-md text-on-surface">Some clinic details are unavailable</h2>
+            <p className="text-body-md text-on-surface-variant">{!hours?.length && "Clinic hours are unavailable. "}{!settings && "Fees and contact details are unavailable. "}Please confirm these details before your visit.</p>
+            <RefreshButton />
+          </section>
+        )}
+
         <div className="grid gap-md md:grid-cols-2">
-          {hours && (
+          {hours && hours.length > 0 && (
             <section aria-labelledby="hours" className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-sm">
               <h2 id="hours" className="text-headline-md text-on-surface">Clinic hours</h2>
               <dl className="mt-md space-y-xs">
@@ -113,7 +123,7 @@ export default async function Home() {
                     <div key={d} className="flex justify-between gap-md text-body-md">
                       <dt className="text-on-surface-variant">{DAYS[d]}</dt>
                       <dd className="text-on-surface">
-                        {!h || h.is_closed ? "Closed" : `${fmtTime(h.open_time)} – ${fmtTime(h.close_time)}`}
+                        {!h ? "Not provided" : h.is_closed ? "Closed" : h.open_time && h.close_time ? `${fmtTime(h.open_time)} – ${fmtTime(h.close_time)}` : "Not provided"}
                       </dd>
                     </div>
                   );

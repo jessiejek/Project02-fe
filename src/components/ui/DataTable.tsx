@@ -88,7 +88,8 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
+    <div aria-busy={loading || undefined} className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
+      {loading && <p role="status" className="sr-only">Loading records…</p>}
       {renderMobileCard && (
         <div className="divide-y divide-outline-variant/30 sm:hidden">
           {loading ? (

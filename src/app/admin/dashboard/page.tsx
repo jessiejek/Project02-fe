@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { addDaysToDate, todayManila } from "@/lib/clock";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
@@ -34,6 +35,9 @@ interface DoctorLoad {
 // stats they were purpose-built for.
 export default function AdminDashboardPage() {
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const loadId = useRef(0);
   const [todaysCount, setTodaysCount] = useState(0);
   const [monthlyCount, setMonthlyCount] = useState(0);
   const [revenueToday, setRevenueToday] = useState(0);
@@ -47,6 +51,9 @@ export default function AdminDashboardPage() {
   const [recentBookings, setRecentBookings] = useState<BookingRow[]>([]);
 
   const load = useCallback(async () => {
+    const requestId = ++loadId.current;
+    setRefreshing(true);
+    try {
       const supabase = null as never;
       const today = todayManila();
       const monthStart = `${today.slice(0, 7)}-01`;
@@ -66,6 +73,8 @@ export default function AdminDashboardPage() {
         queryBookings(supabase, {}),
       ]);
 
+      if (requestId !== loadId.current) return;
+      setLoadError("");
       const todaySummary = dailySummary.find((r) => r.appointment_date === today) ?? null;
       const monthSummary = dailySummary.filter((r) => (r.appointment_date as string) >= monthStart);
       const monthBookings = allBookings.filter((b) => b.appointment_date >= monthStart);
@@ -106,7 +115,11 @@ export default function AdminDashboardPage() {
         })),
       );
 
-      setLoaded(true);
+    } catch {
+      if (requestId === loadId.current) setLoadError("Dashboard data is unavailable. Please try again; no totals are shown while the request has failed.");
+    } finally {
+      if (requestId === loadId.current) { setLoaded(true); setRefreshing(false); }
+    }
   }, []);
 
   useEffect(() => {
@@ -114,6 +127,7 @@ export default function AdminDashboardPage() {
       await load();
     }
     init();
+    return () => { loadId.current += 1; };
   }, [load]);
 
   useClinicHubEvent("PatientCheckedIn", load);
@@ -138,6 +152,8 @@ export default function AdminDashboardPage() {
     );
   }
 
+  if (loadError) return <AppShell role="admin"><ErrorState title="Dashboard unavailable" message={loadError} onRetry={load} retrying={refreshing} /></AppShell>;
+
   const maxLoad = Math.max(1, ...doctorLoads.map((d) => d.bookingCount));
 
   return (
@@ -158,14 +174,16 @@ export default function AdminDashboardPage() {
 
         <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
           <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
-            <h3 className="mb-md text-headline-sm text-on-surface">Most Booked Doctors</h3>
+            <h3 className="mb-md text-headline-sm text-on-surface">Doctors in the latest 20 bookings</h3>
             <div className="space-y-sm">
+              {doctorLoads.length === 0 && <p className="text-body-md text-on-surface-variant">No doctors to show.</p>}
               {doctorLoads.map((d) => (
                 <div key={d.id} className="flex items-center gap-md">
                   <span className="w-32 truncate text-label-md text-on-surface-variant">{d.name}</span>
-                  <div className="h-3 flex-1 rounded-full bg-surface-container-high">
+                  <div aria-hidden="true" className="h-3 flex-1 rounded-full bg-surface-container-high">
                     <div className="h-3 rounded-full bg-primary" style={{ width: `${(d.bookingCount / maxLoad) * 100}%` }} />
                   </div>
+                  <span className="text-label-md tabular-nums text-on-surface">{d.bookingCount}</span>
                 </div>
               ))}
             </div>

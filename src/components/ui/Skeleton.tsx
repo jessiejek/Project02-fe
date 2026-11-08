@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 
 /** One rectangular block — the primitive everything else composes from. */
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-md bg-surface-container-high", className)} />;
+  return <div aria-hidden="true" className={cn("animate-pulse rounded-md bg-surface-container-high", className)} />;
 }
 
 /** A handful of lines of decreasing width, standing in for a paragraph/label group. */

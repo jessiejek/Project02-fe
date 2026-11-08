@@ -32,17 +32,18 @@ export async function requestPasswordReset(email: string): Promise<void> {
   }
 }
 
-/** Re-send the email-verification link. Never throws / never reveals account existence. */
-export async function resendVerification(email: string): Promise<void> {
+/** Request verification. Reports HTTP acceptance only, never account existence or delivery. */
+export async function resendVerification(email: string): Promise<boolean> {
   try {
-    await fetch(`${API_BASE_URL}/api/auth/resend-verification`, {
+    const response = await fetch(`${API_BASE_URL}/api/auth/resend-verification`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
       cache: "no-store",
     });
+    return response.ok;
   } catch {
-    /* best-effort */
+    return false;
   }
 }
 
