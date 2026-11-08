@@ -1,5 +1,8 @@
 "use client";
 
+import "./consultation.css";
+import { ClinicalNoteField } from "@/components/doctor/ClinicalNoteField";
+
 import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
 import { todayManila } from "@/lib/clock";
 import Link from "next/link";
@@ -23,7 +26,6 @@ import {
   ConsultPatientBanner,
   allergiesNeedPrescriptionReview,
 } from "@/components/doctor/ConsultPatientBanner";
-import { ConsultMobileSectionStepper } from "@/components/doctor/ConsultMobileSectionStepper";
 import { Icd10DiagnosisField } from "@/components/doctor/Icd10DiagnosisField";
 import { GrowthChart } from "@/components/doctor/GrowthChart";
 import {
@@ -150,7 +152,7 @@ function toDiagnosisType(d: Diagnosis) {
 }
 
 const SECTIONS = [
-  "SOAP & Chief Complaint",
+  "Clinical notes",
   "Vital Signs",
   "Diagnosis",
   "Prescription",
@@ -175,9 +177,9 @@ const SECTION_ORDER = [0, 1, 2, 3, 4, 6, 7, 5, 8] as const;
 type SectionStatus = "complete" | "warning" | "partial" | "empty";
 
 const STATUS_ICON: Record<SectionStatus, { icon: string; cls: string }> = {
-  complete: { icon: "check_circle", cls: "text-green-600" },
-  warning: { icon: "warning", cls: "text-amber-500" },
-  partial: { icon: "incomplete_circle", cls: "text-blue-500" },
+  complete: { icon: "check_circle", cls: "text-status-success" },
+  warning: { icon: "warning", cls: "text-status-warning" },
+  partial: { icon: "incomplete_circle", cls: "text-status-info" },
   empty: { icon: "radio_button_unchecked", cls: "text-on-surface-variant" },
 };
 
@@ -349,7 +351,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // a wide list overlapping the form or a pill sitting in a gutter too narrow
   // for it. Now it's a header button that opens a normal anchored dropdown:
   // zero footprint closed, and open is a deliberate, dismissible action.
-  const [progressOpen, setProgressOpen] = useState(false);
 
   // Doctor.md view-mode "History" button opens an audit-log drawer of
   // amendments — reads from the real audit_logs table (entity_type
@@ -1269,26 +1270,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     formDirtyRef.current = true;
   }
 
-  function renderMissingRequiredHint(className?: string) {
-    if (canComplete || missingRequiredSections.length === 0) return null;
-    return (
-      <p className={cn("max-w-[20rem] text-right text-label-sm text-amber-900", className)}>
-        Need:{" "}
-        {missingRequiredSections.map((secIdx, idx) => (
-          <span key={secIdx}>
-            {idx > 0 ? ", " : ""}
-            <button
-              type="button"
-              className="font-medium text-primary underline"
-              onClick={() => setOpenSection(secIdx)}
-            >
-              {SECTIONS[secIdx]}
-            </button>
-          </span>
-        ))}
-      </p>
-    );
-  }
+
 
   // Doctor.md requires BP + HR when those templates exist; never read hardcoded
   // Record keys that may be missing before templates load (or if form_key differs).
@@ -1325,7 +1307,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (i === 6) return followUpSatisfied;
     return sectionSatisfied[i];
   }
-  const doneRequired = REQUIRED_SECTIONS.filter((i) => isRequiredSectionDone(i)).length;
+
   const missingRequiredSections = REQUIRED_SECTIONS.filter((i) => !isRequiredSectionDone(i));
   const sectionHasDraft = [
     false,
@@ -1368,17 +1350,16 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (fields) {
       const filled = fields.filter((f) => (f ?? "").trim() !== "").length;
       if (filled === 0) {
-        const required = REQUIRED_SECTIONS.includes(i);
-        return <Icon name={required ? "warning" : "radio_button_unchecked"} className={cn(className, required ? "text-amber-500" : "text-on-surface-variant")} />;
+        return <Icon name="radio_button_unchecked" className={cn(className, "text-on-surface-variant")} />;
       }
       if (filled === fields.length) {
-        return <Icon name="check_circle" className={cn(className, "text-green-600")} />;
+        return <Icon name="check_circle" className={cn(className, "text-status-success")} />;
       }
       return (
         <span
           title={`${filled} of ${fields.length} fields filled in this section`}
           aria-label={`${filled} of ${fields.length} fields filled`}
-          className={cn("inline-flex shrink-0 items-center justify-center rounded-full bg-blue-100 px-xs font-bold text-blue-700", className)}
+          className={cn("inline-flex shrink-0 items-center justify-center px-xs text-label-md font-semibold tabular-nums text-status-info", className)}
         >
           {filled}/{fields.length}
         </span>
@@ -1427,11 +1408,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         )}
         <div className="flex items-center justify-end gap-sm">
           <Button
+            variant="secondary"
             disabled={mode === "amend" && !canComplete}
             loading={mode === "complete" ? savingDraft : savingChanges}
             onClick={() => setReviewSection(sectionIndex)}
           >
-            Save
+            Review section
           </Button>
         </div>
       </div>
@@ -1580,16 +1562,24 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     return savedId;
   }
 
+  const [savedDraftSnapshot, setSavedDraftSnapshot] = useState("");
+  const draftSaveInFlight = useRef(false);
   async function handleSaveDraft() {
+    if (draftSaveInFlight.current || consultationFinalizedRef.current) return;
+    draftSaveInFlight.current = true;
+    const snapshotBeingSaved = currentFormSnapshot();
     setSaveError("");
     setSavingDraft(true);
     try {
       const savedId = await persistConsultation("Draft");
       if (!savedId) throw new Error("Could not save the draft. Check your connection and try again.");
-      setDraftSavedAt(new Date().toLocaleTimeString());
+      completeBaselineRef.current = snapshotBeingSaved;
+      setSavedDraftSnapshot(snapshotBeingSaved);
+      setDraftSavedAt(new Date().toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit", second: "2-digit" }) + " PHT");
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save the draft. Try again.");
     } finally {
+      draftSaveInFlight.current = false;
       setSavingDraft(false);
     }
   }
@@ -1782,20 +1772,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     else void persistAmendProgress();
   }
 
-  // Doctor.md §4: Ctrl+1..8 jump, Ctrl+S save, Ctrl+Enter complete, `?` help.
+  const latestDraftSave = useRef(handleSaveDraft);
+  const latestAmendSave = useRef(persistAmendProgress);
+  useEffect(() => {
+    latestDraftSave.current = handleSaveDraft;
+    latestAmendSave.current = persistAmendProgress;
+  });
+
+  // Doctor.md §4: Ctrl+1..9 jump, Ctrl+S save, Ctrl+Enter complete, `?` help.
   useEffect(() => {
     if (mode === "view") return;
     function handleKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       const isEditable = !!target && ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && /^[1-8]$/.test(e.key)) {
+      if (mod && /^[1-9]$/.test(e.key)) {
         e.preventDefault();
         setOpenSection(Number(e.key) - 1);
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        if (mode === "complete") handleSaveDraft();
-        else void persistAmendProgress();
+        if (mode === "complete") void latestDraftSave.current();
+        else void latestAmendSave.current();
       } else if (mod && e.key === "Enter") {
         e.preventDefault();
         if (mode === "complete" && canComplete) setChecklistOpen(true);
@@ -1806,15 +1803,16 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, canComplete]);
 
   //JJQR - AI (Oct 31, 2026) — F-010 beforeunload, F-022 autosave
   useEffect(() => {
     if (loaded && mode === "complete" && completeBaselineRef.current === null) {
-      completeBaselineRef.current = currentFormSnapshot();
+      const baseline = currentFormSnapshot();
+      completeBaselineRef.current = baseline;
+      queueMicrotask(() => setSavedDraftSnapshot(baseline));
     }
-  }, [loaded, mode]);
+  });
 
   useEffect(() => {
     if (!loaded) return;
@@ -1840,7 +1838,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   useEffect(() => {
     if (mode !== "complete" || !loaded || !booking) return;
     const timer = setInterval(() => {
-      void handleSaveDraft();
+      if (formDirtyRef.current && !draftSaveInFlight.current && !consultationFinalizedRef.current) void latestDraftSave.current();
     }, 30_000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1884,7 +1882,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     return (
       <AppShell role="doctor">
         <div className="mx-auto max-w-[40rem] space-y-lg">
-          <div className="flex flex-col gap-sm rounded-lg bg-green-50 px-md py-sm text-green-800 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-sm rounded-lg bg-status-success-surface px-md py-sm text-status-success sm:flex-row sm:items-center sm:justify-between">
             <span className="flex items-center gap-sm text-label-md">
               <Icon name="check_circle" />
               Consultation saved
@@ -1940,21 +1938,21 @@ Return to patient queue
               </button>
             </div>
             {pfDecision === "charge" && (
-              <input
+              <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input
                 placeholder="Amount*"
                 value={pfAmount}
                 onChange={(e) => setPfAmount(e.target.value)}
                 className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
-              />
+              /></label>
             )}
             {pfDecision === "waive" && (
-              <textarea
+              <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Reason (minimum 5 characters)</span><textarea
                 placeholder="Reason (minimum 5 characters)*"
                 value={pfWaiveReason}
                 onChange={(e) => setPfWaiveReason(e.target.value)}
                 className="w-full rounded-lg border border-outline-variant p-md"
                 rows={3}
-              />
+              /></label>
             )}
             {pfDecision === null && (
               <p className="text-label-md text-on-surface-variant">Front desk can collect or waive later.</p>
@@ -1980,6 +1978,7 @@ Return to patient queue
         {/* JJQR - AI (Oct 31, 2026) — completed view: banner in same 40rem column as cards */}
         <div className="mx-auto w-full max-w-doctor-record space-y-lg">
         <ConsultPatientBanner
+        className="!shadow-none tabular-nums"
           patientName={booking.patientName}
           patientCode={booking.patientCode}
           patientSex={booking.patientSex}
@@ -2147,6 +2146,7 @@ Return to patient queue
     <AppShell role="doctor">
       {/* JJQR - AI (Oct 31, 2026) — F-002 sticky patient banner */}
       <ConsultPatientBanner
+        className="!shadow-none tabular-nums"
         patientName={booking.patientName}
         patientCode={booking.patientCode}
         patientSex={booking.patientSex}
@@ -2186,14 +2186,12 @@ Return to patient queue
         {...clinicalBannerProps}
       />
       {/* JJQR - END */}
-      <div className="min-w-0 space-y-lg overflow-x-clip">
+      <div className="consultation-workspace min-w-0 space-y-lg">
         {mode === "amend" && (
           <Toast variant="info" message="Manual save only — autosave is off in amend mode." dismissible={false} />
         )}
         {saveError && <Toast key={saveError} variant="error" message={saveError} />}
-        {draftSavedAt && mode === "complete" && (
-          <Toast key={draftSavedAt} variant="success" message={`Draft saved at ${draftSavedAt}.`} />
-        )}
+
         {amendSavedAt && mode === "amend" && (
           <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
         )}
@@ -2216,9 +2214,9 @@ Return to patient queue
                   aria-pressed={visitType === vt}
                   onClick={() => setVisitType(vt)}
                   className={cn(
-                    "min-h-[44px] rounded-full border px-md py-xs text-label-md font-medium",
+                    "min-h-[44px] rounded-nav border px-md py-xs text-label-md font-medium",
                     visitType === vt
-                      ? "border-primary bg-primary/10 text-primary"
+                      ? "border-primary bg-primary text-on-primary"
                       : "border-outline-variant text-on-surface-variant",
                   )}
                 >
@@ -2233,95 +2231,33 @@ Return to patient queue
             </div>
           </div>
           <div className="flex flex-wrap gap-sm">
-            <div className="relative">
-              <Button
-                variant="secondary"
-                onClick={() => setProgressOpen((v) => !v)}
-                aria-expanded={progressOpen}
-                aria-haspopup="true"
-                title={`${doneRequired} of ${REQUIRED_SECTIONS.length} required sections complete`}
-                aria-label={`Progress: ${doneRequired} of ${REQUIRED_SECTIONS.length} required sections complete`}
-              >
-                <Icon name="monitoring" className="text-[18px]" />
-                {doneRequired}/{REQUIRED_SECTIONS.length}
-                <Icon name={progressOpen ? "expand_less" : "expand_more"} className="text-[16px]" />
-              </Button>
-              {progressOpen && (
-                <>
-                  {/* Click-outside catcher — a plain overlay, not a scrim (this is a menu, not a modal). */}
-                  <button
-                    type="button"
-                    aria-label="Close progress menu"
-                    tabIndex={-1}
-                    onClick={() => setProgressOpen(false)}
-                    className="fixed inset-0 z-40 cursor-default"
-                  />
-                  <Card className="absolute right-0 z-50 mt-xs w-[17rem] shadow-lg">
-                    <p className="mb-sm text-label-md font-bold text-on-surface-variant">Progress</p>
-                    <ul className="space-y-sm text-label-md text-on-surface-variant">
-                      {SECTIONS.map((s, i) => (
-                        <li key={s}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenSection(i);
-                              setProgressOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center gap-sm rounded-lg px-xs py-1 text-left transition-colors hover:bg-surface-container-low",
-                              openSection === i && "bg-primary/10 font-medium text-on-surface",
-                            )}
-                          >
-                            {renderSectionIndicator(i, "text-[16px]")}
-                            {s}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </Card>
-                </>
-              )}
-            </div>
-            <Button variant="secondary" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts help">
+            <Button variant="secondary" className="!h-11 !min-h-11 !w-11 !px-0 !py-0" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts help">
               <Icon name="help" className="text-[18px]" />
             </Button>
             <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
               View Patient History
             </Button>
-            {consultPrintButtons()}
-            {mode === "complete" ? (
-              <>
-                <Button variant="secondary" loading={savingDraft} className="min-h-[44px]" onClick={handleSaveDraft}>
-                  Save Draft
-                </Button>
-                {renderMissingRequiredHint("hidden lg:block max-w-none text-left")}
-              </>
-            ) : (
-              <>
-                <Button variant="secondary" onClick={requestCancelAmend}>
-                  Cancel
-                </Button>
-                <Button disabled={!canComplete} loading={savingChanges} onClick={handleSaveChanges}>Save Changes</Button>
-              </>
-            )}
+            {((prescriptionGroup?.items.length ?? 0) > 0 || labOrders.length > 0) && consultPrintButtons()}
+            {mode === "amend" && <Button variant="secondary" onClick={requestCancelAmend}>Cancel amendment</Button>}
           </div>
         </div>
 
         {/* JJQR - AI (Oct 31, 2026) — in-flow sections rail (no viewport-fixed overlap with AppShell sidebar) */}
-        <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-lg">
+        <div className="space-y-lg">
           <nav
             aria-label="Consultation sections"
-            className="sticky top-[7.375rem] z-10 hidden max-h-[70vh] flex-col gap-xs self-start overflow-y-auto rounded-xl border border-outline-variant bg-surface-container-lowest p-sm shadow-lg lg:flex"
+            className="flex gap-xs overflow-x-auto border-b border-outline-variant pb-md sm:flex-wrap sm:overflow-visible"
           >
-            <p className="px-xs pb-xs text-label-sm text-on-surface-variant">Sections</p>
             {visibleSectionOrder.map((i, displayIdx) => (
               <button
                 key={SECTIONS[i]}
                 type="button"
                 onClick={() => setOpenSection(i)}
+                aria-pressed={openSection === i}
+                aria-controls={openSection === i ? `consultation-section-${i}` : undefined}
                 className={cn(
-                  "flex items-start gap-sm rounded-lg px-sm py-sm text-left text-label-md transition-colors",
-                  openSection === i ? "bg-primary/10 text-on-surface" : "text-on-surface-variant hover:bg-surface-container-low",
+                  "flex min-h-11 shrink-0 items-center gap-sm rounded-nav border px-md py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
+                  openSection === i ? "border-primary bg-primary/10 font-semibold text-primary" : "border-transparent text-on-surface-variant hover:bg-surface-container-low",
                 )}
               >
                 {renderSectionIndicator(i, "mt-0.5 shrink-0 text-[16px]")}
@@ -2342,41 +2278,31 @@ Return to patient queue
             )}
             {/* JJQR - END */}
             {/* JJQR - AI (Oct 31, 2026) — F-011 mobile section progress */}
-            <ConsultMobileSectionStepper
-              sections={SECTIONS}
-              sectionOrder={visibleSectionOrder}
-              sectionStatus={visibleSectionOrder.map((i) => sectionStatus(i))}
-              openSection={openSection}
-              onSelect={setOpenSection}
-              renderIndicator={(i, cls) => renderSectionIndicator(i, cls)}
-            />
+
             {/* JJQR - END */}
             {visibleSectionOrder.map((i, displayIdx) => {
               const section = SECTIONS[i];
               const isOpen = openSection === i;
+              if (!isOpen) return null;
               return (
-                <Card key={section}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenSection(isOpen ? -1 : i)}
-                    className="-m-lg flex min-h-[44px] w-[calc(100%+2*var(--spacing-lg))] cursor-pointer items-center justify-between rounded-xl p-lg text-left transition-colors hover:bg-surface-container-low"
+                <Card key={section} id={`consultation-section-${i}`} className="consultation-panel">
+                  <div
+                    className="flex min-h-11 w-full items-center justify-between gap-md border-b border-outline-variant pb-md text-left"
                   >
-                    <h3 className="flex items-center gap-sm text-headline-sm text-on-surface">
+                    <h2 className="flex flex-wrap items-center gap-sm text-headline-md font-semibold text-on-surface">
                       {renderSectionIndicator(i, "text-[18px]")}
                       {displayIdx + 1}. {section}
                       {REQUIRED_SECTIONS.includes(i) && (
-                        <span className="rounded-full bg-primary/10 px-sm py-xs text-label-sm text-primary">Required</span>
+                        <span className="sr-only">Required before completion</span>
                       )}
-                    </h3>
-                    <Icon name={isOpen ? "expand_less" : "expand_more"} className="text-on-surface-variant" />
-                  </button>
+                    </h2>
+
+                  </div>
 
                   {isOpen && i === 0 && (
                     <div className="mt-md space-y-md">
-                      {draftSavedAt && mode === "complete" && (
-                        <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
-                      )}
-                      <div className="flex w-full flex-col gap-md">
+
+                      <details className="border-b border-outline-variant pb-sm"><summary className="text-label-md font-medium text-on-surface">Templates and previous notes</summary><div className="mt-md flex w-full flex-col gap-md">
                         {lastVisitSoap && (
                           <button
                             type="button"
@@ -2449,58 +2375,26 @@ Return to patient queue
                               Save as Template
                             </button>
                             <Button
+                              variant="secondary"
                               className="min-h-[44px] flex-1 sm:flex-none"
                               disabled={mode === "amend" && !canComplete}
                               loading={mode === "complete" ? savingDraft : savingChanges}
                               onClick={() => setReviewSection(0)}
                             >
-                              Save
+                              Review notes
                             </Button>
                           </div>
                         </div>
                         {/* JJQR - END */}
+                      </div></details>
+                      <div className="grid grid-cols-1 gap-lg sm:grid-cols-2">
+                        <ClinicalNoteField id="note-chiefComplaint" label="Chief complaint" hint="Reason for this visit, in the patient’s own words." value={chiefComplaint} onChange={setChiefComplaint} required tools={<SoapFieldToolbar doctorId={booking.doctorId} field="chiefComplaint" fieldLabel="Chief complaint" value={chiefComplaint} onInsert={setChiefComplaint} />} />
+                        <ClinicalNoteField id="note-subjective" label="Subjective" hint="Symptoms, relevant history and patient-reported concerns." value={subjective} onChange={setSubjective} tools={<SoapFieldToolbar doctorId={booking.doctorId} field="subjective" fieldLabel="Subjective" value={subjective} onInsert={setSubjective} />} />
+                        <ClinicalNoteField id="note-objective" label="Objective" hint="Examination findings and observed measurements." value={objective} onChange={setObjective} tools={<SoapFieldToolbar doctorId={booking.doctorId} field="objective" fieldLabel="Objective" value={objective} onInsert={setObjective} />} />
+                        <ClinicalNoteField id="note-assessment" label="Assessment" hint="Clinical impression and diagnostic reasoning." value={assessment} onChange={setAssessment} tools={<SoapFieldToolbar doctorId={booking.doctorId} field="assessment" fieldLabel="Assessment" value={assessment} onInsert={setAssessment} />} />
+                        <ClinicalNoteField id="note-plan" label="Plan" hint="Management, counselling and next steps." value={plan} onChange={setPlan} tools={<SoapFieldToolbar doctorId={booking.doctorId} field="plan" fieldLabel="Plan" value={plan} onInsert={setPlan} />} />
                       </div>
-
-                      <div>
-                        <div className="mb-xs flex items-center justify-between">
-                          <span className="text-label-sm text-on-surface-variant">Chief Complaint*</span>
-                          <SoapFieldToolbar doctorId={booking.doctorId} field="chiefComplaint" fieldLabel="Chief Complaint" value={chiefComplaint} onInsert={setChiefComplaint} />
-                        </div>
-                        <textarea placeholder="Chief Complaint*" value={chiefComplaint} onChange={(e) => setChiefComplaint(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
-                      </div>
-                      <div>
-                        <div className="mb-xs flex items-center justify-between">
-                          <span className="text-label-sm text-on-surface-variant">Subjective</span>
-                          <SoapFieldToolbar doctorId={booking.doctorId} field="subjective" fieldLabel="Subjective" value={subjective} onInsert={setSubjective} />
-                        </div>
-                        <textarea placeholder="Subjective" value={subjective} onChange={(e) => setSubjective(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
-                      </div>
-                      <div>
-                        <div className="mb-xs flex items-center justify-between">
-                          <span className="text-label-sm text-on-surface-variant">Objective</span>
-                          <SoapFieldToolbar doctorId={booking.doctorId} field="objective" fieldLabel="Objective" value={objective} onInsert={setObjective} />
-                        </div>
-                        <textarea placeholder="Objective" value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
-                      </div>
-                      <div>
-                        <div className="mb-xs flex items-center justify-between">
-                          <span className="text-label-sm text-on-surface-variant">Assessment</span>
-                          <SoapFieldToolbar doctorId={booking.doctorId} field="assessment" fieldLabel="Assessment" value={assessment} onInsert={setAssessment} />
-                        </div>
-                        <textarea placeholder="Assessment" value={assessment} onChange={(e) => setAssessment(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
-                        {assessmentDiagnosisMismatch && (
-                          <p className="mt-xs text-label-sm text-amber-800">
-                            Assessment text doesn&apos;t mention the primary diagnosis — update Diagnosis if the visit reason changed.
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <div className="mb-xs flex items-center justify-between">
-                          <span className="text-label-sm text-on-surface-variant">Plan</span>
-                          <SoapFieldToolbar doctorId={booking.doctorId} field="plan" fieldLabel="Plan" value={plan} onInsert={setPlan} />
-                        </div>
-                        <textarea placeholder="Plan" value={plan} onChange={(e) => setPlan(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
-                      </div>
+                      {assessmentDiagnosisMismatch && <p role="status" className="text-label-md text-status-warning">Assessment does not mention the primary diagnosis. Review the diagnosis if the visit reason changed.</p>}
                     </div>
                   )}
 
@@ -2523,7 +2417,7 @@ Return to patient queue
                       {patientAgeYears != null && patientAgeYears < 18 && patientAgeMo != null && booking && (
                         <GrowthChart sex={booking.patientSex} ageMonths={patientAgeMo} points={growthChartPoint} />
                       )}
-                      <VitalsEditor bookingId={bookingId} patientId={booking.patientId} onSaved={reloadVitalReadings} />
+                      <VitalsEditor embedded bookingId={bookingId} patientId={booking.patientId} onSaved={reloadVitalReadings} />
                     </div>
                   )}
 
@@ -2531,7 +2425,7 @@ Return to patient queue
                     <div className="mt-md space-y-md">
                       {renderSectionSaveHeader(2)}
                       {assessmentDiagnosisMismatch && (
-                        <p className="rounded-lg border border-amber-300 bg-amber-50 px-md py-sm text-label-sm text-amber-900">
+                        <p className="rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm text-label-sm text-status-warning">
                           Assessment text doesn&apos;t mention the primary diagnosis — update Diagnosis if the visit reason changed.
                         </p>
                       )}
@@ -2619,8 +2513,8 @@ Return to patient queue
                         </span>
                       </label>
                       {allergyAckRequired && !allergyReviewed && (
-                        <div className="flex flex-col gap-sm rounded-lg border border-amber-400 bg-amber-50 px-md py-sm sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-label-md text-amber-900">
+                        <div className="flex flex-col gap-sm rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-label-md text-status-warning">
                             Review allergies (NKDA or add) before prescribing.
                           </p>
                           <Button variant="secondary" className="min-h-[44px] shrink-0" onClick={() => setAllergyReviewed(true)}>
@@ -2678,7 +2572,7 @@ Return to patient queue
                             <Icon name="print" className="text-[16px]" />
                             Print Lab Orders
                           </Button>
-                          <Button loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(true)}>
+                          <Button variant="secondary" loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(true)}>
                             Save & Print Lab Request
                           </Button>
                           <Button variant="secondary" loading={savingLabs} disabled={!booking} onClick={() => setLabsConfirmPrint(false)}>
@@ -2745,10 +2639,10 @@ Return to patient queue
                       )}
 
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                        <input placeholder="Add another test" value={newLab.testName} onChange={(e) => setNewLab({ ...newLab, testName: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Reason / clinical indication" value={newLab.reason} onChange={(e) => setNewLab({ ...newLab, reason: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Specimen type" value={newLab.specimenType} onChange={(e) => setNewLab({ ...newLab, specimenType: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Notes" value={newLab.notes} onChange={(e) => setNewLab({ ...newLab, notes: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Add another test</span><input placeholder="Add another test" value={newLab.testName} onChange={(e) => setNewLab({ ...newLab, testName: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Reason / clinical indication</span><input placeholder="Reason / clinical indication" value={newLab.reason} onChange={(e) => setNewLab({ ...newLab, reason: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Specimen type</span><input placeholder="Specimen type" value={newLab.specimenType} onChange={(e) => setNewLab({ ...newLab, specimenType: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Notes</span><input placeholder="Notes" value={newLab.notes} onChange={(e) => setNewLab({ ...newLab, notes: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
                       </div>
                       <Button variant="secondary" onClick={addLabOrder} disabled={!newLab.testName.trim()}>Add test</Button>
 
@@ -2824,13 +2718,13 @@ Return to patient queue
                         {vaccinations.length === 0 && <p className="text-label-md text-on-surface-variant">No vaccinations staged (optional).</p>}
                       </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-3">
-                        <input placeholder="Vaccine Name" value={newVax.vaccineName} onChange={(e) => setNewVax({ ...newVax, vaccineName: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Dose #" value={newVax.doseNumber} onChange={(e) => setNewVax({ ...newVax, doseNumber: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Route" value={newVax.route} onChange={(e) => setNewVax({ ...newVax, route: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Site" value={newVax.site} onChange={(e) => setNewVax({ ...newVax, site: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
-                        <input placeholder="Lot #" value={newVax.lotNumber} onChange={(e) => setNewVax({ ...newVax, lotNumber: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Vaccine Name</span><input placeholder="Vaccine Name" value={newVax.vaccineName} onChange={(e) => setNewVax({ ...newVax, vaccineName: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Dose #</span><input placeholder="Dose #" value={newVax.doseNumber} onChange={(e) => setNewVax({ ...newVax, doseNumber: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Route</span><input placeholder="Route" value={newVax.route} onChange={(e) => setNewVax({ ...newVax, route: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Site</span><input placeholder="Site" value={newVax.site} onChange={(e) => setNewVax({ ...newVax, site: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Lot #</span><input placeholder="Lot #" value={newVax.lotNumber} onChange={(e) => setNewVax({ ...newVax, lotNumber: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
                         <DatePicker placeholder="Expiry" value={newVax.expiry} onChange={(expiry) => setNewVax({ ...newVax, expiry })} />
-                        <input placeholder="Manufacturer" value={newVax.manufacturer} onChange={(e) => setNewVax({ ...newVax, manufacturer: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" />
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Manufacturer</span><input placeholder="Manufacturer" value={newVax.manufacturer} onChange={(e) => setNewVax({ ...newVax, manufacturer: e.target.value })} className="rounded-lg border border-outline-variant px-md py-sm" /></label>
                       </div>
                       <Button variant="secondary" onClick={addVaccination}>Stage Vaccination</Button>
                     </div>
@@ -2867,8 +2761,8 @@ Return to patient queue
                       {followUpMode === "dated" && (
                         <>
                           <DatePicker value={followUpDate} onChange={setFollowUpDate} />
-                          <input placeholder="Reason" value={followUpReason} onChange={(e) => setFollowUpReason(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" />
-                          <textarea placeholder="Instructions" value={followUpInstructions} onChange={(e) => setFollowUpInstructions(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Reason</span><input placeholder="Reason" value={followUpReason} onChange={(e) => setFollowUpReason(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Instructions</span><textarea placeholder="Instructions" value={followUpInstructions} onChange={(e) => setFollowUpInstructions(e.target.value)} className="w-full rounded-lg border border-outline-variant p-md" rows={2} /></label>
                           <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
                             <input type="checkbox" checked={followUpReminder} onChange={(e) => setFollowUpReminder(e.target.checked)} className="h-5 w-5" />
                             Send reminder
@@ -2880,13 +2774,13 @@ Return to patient queue
                           <p className="text-label-md text-on-surface-variant">
                             Saves today&apos;s date with PRN instructions — patient may return if symptoms recur.
                           </p>
-                          <textarea
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Instructions</span><textarea
                             placeholder="Instructions"
                             value={followUpInstructions}
                             onChange={(e) => setFollowUpInstructions(e.target.value)}
                             className="w-full rounded-lg border border-outline-variant p-md"
                             rows={2}
-                          />
+                          /></label>
                         </>
                       )}
                       {followUpMode === "none" && (
@@ -2946,7 +2840,7 @@ Return to patient queue
                         <Link href="/doctor/templates" className="text-label-sm text-on-surface-variant hover:underline">
                           Manage templates
                         </Link>
-                        <Button loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(true)}>
+                        <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(true)}>
                           {certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
                         </Button>
                         <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(false)}>
@@ -2954,12 +2848,12 @@ Return to patient queue
                         </Button>
                       </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                        <input
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Patient address (&ldquo;residing at …&rdquo;)</span><input
                           value={mcAddress}
                           onChange={(e) => setMcAddress(e.target.value)}
                           placeholder="Patient address (&ldquo;residing at …&rdquo;)"
                           className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
-                        />
+                        /></label>
                         <input
                           value={mcExaminedAt}
                           onChange={(e) => setMcExaminedAt(e.target.value)}
@@ -2990,12 +2884,12 @@ Return to patient queue
                         className="w-full rounded-lg border border-outline-variant p-md text-body-md"
                       />
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                        <input
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Purpose exception (the &ldquo;except ___&rdquo; blank)</span><input
                           value={mcPurposeException}
                           onChange={(e) => setMcPurposeException(e.target.value)}
                           placeholder="Purpose exception (the &ldquo;except ___&rdquo; blank)"
                           className="rounded-lg border border-outline-variant px-md py-sm text-body-md"
-                        />
+                        /></label>
                         <label className="text-label-sm text-on-surface-variant">
                           Please come back on
                           <input type="date" value={mcComeBackOn} onChange={(e) => setMcComeBackOn(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
@@ -3084,22 +2978,22 @@ Return to patient queue
                       </div>
                       {pfDecision === "charge" && (
                         <div className="space-y-md">
-                          <input placeholder="Amount*" value={pfAmount} onChange={(e) => setPfAmount(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmount} onChange={(e) => setPfAmount(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
                           <select className="w-full rounded-lg border border-outline-variant px-md py-sm">
                             <option>Pay at Clinic</option>
                             <option>Online</option>
                           </select>
-                          <textarea placeholder="Notes" className="w-full rounded-lg border border-outline-variant p-md" rows={2} />
+
                         </div>
                       )}
                       {pfDecision === "waive" && (
-                        <textarea
+                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Reason (minimum 5 characters)</span><textarea
                           placeholder="Reason (minimum 5 characters)*"
                           value={pfWaiveReason}
                           onChange={(e) => setPfWaiveReason(e.target.value)}
                           className="w-full rounded-lg border border-outline-variant p-md"
                           rows={3}
-                        />
+                        /></label>
                       )}
                       {pfDecision === null && <p className="text-label-md text-on-surface-variant">Optional — choose Charge or Waive if a decision has been made.</p>}
                     </div>
@@ -3149,12 +3043,12 @@ Return to patient queue
           </>
         }
       >
-        <input
+        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Title (e.g. &quot;Annual Physical — Normal&quot;)</span><input
           value={newTemplateTitle}
           onChange={(e) => setNewTemplateTitle(e.target.value)}
-          placeholder='Title (e.g. "Annual Physical — Normal")'
+          placeholder='Title (e.g. &quot;Annual Physical — Normal&quot;)'
           className="w-full rounded-lg border border-outline-variant px-md py-sm"
-        />
+        /></label>
       </Modal>
 
       <Modal
@@ -3173,12 +3067,12 @@ Return to patient queue
         }
       >
         <div className="space-y-sm">
-          <input
+          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Title (e.g. &quot;Fit to Work&quot;, &quot;Sick Leave 3 days&quot;)</span><input
             value={saveMcTplTitle}
             onChange={(e) => setSaveMcTplTitle(e.target.value)}
-            placeholder='Title (e.g. "Fit to Work", "Sick Leave 3 days")'
+            placeholder='Title (e.g. &quot;Fit to Work&quot;, &quot;Sick Leave 3 days&quot;)'
             className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
+          /></label>
           <p className="text-label-sm text-on-surface-variant">
             Saves the Diagnosis/Impressions, Recommendations, and Purpose exception fields currently
             filled in — not the dates or the patient&apos;s address.
@@ -3201,12 +3095,12 @@ Return to patient queue
           <p className="text-body-sm text-on-surface-variant">
             Diagnosis text: <span className="text-on-surface">{newDiagnosisText.trim() || "—"}</span>
           </p>
-          <input
+          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Short label (e.g. URTI)</span><input
             value={saveTplLabel}
             onChange={(e) => setSaveTplLabel(e.target.value)}
             placeholder="Short label (e.g. URTI)"
             className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
+          /></label>
         </div>
       </Modal>
 
@@ -3262,12 +3156,12 @@ Return to patient queue
           ))}
         </ul>
         {!rxSatisfied && (
-          <p className="mt-md rounded-lg bg-amber-50 px-md py-sm text-label-md text-amber-700">
+          <p className="mt-md rounded-lg bg-status-warning-surface px-md py-sm text-label-md text-status-warning">
             Add at least one medicine, or check “No medicines this visit”.
           </p>
         )}
         {!followUpSatisfied && (
-          <p className="mt-md rounded-lg bg-amber-50 px-md py-sm text-label-md text-amber-700">
+          <p className="mt-md rounded-lg bg-status-warning-surface px-md py-sm text-label-md text-status-warning">
             Complete follow-up (schedule a date, choose PRN, or confirm no follow-up) before Complete — required for Grace clinic.
           </p>
         )}
@@ -3518,14 +3412,14 @@ Return to patient queue
       <div
         role="region"
         aria-label="Consultation actions"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant bg-surface-container-lowest shadow-[0_-4px_16px_rgba(0,0,0,0.08)] pb-[env(safe-area-inset-bottom)] lg:inset-x-0 lg:left-[var(--app-main-left,var(--spacing-sidebar))] lg:right-0"
+        className="consultation-workspace fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant bg-surface-container-lowest pb-[env(safe-area-inset-bottom)] lg:inset-x-0 lg:left-[var(--app-main-left,var(--spacing-sidebar))] lg:right-0"
       >
         <div className="mx-auto flex w-full max-w-content flex-col gap-sm px-md py-sm lg:flex-row lg:items-center lg:justify-between lg:gap-md">
           {mode === "complete" && !canComplete && missingRequiredSections.length > 0 && (
-            <div className="w-full">
+            <div className="shrink-0">
               <button
                 type="button"
-                className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-md py-xs text-label-md text-amber-950 lg:w-auto"
+                className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-xs text-label-md text-status-warning lg:w-auto"
                 aria-expanded={needHintExpanded}
                 onClick={() => setNeedHintExpanded((v) => !v)}
               >
@@ -3535,7 +3429,7 @@ Return to patient queue
                 <Icon name={needHintExpanded ? "expand_less" : "expand_more"} className="text-[20px]" aria-hidden />
               </button>
               {needHintExpanded && (
-                <ul className="mt-xs space-y-xs rounded-lg border border-amber-200 bg-amber-50/80 px-md py-sm text-label-sm text-amber-950">
+                <ul className="mt-xs space-y-xs rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm text-label-sm text-status-warning">
                   {missingRequiredSections.map((secIdx) => (
                     <li key={secIdx}>
                       <button
@@ -3554,31 +3448,12 @@ Return to patient queue
               )}
             </div>
           )}
-          <div className="flex items-center justify-end gap-xs sm:gap-sm">
-            <Button
-              variant="secondary"
-              onClick={() => setHistoryOpen(true)}
-              aria-label="Show History"
-              className="min-h-[44px] flex-1 whitespace-nowrap px-sm sm:flex-none sm:px-lg"
-            >
-              <Icon name="history" className="text-[18px]" />
-              <span className="hidden sm:inline">Show History</span>
-              <span className="sm:hidden">History</span>
-            </Button>
-            {mode === "complete" && (
-              <Button
-                disabled={!canComplete}
-                onClick={() => setChecklistOpen(true)}
-                aria-label="Complete Consultation"
-                className="min-h-[44px] flex-[1.2] whitespace-nowrap px-sm sm:flex-none sm:px-lg"
-              >
-                <span className="tabular-nums text-label-sm">
-                  {doneRequired}/{REQUIRED_SECTIONS.length}
-                </span>
-                <span className="sm:hidden">Complete</span>
-                <span className="hidden sm:inline">Complete Consultation</span>
-              </Button>
-            )}
+          <div className="flex w-full flex-wrap items-center justify-between gap-md lg:w-auto lg:flex-1">
+            <p role="status" aria-live="polite" aria-atomic="true" className="consultation-save-status text-label-md tabular-nums text-on-surface-variant">{savingDraft || savingChanges ? "Saving your changes…" : saveError ? "Not saved — your entries are still here." : mode === "amend" ? (amendSavedAt ? `Amendment saved ${amendSavedAt}` : "Amendment · manual save") : savedDraftSnapshot && currentFormSnapshot() !== savedDraftSnapshot ? "Unsaved changes · auto-save every 30 seconds" : draftSavedAt ? `Draft saved ${draftSavedAt}` : consultationId ? "Draft loaded · no new changes" : "Draft not saved · changes auto-save every 30 seconds"}</p>
+            <div className="flex items-center gap-sm">
+              {mode === "complete" && <Button variant={canComplete ? "primary" : "secondary"} disabled={!canComplete || savingDraft} onClick={() => setChecklistOpen(true)} aria-label="Complete Consultation">Review &amp; complete</Button>}
+              <Button variant={mode === "complete" && canComplete ? "secondary" : "primary"} loading={mode === "complete" ? savingDraft : savingChanges} disabled={mode === "amend" && !canComplete} onClick={mode === "complete" ? handleSaveDraft : handleSaveChanges}>{mode === "complete" ? "Save draft" : "Save amendment"}</Button>
+            </div>
           </div>
         </div>
       </div>

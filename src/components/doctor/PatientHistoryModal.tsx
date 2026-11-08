@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { StatusPill } from "@/components/ui/StatusPill";
@@ -93,6 +94,8 @@ export function PatientHistoryModal({
   doctorId: string;
 }) {
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [header, setHeader] = useState<HeaderInfo | null>(null);
   const [consultations, setConsultations] = useState<ConsultationEntry[]>([]);
   const [vitalTemplates, setVitalTemplates] = useState<VitalFieldTemplate[]>([]);
@@ -109,6 +112,8 @@ export function PatientHistoryModal({
     let cancelled = false;
     async function load() {
       setLoaded(false);
+      setLoadError(false);
+      try {
       const supabase = null as never;
       const [patientRow, consultsRes, templates, vitalRows, bookingRows, rxRes, labRows, docRows, vaxRows] = await Promise.all([
         queryPatientById(supabase, patientId),
@@ -124,6 +129,9 @@ export function PatientHistoryModal({
         queryVaccinations(supabase, patientId),
       ]);
       if (cancelled) return;
+      // The patient lookup returns null for failed reads as well as missing rows.
+      // Never present a stale identity as if the refreshed chart loaded correctly.
+      if (!patientRow) throw new Error("Patient identity could not be loaded.");
 
       if (patientRow) {
         setHeader({
@@ -197,12 +205,13 @@ export function PatientHistoryModal({
       );
 
       setLoaded(true);
+      } catch { if (!cancelled) setLoadError(true); }
     }
-    load();
+    queueMicrotask(() => { if (!cancelled) void load(); });
     return () => {
       cancelled = true;
     };
-  }, [isOpen, patientId, doctorId]);
+  }, [isOpen, patientId, doctorId, loadAttempt]);
 
   if (!isOpen) return null;
 
@@ -211,8 +220,8 @@ export function PatientHistoryModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Patient History" size="lg">
-      <div className="space-y-lg">
-        {!loaded ? (
+      <div className="consultation-history space-y-lg">
+        {loadError ? <ErrorState title="Patient history unavailable" message="History could not be loaded. The consultation notes remain open and unchanged." onRetry={() => { setLoadError(false); setLoadAttempt(n => n+1); }} /> : !loaded ? (
           <div className="space-y-md">
             <SkeletonCard lines={2} />
             <SkeletonTable rows={4} columns={2} />
@@ -227,7 +236,7 @@ export function PatientHistoryModal({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-sm">
                     <p className="text-headline-sm text-on-surface">{header.fullName}</p>
-                    <span className="text-label-sm text-on-surface-variant">{header.patientCode}</span>
+                    <span className="font-mono text-label-md text-on-surface-variant">{header.patientCode}</span>
                   </div>
                   <p className="text-label-md text-on-surface-variant">
                     {header.sex} · {computeAge(header.dateOfBirth) ?? "—"} yrs · Born {header.dateOfBirth}

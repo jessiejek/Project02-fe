@@ -398,7 +398,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
         /></label>
         {/* JJQR - AI (Oct 31, 2026) */}
         {showCatalogWarning && (
-          <p className="mt-xs text-label-sm text-amber-700">
+          <p className="mt-xs text-label-sm text-status-warning">
             Not in catalog — prefer picking a generic from the list (RA 6675).
           </p>
         )}
@@ -574,7 +574,7 @@ function TemplatesTab({ templates, onAddAll, onAddNew, onEdit, onDelete }: Templ
   const filtered = templates.filter((t) => (t.title ?? "").toLowerCase().includes(search.toLowerCase()));
   return (
     <div className="space-y-sm">
-      <Button onClick={onAddNew} className="w-full">
+      <Button variant="secondary" onClick={onAddNew} className="w-full">
         <Icon name="add_circle" className="text-[16px]" />
         Add Template
       </Button>
@@ -1103,11 +1103,11 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
       <div className="flex flex-wrap items-start justify-between gap-lg">
         {!embedded && <div className="space-y-xs"><h1 className="text-balance text-headline-lg font-semibold text-on-surface">{mode === "edit" ? "Edit prescription" : "New prescription"}</h1>{patientName && <p className="text-body-md text-on-surface-variant">For {patientName}</p>}</div>}
         <div className={cn("flex items-center gap-sm", embedded && "ml-auto")}>
-          <Button variant="secondary" loading={printing} disabled={!printReady} onClick={handlePrint}>
+          {(!embedded || printReady) && <Button variant="secondary" loading={printing} disabled={!printReady} onClick={handlePrint}>
             <Icon name="print" className="text-[16px]" />
             Print
-          </Button>
-          <Button loading={saving} onClick={handleSaveClick}>
+          </Button>}
+          <Button variant={embedded ? "secondary" : "primary"} loading={saving} onClick={handleSaveClick}>
             <Icon name="check" className="text-[16px]" />
             {embedded ? "Save medications" : "Save prescription"}
           </Button>
@@ -1117,7 +1117,7 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
         <p className="text-label-md text-error">Complete dose, route, frequency, and duration (sig) before printing.</p>
       )}
       {safetyAlerts.length > 0 && (
-        <ul className="space-y-xs rounded-lg border border-amber-400 bg-amber-50 px-md py-sm text-label-sm text-amber-900">
+        <ul className="space-y-xs rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm text-label-sm text-status-warning">
           {safetyAlerts.map((a, idx) => (
             <li key={`${a.level}-${idx}`}>{a.message}</li>
           ))}

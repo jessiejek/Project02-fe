@@ -1,0 +1,31 @@
+/* Clinical workbench: outer 24px - 16px inset = 8px control corners. */
+.consultation-workspace {
+  font-variant-numeric: tabular-nums;
+  --consult-panel-radius: var(--radius-xl);
+  --consult-panel-padding: var(--spacing-md);
+  --consult-control-radius: max(0px, calc(var(--consult-panel-radius) - var(--consult-panel-padding)));
+}
+.consultation-workspace .consultation-panel {
+  border-radius: var(--consult-panel-radius);
+  padding: var(--consult-panel-padding);
+  box-shadow: none;
+}
+/* Inner editors group by space, not another layer of rounded cards. */
+.consultation-workspace .consultation-panel .bento-card {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.consultation-workspace .consultation-panel :is(input, select, textarea) {
+  border-radius: var(--consult-control-radius);
+  font-variant-numeric: tabular-nums;
+}
+.consultation-workspace .clinical-note-field textarea { min-height: 8.5rem; }
+.consultation-workspace .clinical-note-field:has(textarea[aria-required]) textarea { min-height: 4.5rem; }
+.consultation-workspace :is(time, [data-numeric]), .consultation-history :is(td, time) { font-variant-numeric: tabular-nums; }
+.consultation-history { font-variant-numeric: tabular-nums; }
+.consultation-workspace .consultation-save-status { min-height: 1.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .consultation-workspace *, .consultation-history * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

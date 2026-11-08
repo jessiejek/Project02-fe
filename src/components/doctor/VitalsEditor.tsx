@@ -100,7 +100,7 @@ function VitalInputCard({ template, value, onChange, onRemove }: VitalInputCardP
       </div>
       {/* JJQR - AI (Oct 31, 2026) */}
       {showOutOfRange && (
-        <p className="flex items-center gap-xs text-label-sm text-amber-800" role="status">
+        <p className="flex items-center gap-xs text-label-sm text-status-warning" role="status">
           <Icon name="warning" className="text-[16px]" aria-hidden />
           Out of range
         </p>
@@ -115,13 +115,14 @@ export interface VitalsEditorProps {
   patientId: string;
   /** Called after a successful save — e.g. to close the drawer/modal it's embedded in. */
   onSaved?: () => void;
+  embedded?: boolean;
 }
 
 // The actual vitals-entry UI (grid of cards + "Others" + Save), extracted so
 // it can render both as its own page (patient-chart history use case) and
 // inline in a Drawer from the consultation page — navigating away to a whole
 // new route just to log vitals mid-consultation was the UX problem this fixes.
-export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProps) {
+export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }: VitalsEditorProps) {
   // vital_field_templates rarely changes — fetch once per mount rather than
   // re-querying on every keystroke (Implementation-Phases/03-reference-clinic-data.md
   // §3d).
@@ -227,7 +228,7 @@ export function VitalsEditor({ bookingId, patientId, onSaved }: VitalsEditorProp
           <Icon name="add_circle" className="text-[16px]" />
           Add measurement
         </Button>
-        <Button loading={saving} onClick={() => { setSaveError(null); setConfirmOpen(true); }}>Save vital signs</Button>
+        <Button variant={embedded ? "secondary" : "primary"} loading={saving} onClick={() => { setSaveError(null); setConfirmOpen(true); }}>Save vital signs</Button>
       </div>
 
       <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
