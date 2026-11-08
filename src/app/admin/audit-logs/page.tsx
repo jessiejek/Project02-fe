@@ -112,7 +112,7 @@ export default function AdminAuditLogsPage() {
 
         <DataTable
           columns={[
-            { header: "Timestamp", render: (l) => <span className="font-mono text-label-md">{l.timestamp}</span> },
+            { header: "Timestamp", render: (l) => <span className="tabular-nums text-label-md">{l.timestamp}</span> },
             { header: "Entity Type", render: (l) => <span className="rounded bg-surface-container-high px-2 py-0.5 text-label-sm">{l.entityType}</span> },
             { header: "Entity ID", render: (l) => <span className="font-mono text-label-md">{l.entityId}</span> },
             { header: "Action", render: (l) => l.action },
@@ -126,7 +126,7 @@ export default function AdminAuditLogsPage() {
             <div className="space-y-xs">
               <div className="flex items-center justify-between">
                 <span className="rounded bg-surface-container-high px-2 py-0.5 text-label-sm">{l.entityType}</span>
-                <span className="font-mono text-label-sm text-on-surface-variant">{l.timestamp}</span>
+                <span className="tabular-nums text-label-sm text-on-surface-variant">{l.timestamp}</span>
               </div>
               <p className="text-body-md text-on-surface">{l.action}</p>
               <p className="text-label-sm text-on-surface-variant">By {l.performedBy} · {l.entityId}</p>

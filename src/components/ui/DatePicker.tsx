@@ -102,6 +102,8 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
     <div ref={containerRef} className={cn("relative", className)}>
       <button
         type="button"
+        aria-expanded={open}
+        aria-haspopup="dialog"
         onClick={togglePicker}
         disabled={disabled}
         className={cn(
@@ -117,7 +119,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
       </button>
 
       {open && (
-        <div className="absolute left-0 z-40 mt-xs w-[min(280px,calc(100vw-2rem))] rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-lg">
+        <div role="dialog" aria-label="Choose a date" className="absolute left-0 z-40 mt-xs w-[min(280px,calc(100vw-2rem))] rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-lg">
           <div className="mb-sm flex items-center justify-between">
             <button
               type="button"
@@ -153,6 +155,8 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
                 <button
                   key={i}
                   type="button"
+                  aria-pressed={isSelected}
+                  aria-label={`${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`}
                   disabled={isDisabled}
                   onClick={() => {
                     onChange(toISO(date));
@@ -160,7 +164,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
                   }}
                   className={cn(
                     "rounded-full py-1 text-label-md transition-colors",
-                    !inMonth && "text-on-surface-variant/40",
+                    !inMonth && "text-on-surface-variant",
                     inMonth && !isSelected && "text-on-surface hover:bg-surface-container-high",
                     isSelected && "bg-primary font-medium text-on-primary",
                     !isSelected && isToday && "border border-primary text-primary",
@@ -178,7 +182,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
               onChange(toISO(today));
               setOpen(false);
             }}
-            className="mt-sm w-full rounded-lg py-xs text-center text-label-md text-primary hover:bg-surface-container-high"
+            className="mt-sm w-full rounded-inset py-xs text-center text-label-md text-primary hover:bg-surface-container-high"
           >
             Today
           </button>

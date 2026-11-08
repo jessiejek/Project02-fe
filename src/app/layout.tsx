@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import { config } from "@fortawesome/fontawesome-svg-core";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import "./globals.css";
@@ -14,10 +13,6 @@ import { getServerSession } from "@/lib/auth/session";
 // no runtime network dependency.
 config.autoAddCss = false;
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
 
 export const metadata: Metadata = {
   title: "Dr. Grace Gavino Medical Clinic",
@@ -34,7 +29,7 @@ export default async function RootLayout({
   const initialSession = await getServerSession();
 
   return (
-    <html lang="en" className={`${inter.variable} h-full`}>
+    <html lang="en" className="h-full">
       <body className="min-h-full font-sans antialiased">
         <SessionProvider initialSession={initialSession}>{children}</SessionProvider>
       </body>

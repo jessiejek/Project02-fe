@@ -8,10 +8,10 @@ import { Icon } from "@/components/ui/Icon";
 export type ToastVariant = "info" | "warning" | "success" | "error";
 
 const VARIANT_CLASSES: Record<ToastVariant, string> = {
-  info: "bg-blue-50 border-blue-200 text-blue-800",
-  warning: "bg-amber-50 border-amber-200 text-amber-800",
-  success: "bg-green-50 border-green-200 text-green-800",
-  error: "bg-red-50 border-red-200 text-red-800",
+  info: "bg-status-info-surface border-status-info-border text-status-info",
+  warning: "bg-status-warning-surface border-status-warning-border text-status-warning",
+  success: "bg-status-success-surface border-status-success-border text-status-success",
+  error: "bg-status-danger-surface border-status-danger-border text-status-danger",
 };
 
 const VARIANT_ICON: Record<ToastVariant, string> = {
@@ -25,6 +25,7 @@ export interface ToastProps {
   variant: ToastVariant;
   message: string;
   actionLabel?: string;
+  actionLoading?: boolean;
   onAction?: () => void;
   /** Prefer over onAction for in-app navigation — enables prefetch. */
   actionHref?: string;
@@ -32,13 +33,13 @@ export interface ToastProps {
 }
 
 /** Dismissible alert banner (info/warning/success/error) — per Stitch-00 Sheet 2. */
-export function Toast({ variant, message, actionLabel, onAction, actionHref, dismissible = true }: ToastProps) {
+export function Toast({ variant, message, actionLabel, onAction, actionHref, actionLoading = false, dismissible = true }: ToastProps) {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
   return (
     <div
-      role="status"
+      role={variant === "error" ? "alert" : "status"}
       className={cn(
         "animate-toast-in flex items-center justify-between gap-md rounded-lg border px-md py-sm shadow-sm",
         VARIANT_CLASSES[variant],
@@ -54,8 +55,8 @@ export function Toast({ variant, message, actionLabel, onAction, actionHref, dis
             </Link>
           )}
           {actionLabel && !actionHref && (
-            <button type="button" onClick={onAction} className="ml-xs font-bold underline">
-              {actionLabel}
+            <button type="button" onClick={onAction} disabled={actionLoading} aria-busy={actionLoading || undefined} className="ml-xs font-bold underline disabled:cursor-wait">
+              {actionLoading ? "Sending…" : actionLabel}
             </button>
           )}
         </p>

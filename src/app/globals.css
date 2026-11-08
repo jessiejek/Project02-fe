@@ -58,6 +58,23 @@
   --color-on-background: #0b1c30;
   --color-surface-variant: #d3e4fe;
 
+  /* Semantic status colors: a shared vocabulary, separate from brand teal. */
+  --color-status-success: #166534;
+  --color-status-success-surface: #dcfce7;
+  --color-status-success-border: #bbf7d0;
+  --color-status-warning: #854d0e;
+  --color-status-warning-surface: #fef3c7;
+  --color-status-warning-border: #fde68a;
+  --color-status-danger: #991b1b;
+  --color-status-danger-surface: #fee2e2;
+  --color-status-danger-border: #fecaca;
+  --color-status-info: #1e40af;
+  --color-status-info-surface: #dbeafe;
+  --color-status-info-border: #bfdbfe;
+  --color-status-neutral: #475569;
+  --color-status-neutral-surface: #f1f5f9;
+  --color-status-neutral-border: #cbd5e1;
+
   /* Spacing scale -> p-*, m-*, gap-* etc. */
   --spacing-base: 4px;
   --spacing-xs: 4px;
@@ -73,11 +90,12 @@
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
   --radius-xl: 1.5rem;
+  --radius-inset: max(0px, calc(var(--radius-xl) - var(--spacing-md)));
 
   /* Font family: single Inter stack (see layout.tsx). The original export
      declared a separate font-family token per type-role (all -> Inter);
      collapsed here since they were all the same face. */
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   /* Type scale -> text-headline-lg, text-body-md, etc. (size + line-height +
      letter-spacing + weight bundled per Tailwind v4's --text-*--property syntax) */
@@ -159,7 +177,7 @@ body {
 .bento-card {
   transition: transform 0.24s var(--ease-out-quart), box-shadow 0.24s var(--ease-out-quart);
 }
-.bento-card:hover {
+.bento-card--interactive:hover {
   transform: translateY(-2px);
 }
 
@@ -234,7 +252,11 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
-  .bento-card:hover {
+  .bento-card--interactive:hover {
     transform: none;
   }
 }
+
+/* Content hierarchy and stable numeric scanning. */
+h1, h2, h3 { text-wrap: balance; }
+dd, td, time, input[type="number"], [data-numeric] { font-variant-numeric: tabular-nums; }

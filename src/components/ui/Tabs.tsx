@@ -28,8 +28,16 @@ export function Tabs({ tabs, activeId, onChange, className }: TabsProps) {
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null);
 
   useEffect(() => {
-    const el = btnRefs.current[active ?? ""];
-    if (el) setIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+    function measure() {
+      const el = btnRefs.current[active ?? ""];
+      if (!el) return;
+      setIndicator(previous => previous?.left === el.offsetLeft && previous.width === el.offsetWidth ? previous : { left: el.offsetLeft, width: el.offsetWidth });
+    }
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (containerRef.current) observer.observe(containerRef.current);
+    for (const el of Object.values(btnRefs.current)) if (el) observer.observe(el);
+    return () => observer.disconnect();
   }, [active, tabs]);
 
   function handleClick(id: string) {
@@ -38,7 +46,7 @@ export function Tabs({ tabs, activeId, onChange, className }: TabsProps) {
   }
 
   return (
-    <div ref={containerRef} className={cn("relative flex gap-lg overflow-x-auto border-b border-outline-variant", className)}>
+    <div ref={containerRef} role="tablist" aria-label="Sections" className={cn("relative flex gap-lg overflow-x-auto border-b border-outline-variant", className)}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -46,6 +54,14 @@ export function Tabs({ tabs, activeId, onChange, className }: TabsProps) {
             btnRefs.current[tab.id] = el;
           }}
           type="button"
+          role="tab"
+          aria-selected={active === tab.id}
+          tabIndex={active === tab.id ? 0 : -1}
+          onKeyDown={(event) => {
+            const index = tabs.findIndex(item => item.id === tab.id);
+            const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : event.key === "ArrowRight" ? (index + 1) % tabs.length : event.key === "ArrowLeft" ? (index + tabs.length - 1) % tabs.length : -1;
+            if (next >= 0) { event.preventDefault(); handleClick(tabs[next].id); btnRefs.current[tabs[next].id]?.focus(); }
+          }}
           onClick={() => handleClick(tab.id)}
           className={cn(
             "shrink-0 whitespace-nowrap px-xs py-md text-label-md transition-colors duration-150",

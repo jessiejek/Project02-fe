@@ -4,19 +4,15 @@ import { Icon } from "@/components/ui/Icon";
 export type PillTone = "success" | "warning" | "danger" | "info" | "neutral";
 
 const TONE_CLASSES: Record<PillTone, string> = {
-  success: "bg-green-100 text-green-700 border-green-200",
-  warning: "bg-amber-100 text-amber-700 border-amber-200",
-  danger: "bg-red-100 text-red-700 border-red-200",
-  info: "bg-blue-100 text-blue-700 border-blue-200",
-  neutral: "bg-slate-100 text-slate-600 border-slate-200",
+  success: "bg-status-success-surface text-status-success border-status-success-border",
+  warning: "bg-status-warning-surface text-status-warning border-status-warning-border",
+  danger: "bg-status-danger-surface text-status-danger border-status-danger-border",
+  info: "bg-status-info-surface text-status-info border-status-info-border",
+  neutral: "bg-status-neutral-surface text-status-neutral border-status-neutral-border",
 };
 
 const TONE_ICON: Record<PillTone, string> = {
-  success: "check_circle",
-  warning: "schedule",
-  danger: "cancel",
-  info: "info",
-  neutral: "radio_button_unchecked",
+  success: "check_circle", warning: "schedule", danger: "cancel", info: "info", neutral: "radio_button_unchecked",
 };
 
 // Every status vocabulary in the app (Patient.md/Staff.md/Doctor.md/admin.md)

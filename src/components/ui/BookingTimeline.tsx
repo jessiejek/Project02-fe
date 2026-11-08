@@ -1,3 +1,4 @@
+import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 
 export interface BookingTimelineProps {
@@ -16,9 +17,9 @@ export function BookingTimeline({ steps, currentIndex }: BookingTimelineProps) {
   if (currentIndex < 0) return null;
 
   return (
-    <div className="flex items-center gap-xs">
+    <div className="flex items-center gap-xs" role="list" aria-label="Booking progress">
       {steps.map((step, i) => (
-        <div key={step} className="flex items-center gap-xs">
+        <div key={step} className="flex items-center gap-xs" role="listitem" aria-label={`${step}${i === currentIndex ? ": current step" : i < currentIndex ? ": complete" : ""}`} aria-current={i === currentIndex ? "step" : undefined}>
           {i > 0 && <div className={cn("h-px w-6", i <= currentIndex ? "bg-primary" : "bg-outline-variant")} />}
           <span
             className={cn(
@@ -26,7 +27,7 @@ export function BookingTimeline({ steps, currentIndex }: BookingTimelineProps) {
               i <= currentIndex ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant",
             )}
           >
-            {i <= currentIndex ? "✓" : i + 1}
+            {i <= currentIndex ? <Icon name="check" className="h-3 w-3" /> : i + 1}
           </span>
         </div>
       ))}
