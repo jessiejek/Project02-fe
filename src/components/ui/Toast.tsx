@@ -8,10 +8,10 @@ import { Icon } from "@/components/ui/Icon";
 export type ToastVariant = "info" | "warning" | "success" | "error";
 
 const VARIANT_CLASSES: Record<ToastVariant, string> = {
-  info: "bg-blue-50 border-blue-200 text-blue-800",
-  warning: "bg-amber-50 border-amber-200 text-amber-800",
-  success: "bg-green-50 border-green-200 text-green-800",
-  error: "bg-red-50 border-red-200 text-red-800",
+  info: "bg-status-info-surface border-status-info-border text-status-info",
+  warning: "bg-status-warning-surface border-status-warning-border text-status-warning",
+  success: "bg-status-success-surface border-status-success-border text-status-success",
+  error: "bg-status-danger-surface border-status-danger-border text-status-danger",
 };
 
 const VARIANT_ICON: Record<ToastVariant, string> = {

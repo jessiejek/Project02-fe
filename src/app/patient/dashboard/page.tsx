@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { StatCard } from "@/components/ui/Card";
 import { Toast } from "@/components/ui/Toast";
-import { Button } from "@/components/ui/Button";
+import { buttonStyles } from "@/components/ui/buttonStyles";
 import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctors } from "@/lib/data/doctors";
@@ -205,11 +205,9 @@ export default function PatientDashboardPage() {
                     <span className="text-label-md">{nextBooking.slotStartTime}</span>
                   </div>
                 </div>
-                <Link href={`/patient/bookings/${nextBooking.id}`}>
-                  <Button variant="secondary" className="w-full !bg-on-primary !text-primary">
+                <Link href={`/patient/bookings/${nextBooking.id}`} className={buttonStyles("secondary", "w-full !bg-on-primary !text-primary")}>
                     View Booking
-                  </Button>
-                </Link>
+                  </Link>
               </div>
             )}
           </div>
@@ -221,51 +219,37 @@ export default function PatientDashboardPage() {
           <StatCard icon="medication" value={prescriptionCount} label="Prescriptions" href="/patient/prescriptions" />
         </div>
 
-        <div className="hide-scrollbar overflow-x-auto pb-sm">
+        <div className="pb-sm">
           <h3 className="mb-md text-headline-sm text-on-surface">Quick Actions</h3>
-          <div className="flex min-w-max gap-md">
-            <Link href="/patient/bookings">
-              <Button>
+          <div className="flex flex-wrap gap-sm">
+            <Link href="/patient/bookings" className={buttonStyles("primary")}>
                 <Icon name="add_circle" className="text-[20px]" />
                 Book a Visit
-              </Button>
-            </Link>
-            <Link href="/patient/doctors">
-              <Button variant="secondary">
+              </Link>
+            <Link href="/patient/doctors" className={buttonStyles("secondary")}>
                 <Icon name="medical_services" className="text-[20px]" />
                 Find a Doctor
-              </Button>
-            </Link>
-            <Link href="/patient/bookings">
-              <Button variant="secondary">
+              </Link>
+            <Link href="/patient/bookings" className={buttonStyles("secondary")}>
                 <Icon name="calendar_month" className="text-[20px]" />
                 My Bookings
-              </Button>
-            </Link>
-            <Link href="/patient/privacy-consent">
-              <Button variant="secondary">
+              </Link>
+            <Link href="/patient/privacy-consent" className={buttonStyles("secondary")}>
                 <Icon name="gavel" className="text-[20px]" />
                 Review Consent
-              </Button>
-            </Link>
-            <Link href="/patient/medical-records">
-              <Button variant="secondary">
+              </Link>
+            <Link href="/patient/medical-records" className={buttonStyles("secondary")}>
                 <Icon name="folder_shared" className="text-[20px]" />
                 Medical Records
-              </Button>
-            </Link>
-            <Link href="/patient/prescriptions">
-              <Button variant="secondary">
+              </Link>
+            <Link href="/patient/prescriptions" className={buttonStyles("secondary")}>
                 <Icon name="prescriptions" className="text-[20px]" />
                 Prescriptions
-              </Button>
-            </Link>
-            <Link href="/patient/documents">
-              <Button variant="secondary">
+              </Link>
+            <Link href="/patient/documents" className={buttonStyles("secondary")}>
                 <Icon name="description" className="text-[20px]" />
                 My Documents
-              </Button>
-            </Link>
+              </Link>
           </div>
         </div>
 
@@ -296,11 +280,9 @@ export default function PatientDashboardPage() {
                       <span className="text-label-sm text-on-surface-variant">({doc.reviewCount} reviews)</span>
                       </> : <span className="text-label-sm text-on-surface-variant">No reviews yet</span>}
                     </div>
-                    <Link href={`/patient/doctors/${doc.id}`} className="w-full">
-                      <Button variant="secondary" className="w-full">
+                    <Link href={`/patient/doctors/${doc.id}`} className={buttonStyles("secondary", "w-full w-full")}>
                         Profile
-                      </Button>
-                    </Link>
+                      </Link>
                   </div>
                 ))}
               </div>

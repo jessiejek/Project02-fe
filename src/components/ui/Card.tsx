@@ -15,7 +15,7 @@ export function Card({ hoverable, className, ...props }: CardProps) {
     <div
       className={cn(
         "bento-card rounded-xl border border-outline-variant bg-surface-container-lowest p-lg",
-        hoverable && "cursor-pointer hover:shadow-md",
+        hoverable && "bento-card--interactive cursor-pointer hover:shadow-md",
         className,
       )}
       {...props}
@@ -60,7 +60,11 @@ export function StatCard({ icon, label, value, eyebrow, onClick, href }: StatCar
   }
 
   return (
-    <Card hoverable={Boolean(onClick)} onClick={onClick}>
+    <Card hoverable={Boolean(onClick)} onClick={onClick}
+      role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (event) => {
+        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onClick(); }
+      } : undefined}>
       {content}
     </Card>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/Icon";
@@ -77,6 +77,12 @@ export function DataTable<T>({
     onRowClick?.(row);
   }
 
+  function handleRowKey(event: KeyboardEvent<HTMLElement>, row: T) {
+    if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault(); activateRow(row);
+    }
+  }
+
   function prefetchRow(row: T) {
     if (rowHref) router.prefetch(rowHref(row));
   }
@@ -98,7 +104,10 @@ export function DataTable<T>({
             rows.map((row) => (
               <div
                 key={rowKey(row)}
+                role={rowHref ? "link" : interactive ? "button" : undefined}
                 onClick={interactive ? () => activateRow(row) : undefined}
+                onKeyDown={interactive ? (event) => handleRowKey(event, row) : undefined}
+                tabIndex={interactive ? 0 : undefined}
                 onMouseEnter={interactive ? () => prefetchRow(row) : undefined}
                 onFocus={interactive ? () => prefetchRow(row) : undefined}
                 className={cn("p-lg", interactive && "cursor-pointer active:bg-surface-container-low")}
@@ -116,6 +125,7 @@ export function DataTable<T>({
               {columns.map((column) => (
                 <th
                   key={column.header}
+                  scope="col"
                   className={cn(
                     "px-lg py-md text-label-md text-on-surface-variant",
                     ALIGN_CLASS[column.align ?? "left"],

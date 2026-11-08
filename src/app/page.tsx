@@ -1,3 +1,4 @@
+import { buttonStyles } from "@/components/ui/buttonStyles";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api/client";
 import { VersionFooter } from "@/components/shell/VersionFooter";
@@ -38,10 +39,8 @@ function fmtTime(t: string | null) {
 
 const peso = (n: number) => `₱${Number(n).toLocaleString("en-PH", { maximumFractionDigits: 0 })}`;
 
-const primaryLink =
-  "inline-flex items-center justify-center rounded-lg bg-primary px-lg py-md text-body-md font-medium text-on-primary shadow-sm hover:bg-primary-container";
-const secondaryLink =
-  "inline-flex items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest px-lg py-md text-body-md font-medium text-on-surface hover:bg-surface-container-high";
+const primaryLink = buttonStyles("primary");
+const secondaryLink = buttonStyles("secondary");
 
 const STEPS = [
   { n: "1", title: "Create an account", body: "Sign up once with your name, birth date and email." },
@@ -78,9 +77,9 @@ export default async function Home() {
             <Link href="/register?next=/patient/bookings" className={primaryLink}>
               Book a visit
             </Link>
-            <Link href="/register" className={secondaryLink}>
-              Register
-            </Link>
+            <a href="#how" className={secondaryLink}>
+              How booking works
+            </a>
           </div>
           <p className="text-label-md text-on-surface-variant">
             Already a patient?{" "}
