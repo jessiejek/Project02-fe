@@ -41,12 +41,12 @@ export function StatCard({ icon, label, value, eyebrow, onClick, href }: StatCar
           <Icon name={icon} />
         </div>
         {eyebrow && (
-          <span className="text-label-sm uppercase tracking-wider text-on-surface-variant/60">
+          <span className="text-label-sm uppercase tracking-wider text-on-surface-variant">
             {eyebrow}
           </span>
         )}
       </div>
-      <p className="text-headline-lg text-on-surface">{value}</p>
+      <p className="text-headline-lg tabular-nums text-on-surface">{value}</p>
       <p className="text-label-md text-on-surface-variant">{label}</p>
     </>
   );

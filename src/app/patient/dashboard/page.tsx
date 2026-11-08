@@ -1,5 +1,7 @@
 "use client";
 
+import { todayManila } from "@/lib/clock";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -134,7 +136,7 @@ export default function PatientDashboardPage() {
     );
   }
 
-  const upcoming = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status));
+  const upcoming = bookings.filter((b) => ["Confirmed", "CheckedIn"].includes(b.status) && b.appointmentDate >= todayManila()).sort((a, b) => `${a.appointmentDate} ${a.slotStartTime}`.localeCompare(`${b.appointmentDate} ${b.slotStartTime}`));
   // Completed visits with an outstanding balance — "Pay at Clinic" is the
   // only payment mode now, so this means money owed, not a proof-of-payment
   // upload (that flow doesn't exist for walk-in visits).
@@ -166,7 +168,7 @@ export default function PatientDashboardPage() {
           {!isEmailVerified && (
             <Toast
               variant="warning"
-              message="Please verify your email address to ensure full access to your medical records."
+              message="Please verify the email address used for clinic messages."
               actionLabel="Resend Verification Email"
               onAction={handleResendVerification}
             />
@@ -174,7 +176,7 @@ export default function PatientDashboardPage() {
           {!consentedAt && (
             <Toast
               variant="warning"
-              message="Your privacy consent needs review to comply with updated healthcare regulations."
+              message="Please review your privacy consent."
               actionLabel="Review Now"
               actionHref="/patient/privacy-consent"
             />
@@ -184,15 +186,39 @@ export default function PatientDashboardPage() {
         <div>
           <h2 className="text-headline-lg text-on-surface">Welcome back, {firstName}</h2>
           <p className="text-body-lg text-on-surface-variant">
-            Here is an overview of your health status and upcoming tasks.
+            Manage your appointments, payments, and medical documents.
           </p>
         </div>
 
+          <div className="space-y-lg">
+            {nextBooking && (
+              <div className="relative overflow-hidden rounded-xl bg-primary p-lg text-on-primary shadow-lg">
+                <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Next Appointment</h3>
+                <h4 className="text-headline-md">{nextBooking.doctorName}</h4>
+                <div className="mb-lg flex items-center justify-between rounded-lg bg-on-primary/10 p-md">
+                  <div className="flex items-center gap-sm">
+                    <Icon name="calendar_today" />
+                    <span className="text-label-md">{nextBooking.appointmentDate}</span>
+                  </div>
+                  <div className="flex items-center gap-sm">
+                    <Icon name="schedule" />
+                    <span className="text-label-md">{nextBooking.slotStartTime}</span>
+                  </div>
+                </div>
+                <Link href={`/patient/bookings/${nextBooking.id}`}>
+                  <Button variant="secondary" className="w-full !bg-on-primary !text-primary">
+                    View Booking
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </div>
+
         <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
-          <StatCard icon="calendar_today" value={upcoming.length} label="Active Appointments" eyebrow="Today" href="/patient/bookings" />
-          <StatCard icon="receipt_long" value={paymentDue.length} label="Payment Due" eyebrow="Pending" href="/patient/bookings" />
-          <StatCard icon="check_circle" value={completed.length} label="Completed Appointments" eyebrow="History" href="/patient/bookings" />
-          <StatCard icon="medication" value={prescriptionCount} label="Current Prescriptions" eyebrow="Active" href="/patient/prescriptions" />
+          <StatCard icon="calendar_today" value={upcoming.length} label="Active Appointments" href="/patient/bookings" />
+          <StatCard icon="receipt_long" value={paymentDue.length} label="Payment Due" href="/patient/bookings" />
+          <StatCard icon="check_circle" value={completed.length} label="Completed Appointments" href="/patient/bookings" />
+          <StatCard icon="medication" value={prescriptionCount} label="Prescriptions" href="/patient/prescriptions" />
         </div>
 
         <div className="hide-scrollbar overflow-x-auto pb-sm">
@@ -244,10 +270,10 @@ export default function PatientDashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-lg lg:grid-cols-12">
-          <div className="space-y-lg lg:col-span-8">
+          <div className="space-y-lg lg:col-span-12">
             <section>
               <div className="mb-md flex items-center justify-between">
-                <h3 className="text-headline-sm text-on-surface">Available Specialists</h3>
+                <h3 className="text-headline-sm text-on-surface">Clinic Doctors</h3>
                 <Link href="/patient/doctors" className="text-label-md text-primary hover:underline">
                   View All
                 </Link>
@@ -264,9 +290,11 @@ export default function PatientDashboardPage() {
                     <h4 className="text-headline-sm text-on-surface">{doc.name}</h4>
                     <p className="mb-md text-label-md text-on-surface-variant">{doc.specialization}</p>
                     <div className="mb-lg flex items-center gap-xs">
+                      {doc.reviewCount > 0 ? <>
                       <Icon name="star" className="text-sm text-tertiary" />
                       <span className="text-label-sm font-bold">{doc.rating}</span>
                       <span className="text-label-sm text-on-surface-variant">({doc.reviewCount} reviews)</span>
+                      </> : <span className="text-label-sm text-on-surface-variant">No reviews yet</span>}
                     </div>
                     <Link href={`/patient/doctors/${doc.id}`} className="w-full">
                       <Button variant="secondary" className="w-full">
@@ -295,38 +323,14 @@ export default function PatientDashboardPage() {
                         <p className="text-label-md text-on-surface-variant">{item.subtitle}</p>
                       </div>
                     </div>
-                    <button type="button" className="rounded-lg p-xs text-on-surface-variant transition-all hover:bg-surface-container-high">
-                      <Icon name="download" />
-                    </button>
+                    <Link href={item.kind === "record" ? "/patient/medical-records" : "/patient/prescriptions"} className="rounded-lg p-xs text-primary hover:underline" aria-label={`View ${item.kind === "record" ? "medical records" : "prescriptions"}`}>View</Link>
                   </div>
                 ))}
               </div>
             </section>
           </div>
 
-          <div className="space-y-lg lg:col-span-4">
-            {nextBooking && (
-              <div className="relative overflow-hidden rounded-xl bg-primary p-lg text-on-primary shadow-lg">
-                <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Your Appointment Today</h3>
-                <h4 className="text-headline-md">{nextBooking.doctorName}</h4>
-                <div className="mb-lg flex items-center justify-between rounded-lg bg-on-primary/10 p-md">
-                  <div className="flex items-center gap-sm">
-                    <Icon name="calendar_today" />
-                    <span className="text-label-md">{nextBooking.appointmentDate}</span>
-                  </div>
-                  <div className="flex items-center gap-sm">
-                    <Icon name="schedule" />
-                    <span className="text-label-md">{nextBooking.slotStartTime}</span>
-                  </div>
-                </div>
-                <Link href={`/patient/bookings/${nextBooking.id}`}>
-                  <Button variant="secondary" className="w-full !bg-on-primary !text-primary">
-                    View Booking
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </div>
+
         </div>
       </div>
     </AppShell>

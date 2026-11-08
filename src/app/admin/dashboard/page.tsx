@@ -141,7 +141,7 @@ export default function AdminDashboardPage() {
   const maxLoad = Math.max(1, ...doctorLoads.map((d) => d.bookingCount));
 
   return (
-    <AppShell role="admin" roleBadge={<span className="rounded-full bg-tertiary-container px-md py-xs text-label-sm text-on-tertiary-container">Admin</span>}>
+    <AppShell role="admin">
       <div className="space-y-xl">
         <h2 className="text-headline-lg text-on-surface">Admin Dashboard</h2>
 

@@ -807,7 +807,7 @@ export function DoctorTemplatesPanel() {
         {preview ? (
           <p className="line-clamp-2 flex-1 text-body-md text-on-surface-variant">{preview}</p>
         ) : (
-          <p className="flex-1 text-body-md italic text-on-surface-variant/70">No preview text</p>
+          <p className="flex-1 text-body-md text-on-surface-variant">No preview text</p>
         )}
         {confirming ? (
           <div className="mt-sm rounded-lg border border-outline-variant bg-surface-container-low px-sm py-sm">
