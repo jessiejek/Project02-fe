@@ -6,11 +6,11 @@ import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/Icon";
 import { ROLE_CONFIG, type Role } from "@/lib/nav-config";
 
-const ACCENT_BORDER: Record<string, string> = {
-  primary: "border-primary",
-  secondary: "border-secondary",
-  "on-secondary-fixed": "border-on-secondary-fixed",
-  tertiary: "border-tertiary",
+const ACCENT_BACKGROUND: Record<string, string> = {
+  primary: "bg-primary",
+  secondary: "bg-secondary",
+  "on-secondary-fixed": "bg-on-secondary-fixed",
+  tertiary: "bg-tertiary",
 };
 
 const ACCENT_TEXT: Record<string, string> = {
@@ -57,7 +57,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
-              role === "doctor" ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-low" : "shrink-0 rounded-full p-xs text-outline-variant transition-colors hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
+              role === "doctor" ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-nav text-on-surface-variant hover:bg-surface-container-low" : "shrink-0 rounded-full p-xs text-outline-variant transition-colors hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
               !collapsed && "ml-auto",
             )}
           >
@@ -86,13 +86,15 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
                   onClick={onNavigate}
                   title={collapsed ? item.label : undefined}
                   className={cn(
-                    "flex min-h-11 items-center gap-md rounded-lg py-sm text-label-md transition-colors motion-reduce:transition-none",
+                    "group/sidebar-nav relative flex min-h-11 items-center gap-md rounded-nav py-sm text-label-md transition-colors motion-reduce:transition-none",
                     collapsed ? "justify-center px-sm" : "px-md",
-                    role === "doctor" ? cn("border-l-4", active ? "border-primary bg-primary/10 font-semibold text-primary" : "border-transparent text-on-surface-variant hover:bg-surface-container-low") : active
-                      ? cn("border-l-4 bg-on-secondary-fixed-variant", ACCENT_BORDER[config.accent], ACCENT_TEXT[config.accent])
+                    role === "doctor" ? (active ? "bg-primary/10 font-semibold text-primary" : "text-on-surface-variant hover:bg-surface-container-low") : active
+                      ? cn("bg-on-secondary-fixed-variant", ACCENT_TEXT[config.accent])
                       : "text-outline-variant hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
                   )}
                 >
+                  {/* A separate inset indicator stays straight instead of following the link's corners. */}
+                  <span aria-hidden="true" className={cn("pointer-events-none absolute inset-y-sm left-0 w-[3px] rounded-none", ACCENT_BACKGROUND[config.accent], active ? "opacity-100" : "opacity-0 group-hover/sidebar-nav:opacity-100")} />
                   <Icon name={item.icon} className="h-4 w-4 shrink-0" />
                   {!collapsed && item.label}
                 </Link>
@@ -110,7 +112,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
           href="/logout"
           title={collapsed ? "Logout" : undefined}
           className={cn(
-            role === "doctor" ? "flex min-h-11 items-center gap-md rounded-lg py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low" : "flex items-center gap-md rounded-lg py-sm text-label-md text-outline-variant transition-all hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
+            role === "doctor" ? "flex min-h-11 items-center gap-md rounded-nav py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low" : "flex items-center gap-md rounded-nav py-sm text-label-md text-outline-variant transition-all hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
             collapsed ? "justify-center px-sm" : "px-md",
           )}
         >

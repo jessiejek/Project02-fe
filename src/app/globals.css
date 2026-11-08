@@ -87,6 +87,7 @@
   /* Radius scale -> rounded, rounded-sm/md/lg/xl */
   --radius: 0.5rem;
   --radius-sm: 0.25rem;
+  --radius-nav: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
   --radius-xl: 1.5rem;
