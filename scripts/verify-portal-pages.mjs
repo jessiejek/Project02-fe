@@ -7,7 +7,7 @@ import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
-const origin = process.env.PREVIEW_URL || 'http://127.0.0.1:3001';
+const origin = process.env.PREVIEW_URL || 'http://localhost:3001';
 const api = 'http://127.0.0.1:5055';
 const portal = process.env.PORTAL || 'public';
 const phase = process.env.CAPTURE_PHASE || 'after';
@@ -32,11 +32,13 @@ try {
   if (portal === 'public') {
     routes = [['home', '/'], ['login', '/login'], ['register', '/register'], ['forgot-password', '/forgot-password']];
   } else {
-    await page.goto(origin + '/login');
+    await page.goto(origin + '/login'); await page.waitForLoadState('networkidle');
+    // Wait for hydration so the submit runs the client handler, not a native GET form post.
+    await page.waitForFunction(() => { const f = document.querySelector('form'); return !!f && Object.keys(f).some(k => k.startsWith('__react')); }, {}, { timeout: 60000 });
     await page.getByLabel('Email', { exact: true }).fill(`${portal}@clinic.test`);
     await page.getByLabel('Password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Log in', exact: true }).click();
-    await page.waitForURL(`**/${portal}/dashboard`, { timeout: 30000 });
+    await page.waitForURL(url => url.pathname.startsWith(`/${portal}/`), { timeout: 120000 });
     const { token } = await (await context.request.get(origin + '/api/session/token')).json(); assert.ok(token);
     const get = async path => { const r = await context.request.get(api + path, { headers: { Authorization: `Bearer ${token}` } }); return r.ok() ? r.json() : null; };
     if (portal === 'admin' || portal === 'staff') {
@@ -71,8 +73,9 @@ try {
   for (const [name, path] of routes) {
     await page.setViewportSize({ width: 1440, height: 1000 });
     const response = await page.goto(origin + path);
-    await page.waitForLoadState('networkidle').catch(() => {});
-    await page.waitForFunction(() => { const m = document.querySelector('main') || document.body; return !/^Loading[^\n]*[….]?$/.test(m.innerText.trim()) && !m.querySelector('.animate-pulse'); }, {}, { timeout: 20000 }).catch(() => {});
+    // Portals keep a SignalR socket and polling open, so 'networkidle' never settles; wait for content instead.
+    await page.waitForLoadState('load').catch(() => {}); await page.waitForTimeout(1200);
+    await page.waitForFunction(() => { const m = document.querySelector('main') || document.body; return !/^Loading[^\n]*[….]?$/.test(m.innerText.trim()) && !m.querySelector('.animate-pulse'); }, {}, { timeout: 15000 }).catch(() => {});
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 }); await page.waitForTimeout(150);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);

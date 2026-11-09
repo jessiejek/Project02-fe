@@ -8,6 +8,11 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { Icon } from "@/components/ui/Icon";
+import { formatClinicDateShort, formatPeso } from "@/lib/format";
 import { queryReport } from "@/lib/data/admin";
 
 interface UnpaidVisitRow {
@@ -45,19 +50,32 @@ export default function AdminReportsPage() {
   const [unpaidCompleted, setUnpaidCompleted] = useState<UnpaidVisitRow[]>([]);
   const [pendingFollowUps, setPendingFollowUps] = useState<PendingFollowUpRow[]>([]);
   const [dailySummary, setDailySummary] = useState<DailySummaryRow[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const rangeInvalid = Boolean(dateFrom && dateTo && dateFrom > dateTo);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
+      if (rangeInvalid) { setLoading(false); return; }
       setLoading(true);
       const supabase = null as never;
       const inRange = (d: string | null | undefined, lo: string, hi: string) => !!d && d >= lo && d <= hi;
-      const [unpaidAll, followUpsAll, summaryAll] = await Promise.all([
+      let unpaidAll: Record<string, unknown>[], followUpsAll: Record<string, unknown>[], summaryAll: Record<string, unknown>[];
+      try {
+      [unpaidAll, followUpsAll, summaryAll] = await Promise.all([
         //JJQR - AI (Oct 31, 2026)
         queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits"),
         queryReport<Record<string, unknown>>(supabase, "v_pending_follow_ups"),
         queryReport<Record<string, unknown>>(supabase, "v_daily_booking_summary"),
         //JJQR - END
       ]);
+      } catch {
+        if (!cancelled) { setLoadError(true); setLoading(false); }
+        return;
+      }
+      if (cancelled) return;
+      setLoadError(false);
       const unpaidRes = { data: unpaidAll.filter((b) => inRange(b.appointment_date as string, dateFrom, dateTo)) };
       const followUpsRes = {
         data: followUpsAll.filter(
@@ -112,18 +130,8 @@ export default function AdminReportsPage() {
       setLoading(false);
     }
     load();
-  }, [dateFrom, dateTo]);
-
-  if (loading) {
-    return (
-      <AppShell role="admin">
-        <div className="space-y-lg">
-          <SkeletonStats />
-          <SkeletonTable rows={5} columns={5} />
-        </div>
-      </AppShell>
-    );
-  }
+    return () => { cancelled = true; };
+  }, [dateFrom, dateTo, rangeInvalid, reloadKey]);
 
   function exportCsv() {
     const escapeCell = (value: string | number | null | undefined) => {
@@ -163,70 +171,103 @@ export default function AdminReportsPage() {
     URL.revokeObjectURL(url);
   }
 
+  const totals = dailySummary.reduce((t, r) => ({ visits: t.visits + r.total, completed: t.completed + r.completed, noShows: t.noShows + r.noShows, revenue: t.revenue + r.revenue }), { visits: 0, completed: 0, noShows: 0, revenue: 0 });
+  const unpaidTotal = unpaidCompleted.reduce((sum, b) => sum + b.amountDue, 0);
+  const th = "px-sm py-sm text-label-md font-medium text-on-surface-variant";
+  const td = "px-sm py-sm";
+
   return (
     <AppShell role="admin">
       <div className="space-y-xl">
-        <div className="flex flex-wrap items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">Reports</h2>
-          <Button
-            variant="secondary"
-            onClick={exportCsv}
-            disabled={unpaidCompleted.length === 0 && dailySummary.length === 0 && pendingFollowUps.length === 0}
-          >
-            Export CSV
-          </Button>
+        <PageHeader
+          title="Clinic reports"
+          description={<>Revenue, unpaid visits and follow-ups for <span className="tabular-nums">{formatClinicDateShort(dateFrom)} – {formatClinicDateShort(dateTo)}</span>.</>}
+          actions={
+            <Button
+              variant="secondary"
+              onClick={exportCsv}
+              disabled={loading || (unpaidCompleted.length === 0 && dailySummary.length === 0 && pendingFollowUps.length === 0)}
+            >
+              <Icon name="download" className="text-[14px]" />Export CSV
+            </Button>
+          }
+        />
+
+        <div className="flex flex-col gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-md sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="space-y-xs">
+            <span className="block text-label-md text-on-surface-variant">From</span>
+            <DatePicker value={dateFrom} onChange={setDateFrom} className="w-full sm:w-[11rem]" />
+          </div>
+          <div className="space-y-xs">
+            <span className="block text-label-md text-on-surface-variant">To</span>
+            <DatePicker value={dateTo} onChange={setDateTo} className="w-full sm:w-[11rem]" />
+          </div>
+          {rangeInvalid && <FormAlert className="sm:flex-1">The start date is after the end date. Pick a start on or before {formatClinicDateShort(dateTo)}.</FormAlert>}
         </div>
 
-        <Card className="flex flex-col gap-md sm:flex-row sm:flex-wrap sm:items-center">
-          <label className="flex w-full flex-col gap-xs text-label-md text-on-surface-variant sm:w-auto sm:flex-row sm:items-center sm:gap-sm">
-            From
-            <DatePicker value={dateFrom} onChange={setDateFrom} className="w-full sm:w-[10rem]" />
-          </label>
-          <label className="flex w-full flex-col gap-xs text-label-md text-on-surface-variant sm:w-auto sm:flex-row sm:items-center sm:gap-sm">
-            To
-            <DatePicker value={dateTo} onChange={setDateTo} className="w-full sm:w-[10rem]" />
-          </label>
-        </Card>
+        {rangeInvalid ? null : loadError ? (
+          <ErrorState title="Reports unavailable" message="Report data could not be loaded for this range. No totals are shown while the request has failed." onRetry={() => setReloadKey((k) => k + 1)} retrying={loading} />
+        ) : loading ? (
+          <div className="space-y-lg" aria-busy="true">
+            <p className="sr-only" role="status">Loading reports…</p>
+            <SkeletonStats />
+            <SkeletonTable rows={5} columns={5} />
+          </div>
+        ) : (
+        <>
+        <dl className="grid grid-cols-2 gap-md lg:grid-cols-4">
+          {[
+            ["Revenue", formatPeso(totals.revenue, "₱0")],
+            ["Unpaid after visit", formatPeso(unpaidTotal, "₱0")],
+            ["Visits", String(totals.visits)],
+            ["No-shows", String(totals.noShows)],
+          ].map(([label, value], i) => (
+            <div key={label} className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
+              <dt className="text-label-md text-on-surface-variant">{label}</dt>
+              <dd className={i === 0 ? "mt-xs text-headline-lg tabular-nums text-primary" : "mt-xs text-headline-lg tabular-nums text-on-surface"}>{value}</dd>
+            </div>
+          ))}
+        </dl>
 
         <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Unpaid Completed Appointments</h3>
+          <div className="mb-md flex flex-wrap items-baseline justify-between gap-sm">
+            <h2 className="text-headline-sm text-on-surface">Completed visits not yet paid</h2>
+            <span className="text-label-md tabular-nums text-on-surface-variant">{unpaidCompleted.length} visits · {formatPeso(unpaidTotal, "₱0")}</span>
+          </div>
           {unpaidCompleted.length === 0 ? (
-            <p className="text-body-md text-on-surface-variant">No unpaid completed appointments in this range.</p>
+            <p className="text-body-md text-on-surface-variant">Every completed visit in this range is settled.</p>
           ) : (
             <>
-              <div className="space-y-sm sm:hidden">
+              <ul className="divide-y divide-outline-variant sm:hidden">
                 {unpaidCompleted.map((b) => (
-                  <div key={b.bookingId} className="space-y-xs rounded-lg border border-outline-variant p-md">
-                    <p className="text-body-md font-medium text-on-surface">{b.patientName}</p>
-                    <p className="text-label-sm text-on-surface-variant">
-                      {b.doctorName} · {b.visitDate}
-                    </p>
-                    <div className="flex items-center justify-between gap-md">
-                      <span className="text-body-md text-on-surface">₱{b.amountDue}</span>
-                      <Link href={`/admin/bookings/${b.bookingId}`} className="text-label-md text-primary hover:underline">
-                        View Booking
-                      </Link>
-                    </div>
-                  </div>
+                  <li key={b.bookingId}>
+                    <Link href={`/admin/bookings/${b.bookingId}`} className="flex min-h-11 items-center justify-between gap-md py-sm">
+                      <span className="min-w-0">
+                        <span className="block text-body-md font-medium text-on-surface">{b.patientName}</span>
+                        <span className="block text-label-md text-on-surface-variant">{b.doctorName} · <span className="tabular-nums">{formatClinicDateShort(b.visitDate)}</span></span>
+                      </span>
+                      <span className="shrink-0 text-body-md tabular-nums text-on-surface">{formatPeso(b.amountDue)}</span>
+                    </Link>
+                  </li>
                 ))}
-              </div>
+              </ul>
               <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full text-body-md">
                   <thead>
-                    <tr className="text-left text-label-md text-on-surface-variant">
-                      <th className="py-sm">Patient</th><th className="py-sm">Doctor</th><th className="py-sm">Appointment Date</th><th className="py-sm text-right">Amount Due</th><th className="py-sm text-right">Action</th>
+                    <tr className="text-left">
+                      <th className={th}>Patient</th><th className={th}>Doctor</th><th className={th}>Visit date</th><th className={`${th} text-right`}>Amount due</th><th className={`${th} text-right`}><span className="sr-only">Open</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {unpaidCompleted.map((b) => (
-                      <tr key={b.bookingId} className="border-t border-outline-variant/40">
-                        <td className="py-sm">{b.patientName}</td>
-                        <td className="py-sm">{b.doctorName}</td>
-                        <td className="py-sm">{b.visitDate}</td>
-                        <td className="py-sm text-right">₱{b.amountDue}</td>
-                        <td className="py-sm text-right">
-                          <Link href={`/admin/bookings/${b.bookingId}`} className="text-label-md text-primary hover:underline">
-                            View Booking
+                      <tr key={b.bookingId} className="border-t border-outline-variant">
+                        <td className={`${td} font-medium text-on-surface`}>{b.patientName}</td>
+                        <td className={td}>{b.doctorName}</td>
+                        <td className={`${td} tabular-nums`}>{formatClinicDateShort(b.visitDate)}</td>
+                        <td className={`${td} text-right tabular-nums`}>{formatPeso(b.amountDue)}</td>
+                        <td className={`${td} text-right`}>
+                          <Link href={`/admin/bookings/${b.bookingId}`} className="text-label-md font-medium text-primary hover:underline">
+                            Open booking
                           </Link>
                         </td>
                       </tr>
@@ -239,65 +280,81 @@ export default function AdminReportsPage() {
         </Card>
 
         <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Pending Follow-Ups</h3>
+          <h2 className="mb-md text-headline-sm text-on-surface">Pending follow-ups</h2>
           {pendingFollowUps.length === 0 ? (
             <p className="text-body-md text-on-surface-variant">No pending follow-ups in this range.</p>
           ) : (
-            <div className="space-y-sm">
+            <ul className="divide-y divide-outline-variant">
               {pendingFollowUps.map((c) => (
-                <div key={c.id} className="flex flex-wrap items-center justify-between gap-md rounded-lg border border-outline-variant p-md text-body-md text-on-surface-variant">
-                  <span>{c.patientName} — {c.doctorName} — {c.reason} — {c.followUpDate}</span>
-                  <Button variant="secondary" disabled>
-                    Send Reminder <span className="ml-xs rounded bg-surface-container-high px-1 text-[10px]">In Progress</span>
-                  </Button>
-                </div>
+                <li key={c.id} className="flex flex-wrap items-start justify-between gap-sm py-sm">
+                  <span className="min-w-0">
+                    <span className="block text-body-md font-medium text-on-surface">{c.patientName}</span>
+                    <span className="block text-label-md text-on-surface-variant">{c.reason} · {c.doctorName}</span>
+                  </span>
+                  <span className="text-label-md tabular-nums text-on-surface">{formatClinicDateShort(c.followUpDate)}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </Card>
 
         <Card>
-          <h3 className="mb-md text-headline-sm text-on-surface">Daily Booking Summary</h3>
+          <h2 className="mb-md text-headline-sm text-on-surface">Day by day</h2>
           {dailySummary.length === 0 ? (
             <p className="text-body-md text-on-surface-variant">No bookings in this range.</p>
           ) : (
             <>
-              <div className="space-y-sm sm:hidden">
+              <ul className="divide-y divide-outline-variant sm:hidden">
                 {dailySummary.map((row) => (
-                  <div key={row.date} className="rounded-lg border border-outline-variant p-md text-body-md">
-                    <p className="mb-xs font-medium text-on-surface">{row.date}</p>
-                    <p className="text-label-sm text-on-surface-variant">
-                      Total {row.total} · Completed {row.completed} · Paid {row.paid} · Unpaid {row.unpaid} · No-shows {row.noShows}
+                  <li key={row.date} className="py-sm text-body-md">
+                    <div className="flex items-baseline justify-between gap-md">
+                      <p className="font-medium tabular-nums text-on-surface">{formatClinicDateShort(row.date)}</p>
+                      <p className="tabular-nums text-on-surface">{formatPeso(row.revenue, "₱0")}</p>
+                    </div>
+                    <p className="text-label-md tabular-nums text-on-surface-variant">
+                      {row.total} total · {row.completed} completed · {row.paid} paid · {row.unpaid} unpaid · {row.noShows} no-shows
                     </p>
-                    <p className="mt-xs text-on-surface">Revenue ₱{row.revenue}</p>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
               <div className="hidden overflow-x-auto sm:block">
-                <table className="w-full text-body-md">
+                <table className="w-full text-body-md tabular-nums">
                   <thead>
-                    <tr className="text-left text-label-md text-on-surface-variant">
-                      <th className="py-sm">Date</th><th className="py-sm text-right">Total</th><th className="py-sm text-right">Completed</th><th className="py-sm text-right">Paid</th><th className="py-sm text-right">Unpaid</th><th className="py-sm text-right">No-Shows</th><th className="py-sm text-right">Revenue</th>
+                    <tr className="text-left">
+                      <th className={th}>Date</th><th className={`${th} text-right`}>Total</th><th className={`${th} text-right`}>Completed</th><th className={`${th} text-right`}>Paid</th><th className={`${th} text-right`}>Unpaid</th><th className={`${th} text-right`}>No-shows</th><th className={`${th} text-right`}>Revenue</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dailySummary.map((row) => (
-                      <tr key={row.date} className="border-t border-outline-variant/40">
-                        <td className="py-sm">{row.date}</td>
-                        <td className="py-sm text-right">{row.total}</td>
-                        <td className="py-sm text-right">{row.completed}</td>
-                        <td className="py-sm text-right">{row.paid}</td>
-                        <td className="py-sm text-right">{row.unpaid}</td>
-                        <td className="py-sm text-right">{row.noShows}</td>
-                        <td className="py-sm text-right">₱{row.revenue}</td>
+                      <tr key={row.date} className="border-t border-outline-variant">
+                        <td className={td}>{formatClinicDateShort(row.date)}</td>
+                        <td className={`${td} text-right`}>{row.total}</td>
+                        <td className={`${td} text-right`}>{row.completed}</td>
+                        <td className={`${td} text-right`}>{row.paid}</td>
+                        <td className={`${td} text-right`}>{row.unpaid}</td>
+                        <td className={`${td} text-right`}>{row.noShows}</td>
+                        <td className={`${td} text-right`}>{formatPeso(row.revenue, "₱0")}</td>
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-outline-variant font-semibold text-on-surface">
+                      <td className={td}>Total</td>
+                      <td className={`${td} text-right`}>{totals.visits}</td>
+                      <td className={`${td} text-right`}>{totals.completed}</td>
+                      <td className={`${td} text-right`}>{dailySummary.reduce((n, r) => n + r.paid, 0)}</td>
+                      <td className={`${td} text-right`}>{dailySummary.reduce((n, r) => n + r.unpaid, 0)}</td>
+                      <td className={`${td} text-right`}>{totals.noShows}</td>
+                      <td className={`${td} text-right`}>{formatPeso(totals.revenue, "₱0")}</td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
             </>
           )}
         </Card>
+        </>
+        )}
       </div>
     </AppShell>
   );

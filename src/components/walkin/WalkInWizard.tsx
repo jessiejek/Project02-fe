@@ -8,6 +8,13 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { StepIndicator } from "@/components/ui/StepIndicator";
 import { Icon } from "@/components/ui/Icon";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { hintStyles, inputStyles, labelStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDateShort, formatPeso, orDash } from "@/lib/format";
 import { queryPatients, createPatient } from "@/lib/data/patients";
 import { clientPage } from "@/lib/data/paging";
 import { checkInWalkIn, type QueueTicket } from "@/lib/data/queue";
@@ -77,11 +84,21 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [ticket, setTicket] = useState<QueueTicket | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function load() {
       const supabase = null as never;
-      const allPatients = await queryPatients(supabase);
+      let allPatients;
+      try {
+        allPatients = await queryPatients(supabase);
+      } catch {
+        setLoadError(true);
+        setLoading(false);
+        return;
+      }
+      setLoadError(false);
       setPatients(
         allPatients.map((p) => ({
           id: p.patient_id,
@@ -97,7 +114,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
       setLoading(false);
     }
     load();
-  }, []);
+  }, [reloadKey]);
 
   const patient = patients.find((p) => p.id === patientId);
 
@@ -205,10 +222,22 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
     setPatientSearch("");
   }
 
-  if (loading) {
+  const header = (
+    <PageHeader
+      title="Walk-in check-in"
+      description="Find the patient (or register them), confirm the visit, and hand them a queue number."
+    />
+  );
+
+  if (loading || loadError) {
     return (
       <AppShell role={role}>
-        <p className="text-body-md text-on-surface-variant">Loading walk-in setup...</p>
+        <div className="space-y-lg">
+          {header}
+          {loadError
+            ? <ErrorState title="Patients unavailable" message="The patient list could not be loaded, so check-in can't start yet. Try again." onRetry={() => { setLoading(true); setReloadKey((k) => k + 1); }} />
+            : <><p className="sr-only" role="status">Loading patients…</p><SkeletonTable rows={6} columns={4} /></>}
+        </div>
       </AppShell>
     );
   }
@@ -216,15 +245,15 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
   if (step === "done" && ticket) {
     return (
       <AppShell role={role}>
-        <Card className="mx-auto max-w-[26rem] text-center">
-          <Icon name="check_circle" className="mb-md text-[48px] text-primary" />
-          <h2 className="mb-md text-headline-md text-on-surface">Checked In</h2>
-          <div className="mb-lg rounded-lg border-2 border-dashed border-outline-variant p-lg">
-            <p className="text-display-sm text-primary">{ticket.queue_number}</p>
-            <p className="text-body-md text-on-surface">{ticket.patient_name}</p>
-            <p className="text-label-md text-on-surface-variant">{ticket.patient_code}</p>
+        <Card className="animate-surface-in mx-auto max-w-auth text-center" role="status">
+          <Icon name="check_circle" className="mb-sm text-[32px] text-status-success" />
+          <h1 className="mb-md text-headline-md text-on-surface">{ticket.patient_name} is checked in</h1>
+          <div className="mb-lg rounded-lg border border-outline-variant bg-surface-container-low p-lg">
+            <p className="text-label-md text-on-surface-variant">Queue number</p>
+            <p className="text-display-sm tabular-nums text-primary">{ticket.queue_number}</p>
+            <p className="font-mono text-body-sm text-on-surface-variant">{ticket.patient_code}</p>
             <p className="mt-sm text-label-md text-on-surface-variant">
-              {ticket.visit_type === "FollowUp" ? "Follow-up" : "New"} · provisional fee ₱{ticket.provisional_fee}
+              {ticket.visit_type === "FollowUp" ? "Follow-up" : "New visit"} · provisional fee <span className="tabular-nums">{formatPeso(ticket.provisional_fee)}</span>
             </p>
           </div>
           <div className="flex gap-md">
@@ -246,14 +275,14 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 )
               }
             >
-              Print Queue Slip
+              <Icon name="print" className="text-[14px]" />Print slip
             </Button>
             <Button className="flex-1" onClick={resetForNext}>
-              New Walk-In →
+              Next walk-in<Icon name="chevron_right" className="text-[14px]" />
             </Button>
           </div>
-          <Link href={`/${role}/bookings/${ticket.booking_id}`} className="mt-md inline-block text-label-sm text-primary hover:underline">
-            View Booking Details
+          <Link href={`/${role}/bookings/${ticket.booking_id}`} className="mt-md inline-flex min-h-11 items-center text-label-md font-medium text-primary hover:underline">
+            View booking details
           </Link>
         </Card>
       </AppShell>
@@ -262,38 +291,52 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
 
   return (
     <AppShell role={role}>
-      <div className={cn("pb-28", step === 1 ? "w-full" : "mx-auto max-w-[40rem]")}>
+      <div className={cn("space-y-lg pb-28", step === 1 ? "w-full" : "mx-auto max-w-doctor-record")}>
+        {header}
         <StepIndicator steps={STEPS} currentStep={step === "done" ? STEPS.length : step} />
 
         {step === 1 && (
           <Card>
-            <h2 className="mb-md text-headline-md text-on-surface">Select Patient</h2>
-            <input
-              value={patientSearch}
-              onChange={(e) => setPatientSearch(e.target.value)}
-              placeholder="Search by name/code/phone/email"
-              className="mb-md w-full rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <div className="mb-md overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest">
+            <div className="mb-md flex flex-wrap items-end justify-between gap-md">
+              <h2 className="text-headline-md text-on-surface">Who is checking in?</h2>
+              <Button variant="secondary" onClick={() => setQuickRegisterOpen(true)}>
+                <Icon name="add_circle" className="text-[16px]" />
+                Register new patient
+              </Button>
+            </div>
+            <label className="mb-md block space-y-xs">
+              <span className="text-label-md text-on-surface-variant">Search patients</span>
+              <input
+                type="search"
+                value={patientSearch}
+                onChange={(e) => setPatientSearch(e.target.value)}
+                placeholder="Name, patient code, phone or email"
+                className={inputStyles()}
+              />
+            </label>
+            <fieldset className="mb-md min-w-0 overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest">
+              <legend className="sr-only">Select a patient</legend>
               {filteredPatients.length === 0 ? (
-                <p className="px-md py-lg text-center text-label-md text-on-surface-variant">No matching patients.</p>
+                <div className="space-y-sm px-md py-lg text-center">
+                  <p className="text-body-md text-on-surface-variant">{patientSearch.trim() ? `No patients match “${patientSearch.trim()}”.` : "No patients registered yet."}</p>
+                  <Button variant="ghost" onClick={() => setQuickRegisterOpen(true)}>Register them as a new patient</Button>
+                </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[42rem] border-collapse text-label-sm">
+                  <table className="w-full min-w-[42rem] border-collapse text-body-md">
                     <thead>
                       <tr className="border-b border-outline-variant bg-surface-container-low">
-                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Patient</th>
-                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Contact</th>
+                        <th className="whitespace-nowrap px-md py-sm text-left text-label-md font-medium text-on-surface-variant">Patient</th>
+                        <th className="whitespace-nowrap px-md py-sm text-left text-label-md font-medium text-on-surface-variant">Contact</th>
                         {/* Staff.md ask: name alone doesn't identify a patient — two
-                            "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do
-                            (the MF-code did too, but staff don't work off it). */}
-                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Sex</th>
-                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Age</th>
-                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Date of Birth</th>
-                        <th className="whitespace-nowrap px-md py-xs text-left font-medium text-on-surface-variant">Account</th>
+                            "Juan Dela Cruz" walk in on the same day. Sex/age/DOB do. */}
+                        <th className="whitespace-nowrap px-md py-sm text-left text-label-md font-medium text-on-surface-variant">Sex</th>
+                        <th className="whitespace-nowrap px-md py-sm text-right text-label-md font-medium text-on-surface-variant">Age</th>
+                        <th className="whitespace-nowrap px-md py-sm text-left text-label-md font-medium text-on-surface-variant">Date of birth</th>
+                        <th className="whitespace-nowrap px-md py-sm text-left text-label-md font-medium text-on-surface-variant">Account</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-outline-variant/30">
+                    <tbody className="divide-y divide-outline-variant">
                       {pagedPatients.items.map((p) => (
                         <tr
                           key={p.id}
@@ -303,55 +346,40 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                             patientId === p.id ? "bg-primary/10" : "hover:bg-surface-container-low",
                           )}
                         >
-                          <td className="whitespace-nowrap px-md py-xs text-on-surface">{p.fullName}</td>
-                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{p.contactNumber}</td>
-                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{p.sex}</td>
-                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{computeAge(p.dateOfBirth)}</td>
-                          <td className="whitespace-nowrap px-md py-xs text-on-surface-variant">{p.dateOfBirth}</td>
-                          <td
-                            className={cn(
-                              "whitespace-nowrap px-md py-xs font-medium",
-                              p.accountStatus === "LinkedAccount" && "text-green-700",
-                              p.accountStatus === "NoAccount" && "text-on-surface-variant",
-                              p.accountStatus === "AccountUnknown" && "text-amber-700",
-                            )}
-                          >
-                            {p.accountStatus === "LinkedAccount"
-                              ? "Linked account"
-                              : p.accountStatus === "NoAccount"
-                                ? "No account"
-                                : "Account unknown"}
+                          <td className="px-md py-sm">
+                            <label className="flex min-h-11 cursor-pointer items-center gap-sm">
+                              <input type="radio" name="walkin-patient" checked={patientId === p.id} onChange={() => setPatientId(p.id)} className="h-4 w-4 shrink-0 accent-primary" />
+                              <span>
+                                <span className="block font-medium text-on-surface">{p.fullName}</span>
+                                <span className="block font-mono text-body-sm text-on-surface-variant">{p.patientCode}</span>
+                              </span>
+                            </label>
                           </td>
+                          <td className="whitespace-nowrap px-md py-sm tabular-nums text-on-surface-variant">{orDash(p.contactNumber)}</td>
+                          <td className="whitespace-nowrap px-md py-sm text-on-surface-variant">{p.sex}</td>
+                          <td className="whitespace-nowrap px-md py-sm text-right tabular-nums text-on-surface">{computeAge(p.dateOfBirth)}</td>
+                          <td className="whitespace-nowrap px-md py-sm tabular-nums text-on-surface-variant">{formatClinicDateShort(p.dateOfBirth)}</td>
+                          <td className="whitespace-nowrap px-md py-sm"><StatusPill status={p.accountStatus} /></td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-            </div>
+            </fieldset>
             {filteredPatients.length > 0 && (
-              <div className="mb-lg flex items-center justify-between text-label-md text-on-surface-variant">
-                <span>
+              <div className="flex flex-wrap items-center justify-between gap-md text-label-md text-on-surface-variant">
+                <span className="tabular-nums">
                   {(patientPage - 1) * PATIENTS_PAGE_SIZE + 1}–
                   {Math.min(patientPage * PATIENTS_PAGE_SIZE, filteredPatients.length)} of {filteredPatients.length}
                 </span>
                 <div className="flex items-center gap-sm">
-                  <Button
-                    variant="secondary"
-                    className="!px-sm !py-xs text-label-sm"
-                    disabled={patientPage <= 1}
-                    onClick={() => setPatientPage((p) => p - 1)}
-                  >
-                    Previous
+                  <Button variant="secondary" className="px-md" disabled={patientPage <= 1} onClick={() => setPatientPage((p) => p - 1)}>
+                    <Icon name="chevron_left" className="text-[14px]" />Previous
                   </Button>
-                  <span>{patientPage} / {patientPageCount}</span>
-                  <Button
-                    variant="secondary"
-                    className="!px-sm !py-xs text-label-sm"
-                    disabled={patientPage >= patientPageCount}
-                    onClick={() => setPatientPage((p) => p + 1)}
-                  >
-                    Next
+                  <span className="tabular-nums">{patientPage} of {patientPageCount}</span>
+                  <Button variant="secondary" className="px-md" disabled={patientPage >= patientPageCount} onClick={() => setPatientPage((p) => p + 1)}>
+                    Next<Icon name="chevron_right" className="text-[14px]" />
                   </Button>
                 </div>
               </div>
@@ -360,166 +388,141 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
         )}
 
         {/* Sticky, not buried below a potentially-long patient list — Continue
-            stays reachable at any scroll position instead of requiring a
-            scroll past the whole list + pagination to find it. */}
+            stays reachable at any scroll position. Names the selection so the
+            receptionist can confirm who they picked without scrolling back. */}
         {step === 1 && (
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-outline-variant bg-surface-container-lowest p-md md:left-sidebar">
-            <div className="w-full">
-              <Button disabled={!patientId} onClick={() => setStep(2)} className="w-full">
-                Continue
+            <div className="flex flex-wrap items-center justify-between gap-md">
+              <p className="min-w-0 text-body-md text-on-surface-variant" aria-live="polite">
+                {patient ? <>Selected: <span className="font-medium text-on-surface">{patient.fullName}</span></> : "Select a patient to continue."}
+              </p>
+              <Button disabled={!patientId} onClick={() => setStep(2)} className="w-full sm:w-auto sm:min-w-48">
+                Continue<Icon name="chevron_right" className="text-[14px]" />
               </Button>
             </div>
           </div>
         )}
 
-        {/* Floating above the sticky Continue bar — opens the registration
-            form in its own modal instead of pushing content around inline. */}
-        {step === 1 && (
-          <Button
-            onClick={() => setQuickRegisterOpen(true)}
-            className="fixed bottom-[88px] right-lg z-40 shadow-lg"
-          >
-            <Icon name="add_circle" className="text-[18px]" />
-            Add New Patient
-          </Button>
-        )}
-
         <Modal
           isOpen={quickRegisterOpen}
-          onClose={() => setQuickRegisterOpen(false)}
-          title="Register New Patient"
+          onClose={() => { if (!registering) setQuickRegisterOpen(false); }}
+          title="Register a new patient"
           footer={
             <>
               <Button variant="secondary" onClick={() => setQuickRegisterOpen(false)} disabled={registering}>
                 Cancel
               </Button>
-              <Button onClick={handleQuickRegister} disabled={!canQuickRegister || registering}>
-                {registering ? "Registering…" : "Register Patient"}
+              <Button onClick={handleQuickRegister} disabled={!canQuickRegister} loading={registering}>
+                {registering ? "Registering…" : "Register and select"}
               </Button>
             </>
           }
         >
           <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-            {registerError && (
-              <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container sm:col-span-2">{registerError}</p>
-            )}
-            <input
-              value={quickRegister.firstName}
-              onChange={(e) => setQuickRegister((prev) => ({ ...prev, firstName: e.target.value }))}
-              placeholder="First Name*"
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <input
-              value={quickRegister.middleName}
-              onChange={(e) => setQuickRegister((prev) => ({ ...prev, middleName: e.target.value }))}
-              placeholder="Middle Name"
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <input
-              value={quickRegister.lastName}
-              onChange={(e) => setQuickRegister((prev) => ({ ...prev, lastName: e.target.value }))}
-              placeholder="Last Name*"
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <input
-              value={quickRegister.dateOfBirth}
-              onChange={(e) => setQuickRegister((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
-              type="date"
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <select
-              value={quickRegister.sex}
-              onChange={(e) => setQuickRegister((prev) => ({ ...prev, sex: e.target.value as "" | "Male" | "Female" }))}
-              className="rounded-lg border border-outline-variant px-md py-sm text-on-surface-variant"
-            >
-              <option value="">Sex*</option>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-            <input
-              value={quickRegister.contactNumber}
-              onChange={(e) => setQuickRegister((prev) => ({ ...prev, contactNumber: e.target.value }))}
-              placeholder="Contact Number"
-              className="rounded-lg border border-outline-variant px-md py-sm"
-            />
-            <input
-              value={quickRegister.address}
-              onChange={(e) => setQuickRegister((prev) => ({ ...prev, address: e.target.value }))}
-              placeholder="Address"
-              className="rounded-lg border border-outline-variant px-md py-sm sm:col-span-2"
-            />
-            <label className="flex items-center gap-sm text-label-md text-on-surface-variant sm:col-span-2">
-              <input type="checkbox" checked={preparePortal} onChange={(e) => setPreparePortal(e.target.checked)} className="h-5 w-5" />
-              Prepare Portal Account — creates login access, patient sets password on first login.
+            {registerError && <FormAlert className="sm:col-span-2">{registerError}</FormAlert>}
+            {([
+              ["firstName", "First name", true],
+              ["middleName", "Middle name", false],
+              ["lastName", "Last name", true],
+            ] as const).map(([key, label, required]) => (
+              <div key={key} className="space-y-xs">
+                <label htmlFor={`qr-${key}`} className={labelStyles}>{label}{!required && <span className="font-normal text-on-surface-variant"> (optional)</span>}</label>
+                <input id={`qr-${key}`} required={required} value={quickRegister[key]}
+                  onChange={(e) => setQuickRegister((prev) => ({ ...prev, [key]: e.target.value }))} className={inputStyles()} />
+              </div>
+            ))}
+            <div className="space-y-xs">
+              <label htmlFor="qr-dob" className={labelStyles}>Date of birth</label>
+              <input id="qr-dob" type="date" required max={todayManila()} value={quickRegister.dateOfBirth}
+                onChange={(e) => setQuickRegister((prev) => ({ ...prev, dateOfBirth: e.target.value }))} className={inputStyles()} />
+            </div>
+            <div className="space-y-xs">
+              <label htmlFor="qr-sex" className={labelStyles}>Sex</label>
+              <select id="qr-sex" required value={quickRegister.sex}
+                onChange={(e) => setQuickRegister((prev) => ({ ...prev, sex: e.target.value as "" | "Male" | "Female" }))} className={inputStyles()}>
+                <option value="" disabled>Select…</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+            </div>
+            <div className="space-y-xs">
+              <label htmlFor="qr-contact" className={labelStyles}>Contact number <span className="font-normal text-on-surface-variant">(optional)</span></label>
+              <input id="qr-contact" type="tel" value={quickRegister.contactNumber}
+                onChange={(e) => setQuickRegister((prev) => ({ ...prev, contactNumber: e.target.value }))} className={inputStyles()} />
+            </div>
+            <div className="space-y-xs sm:col-span-2">
+              <label htmlFor="qr-address" className={labelStyles}>Address <span className="font-normal text-on-surface-variant">(optional)</span></label>
+              <input id="qr-address" value={quickRegister.address}
+                onChange={(e) => setQuickRegister((prev) => ({ ...prev, address: e.target.value }))} className={inputStyles()} />
+            </div>
+            <label className="flex min-h-11 items-start gap-sm text-body-md text-on-surface sm:col-span-2">
+              <input type="checkbox" checked={preparePortal} onChange={(e) => setPreparePortal(e.target.checked)} className="mt-0.5 h-5 w-5 accent-primary" />
+              <span>Prepare portal account <span className={`block ${hintStyles}`}>Creates login access; the patient sets a password on first login.</span></span>
             </label>
             {preparePortal && (
-              <p className="text-label-sm text-on-surface-variant sm:col-span-2">
+              <FormAlert tone="info" className="sm:col-span-2">
                 Not wired yet — this registers as a guest record for now; portal invites need an email field this form doesn&apos;t collect.
-              </p>
+              </FormAlert>
             )}
           </div>
         </Modal>
 
         {step === 2 && patient && (
           <Card>
-            <h2 className="mb-lg text-headline-md text-on-surface">Confirm &amp; Check In</h2>
+            <h2 className="mb-md text-headline-md text-on-surface">Confirm the visit</h2>
 
-            {/* Patient identity — avatar + name up front, the way a receipt or
-                ticket leads with who it's for. */}
-            <div className="mb-lg flex items-center gap-md rounded-xl bg-surface-container-low p-md">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Icon name="person" className="text-[20px]" />
-              </div>
-              <div>
-                <p className="text-body-lg font-medium text-on-surface">{patient.fullName}</p>
-                <p className="text-label-sm text-on-surface-variant">{patient.patientCode}</p>
-              </div>
+            {/* Patient identity up front, the way a ticket leads with who it's for. */}
+            <div className="mb-lg rounded-lg border border-outline-variant bg-surface-container-low p-md">
+              <p className="break-words text-headline-sm text-on-surface">{patient.fullName}</p>
+              <p className="text-label-md text-on-surface-variant">
+                <span className="font-mono">{patient.patientCode}</span> · {patient.sex} · <span className="tabular-nums">{computeAge(patient.dateOfBirth)} yrs</span>
+              </p>
             </div>
 
             <div className="mb-lg space-y-lg">
               <div>
-                <p className="mb-sm text-label-md font-medium text-on-surface-variant">Appointment type</p>
-                <div className="inline-flex rounded-full border border-outline-variant bg-surface-container-lowest p-[3px]">
+                <p id="walkin-visit-type" className={`mb-sm ${labelStyles}`}>Visit type</p>
+                <div role="radiogroup" aria-labelledby="walkin-visit-type" className="inline-flex rounded-lg border border-outline-variant bg-surface-container-lowest p-xs">
                   {(["New", "FollowUp"] as const).map((vt) => (
                     <button
                       key={vt}
                       type="button"
+                      role="radio"
+                      aria-checked={visitType === vt}
                       onClick={() => setVisitType(vt)}
                       className={cn(
-                        "rounded-full px-lg py-sm text-label-md transition-colors",
+                        "min-h-10 rounded-[calc(var(--radius)-var(--spacing-xs))] px-lg text-label-md transition-colors",
                         visitType === vt
                           ? "bg-primary text-on-primary shadow-sm"
                           : "text-on-surface-variant hover:text-on-surface",
                       )}
                     >
-                      {vt === "New" ? "New" : "Follow-up"}
+                      {vt === "New" ? "New visit" : "Follow-up"}
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <p className="mb-sm text-label-md font-medium text-on-surface-variant">Discount</p>
+                <label htmlFor="walkin-discount" className={`mb-sm ${labelStyles}`}>Discount</label>
                 <div className="flex flex-wrap items-center gap-sm">
                   <select
+                    id="walkin-discount"
                     value={discountCategory}
                     onChange={(e) => setDiscountCategory(e.target.value as "Senior" | "PWD" | "")}
-                    className="rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-sm text-body-md text-on-surface"
+                    className={inputStyles("w-auto min-w-48")}
                   >
                     <option value="">None</option>
                     <option value="Senior">Senior citizen</option>
                     <option value="PWD">PWD</option>
                   </select>
                   {discountCategory === "Senior" && patient?.dateOfBirth && isSeniorCitizen(patient.dateOfBirth) && (
-                    <span className="inline-flex items-center gap-xs rounded-full bg-primary/10 px-sm py-xs text-label-sm text-primary">
-                      <Icon name="star" className="text-[12px]" />
-                      Auto-detected from date of birth
-                    </span>
+                    <span className={hintStyles}>Set automatically: patient is 60 or older.</span>
                   )}
                 </div>
               </div>
 
-              <label className="flex cursor-pointer items-center justify-between gap-md rounded-xl border border-outline-variant p-md">
+              <label className="flex min-h-11 cursor-pointer items-center justify-between gap-md rounded-lg border border-outline-variant p-md">
                 <span className="flex items-center gap-sm text-body-md text-on-surface">
                   <Icon name="description" className="text-[18px] text-on-surface-variant" />
                   Medical certificate requested
@@ -532,24 +535,24 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 />
               </label>
 
-              <div className="flex items-start gap-sm rounded-xl bg-primary/5 p-md">
-                <Icon name="payments" className="mt-[2px] text-[18px] text-primary" />
+              <div className="flex items-start gap-sm rounded-lg bg-surface-container-low p-md">
+                <Icon name="payments" className="mt-[2px] text-[16px] text-on-surface-variant" />
                 <div>
-                  <p className="text-label-md font-medium text-on-surface">Pay at Clinic</p>
-                  <p className="text-label-sm text-on-surface-variant">
+                  <p className="text-label-md font-medium text-on-surface">Pay at clinic</p>
+                  <p className="text-label-md text-on-surface-variant">
                     Provisional fee computed at check-in, finalised at consultation.
                   </p>
                 </div>
               </div>
             </div>
 
-            {createError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{createError}</p>}
+            {createError && <FormAlert className="mb-md">{createError}</FormAlert>}
             <div className="flex gap-md">
-              <Button variant="secondary" onClick={() => setStep(1)} className="flex-1">
-                Back
+              <Button variant="secondary" onClick={() => setStep(1)} disabled={creating} className="flex-1">
+                <Icon name="chevron_left" className="text-[14px]" />Back
               </Button>
-              <Button onClick={handleCheckIn} disabled={creating} className="flex-1">
-                {creating ? "Checking in…" : "Check In"}
+              <Button onClick={handleCheckIn} loading={creating} className="flex-[2]">
+                {creating ? "Checking in…" : "Check in and get queue number"}
               </Button>
             </div>
           </Card>

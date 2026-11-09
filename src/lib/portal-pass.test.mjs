@@ -30,3 +30,43 @@ test('public home highlights today from the clinic timezone, not the viewer', ()
   assert.match(src, /getUTCDay/);
   assert.match(src, /aria-current={isToday \? "date"/);
 });
+
+const ADMIN_PAGES = ['dashboard', 'bookings', 'bookings/[id]', 'patients', 'patients/[id]', 'doctors', 'staff', 'announcements', 'audit-logs', 'reports', 'settings']
+  .map(p => `app/admin/${p}/page.tsx`);
+
+test('admin pages use the shared header and never nest a button inside a link', () => {
+  for (const p of ADMIN_PAGES) {
+    const src = read(p);
+    assert.doesNotMatch(src, /<Link[^>]*>\s*<Button/, p);
+    assert.doesNotMatch(src, /<h2 className="text-headline-lg/, p);
+  }
+  for (const p of ADMIN_PAGES.filter(p => !p.includes('[id]'))) assert.match(read(p), /<PageHeader/, p);
+  assert.match(read('components/admin/DoctorForm.tsx'), /<PageHeader/);
+  assert.match(read('components/walkin/WalkInWizard.tsx'), /<PageHeader/);
+});
+
+test('admin data screens show a recoverable error instead of an endless spinner or fake zeros', () => {
+  for (const p of ADMIN_PAGES) assert.match(read(p), /<ErrorState/, p);
+  assert.match(read('components/walkin/WalkInWizard.tsx'), /<ErrorState/);
+});
+
+test('admin writes show pending state and keep input on failure', () => {
+  assert.match(read('app/admin/bookings/[id]/page.tsx'), /async function submitModal/);
+  assert.match(read('app/admin/patients/page.tsx'), /Keep the modal and the typed details open on failure/);
+  assert.match(read('app/admin/settings/page.tsx'), /async function run\(/);
+  assert.match(read('app/admin/announcements/page.tsx'), /role="switch"/);
+});
+
+test('admin keeps the consent re-trigger warning and branding preview caveat', () => {
+  const src = read('app/admin/settings/page.tsx');
+  assert.match(src, /This will re-trigger the consent banner for every patient\./);
+  assert.match(src, /preview-only for now/);
+});
+
+test('display tokens and helpers back the shared UI', () => {
+  assert.match(read('app/globals.css'), /--text-display-sm: 48px;/);
+  const fmt = read('lib/format.ts');
+  assert.match(fmt, /timeZone: "UTC"/);
+  assert.doesNotMatch(fmt, /toISOString/);
+  assert.match(read('components/ui/BookingTimeline.tsx'), /statusLabel\(step\)/);
+});

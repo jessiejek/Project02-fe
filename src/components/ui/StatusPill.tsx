@@ -84,6 +84,11 @@ const STATUS_LABEL: Partial<Record<string, string>> = {
   Invited: "Invited",
 };
 
+/** Human label for a status enum value ("ProofSubmitted" -> "Proof submitted"), e.g. for filter options. */
+export function statusLabel(status: string): string {
+  return STATUS_LABEL[status] ?? status.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
 export interface StatusPillProps {
   /** A known status string (see STATUS_TONE above) — tone/icon resolve automatically. */
   status?: keyof typeof STATUS_TONE | (string & {});

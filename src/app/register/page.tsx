@@ -85,7 +85,7 @@ function RegisterPageForm() {
       <form className="space-y-xl" onSubmit={handleSubmit}>
         {error && <FormAlert>{error}</FormAlert>}
 
-        <fieldset className="space-y-md">
+        <fieldset className="min-w-0 space-y-md">
           <legend className={legendStyles}>About you</legend>
           <div className="grid gap-md sm:grid-cols-2">
             <div className="space-y-xs">
@@ -131,7 +131,7 @@ function RegisterPageForm() {
           </div>
         </fieldset>
 
-        <fieldset className="space-y-md">
+        <fieldset className="min-w-0 space-y-md">
           <legend className={legendStyles}>Sign-in details</legend>
           <div className="space-y-xs">
             <label htmlFor="email" className={labelStyles}>Email</label>

@@ -2,7 +2,7 @@
 
 All application page routes, grouped by portal. API handlers and framework-generated error routes are not page routes.
 
-Status: doctor portal complete. Public and auth pass complete (shared `AuthShell`, `FormAlert`, `fieldStyles`, `PageHeader`; `--text-body-sm` token). Remaining portals are in progress in order: admin, staff, patient.
+Status: doctor portal complete. Public and auth pass complete (shared `AuthShell`, `FormAlert`, `fieldStyles`, `PageHeader`; `--text-body-sm` token). Admin pass complete (`InfoField`, `lib/format.ts`, shared `WalkInWizard` and `DoctorForm`; `--text-display-sm` token). Remaining portals in order: staff, patient.
 
 ## Doctor (14)
 
@@ -33,21 +33,21 @@ Status: doctor portal complete. Public and auth pass complete (shared `AuthShell
 
 ## Admin (15)
 
-- [ ] `/admin/announcements` — `src/app/admin/announcements/page.tsx`
-- [ ] `/admin/audit-logs` — `src/app/admin/audit-logs/page.tsx`
-- [ ] `/admin/bookings` — `src/app/admin/bookings/page.tsx`
-- [ ] `/admin/bookings/[id]` — `src/app/admin/bookings/[id]/page.tsx`
-- [ ] `/admin/calendar` — `src/app/admin/calendar/page.tsx`
-- [ ] `/admin/dashboard` — `src/app/admin/dashboard/page.tsx`
-- [ ] `/admin/doctors` — `src/app/admin/doctors/page.tsx`
-- [ ] `/admin/doctors/[id]/edit` — `src/app/admin/doctors/[id]/edit/page.tsx`
-- [ ] `/admin/doctors/new` — `src/app/admin/doctors/new/page.tsx`
-- [ ] `/admin/patients` — `src/app/admin/patients/page.tsx`
-- [ ] `/admin/patients/[id]` — `src/app/admin/patients/[id]/page.tsx`
-- [ ] `/admin/reports` — `src/app/admin/reports/page.tsx`
-- [ ] `/admin/settings` — `src/app/admin/settings/page.tsx`
-- [ ] `/admin/staff` — `src/app/admin/staff/page.tsx`
-- [ ] `/admin/walk-in` — `src/app/admin/walk-in/page.tsx`
+- [x] `/admin/announcements` — `src/app/admin/announcements/page.tsx`
+- [x] `/admin/audit-logs` — `src/app/admin/audit-logs/page.tsx`
+- [x] `/admin/bookings` — `src/app/admin/bookings/page.tsx`
+- [x] `/admin/bookings/[id]` — `src/app/admin/bookings/[id]/page.tsx`
+- [x] `/admin/calendar` — `src/app/admin/calendar/page.tsx`
+- [x] `/admin/dashboard` — `src/app/admin/dashboard/page.tsx`
+- [x] `/admin/doctors` — `src/app/admin/doctors/page.tsx`
+- [x] `/admin/doctors/[id]/edit` — `src/app/admin/doctors/[id]/edit/page.tsx`
+- [x] `/admin/doctors/new` — `src/app/admin/doctors/new/page.tsx`
+- [x] `/admin/patients` — `src/app/admin/patients/page.tsx`
+- [x] `/admin/patients/[id]` — `src/app/admin/patients/[id]/page.tsx`
+- [x] `/admin/reports` — `src/app/admin/reports/page.tsx`
+- [x] `/admin/settings` — `src/app/admin/settings/page.tsx`
+- [x] `/admin/staff` — `src/app/admin/staff/page.tsx`
+- [x] `/admin/walk-in` — `src/app/admin/walk-in/page.tsx`
 
 ## Staff (11)
 

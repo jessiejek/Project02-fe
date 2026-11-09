@@ -7,7 +7,16 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
+import Link from "next/link";
 import { Modal } from "@/components/ui/Modal";
+import { Icon } from "@/components/ui/Icon";
+import { InfoField } from "@/components/ui/InfoField";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate, formatPeso } from "@/lib/format";
+import { showPaymentStatus } from "@/lib/paymentDisplay";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { queryBookingById, updateBookingStatus, rescheduleBooking } from "@/lib/data/bookings";
 import { waivePayment, refundPayment } from "@/lib/data/payments";
@@ -57,11 +66,22 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [actionSubmitting, setActionSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [pageError, setPageError] = useState("");
 
   useEffect(() => {
     async function load() {
       const supabase = null as never;
-      const b = await queryBookingById(supabase, id);
+      let b;
+      try {
+        b = await queryBookingById(supabase, id);
+      } catch {
+        setLoadError(true);
+        return;
+      }
+      setLoadError(false);
       if (!b) {
         setBooking(null);
         return;
@@ -85,15 +105,48 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
       });
     }
     load();
-  }, [id]);
+  }, [id, reloadKey]);
 
   if (booking === null) notFound();
   if (booking === undefined) {
     return (
       <AppShell role="admin">
-        <p className="text-body-md text-on-surface-variant">Loading booking…</p>
+        <div className="mx-auto max-w-doctor-record">
+          {loadError
+            ? <ErrorState title="Booking unavailable" message="This booking could not be loaded. Nothing has changed; try again." onRetry={() => { setLoadError(false); setReloadKey((k) => k + 1); }} />
+            : <><p className="sr-only" role="status">Loading booking…</p><SkeletonCard lines={5} /></>}
+        </div>
       </AppShell>
     );
+  }
+
+  /** Pending + error feedback for the one-click status actions (Confirm, Complete). */
+  async function act(key: string, fn: () => Promise<void>) {
+    setBusy(key);
+    setPageError("");
+    try {
+      await fn();
+    } catch (e) {
+      setPageError(e instanceof Error && e.message ? e.message : "The booking could not be updated. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Same feedback for reason modals: closes only after the write succeeds. */
+  async function submitModal(fn: () => Promise<void>, close: () => void) {
+    setActionSubmitting(true);
+    setActionError("");
+    try {
+      await fn();
+      close();
+      setReasonText("");
+      setRefundAmount("");
+    } catch (e) {
+      setActionError(e instanceof Error && e.message ? e.message : "The change could not be saved. Try again.");
+    } finally {
+      setActionSubmitting(false);
+    }
   }
 
   async function updateBooking(patch: { status?: string; cancellationReason?: string }) {
@@ -123,83 +176,96 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
   }
 
   const timelineIndex = TIMELINE.indexOf(booking.status);
+  const showPayment = showPaymentStatus(booking.status, booking.paymentStatus);
+  const anyBusy = busy !== null;
 
   return (
     <AppShell role="admin">
-      <div className="mx-auto max-w-[40rem] space-y-lg">
-        {/* Patient/Doctor/Appointment/Payment info cards — admin.md §3 */}
-        <Card>
-          <h2 className="mb-md text-headline-sm text-on-surface">Patient</h2>
-          <div className="grid grid-cols-2 gap-md text-body-md sm:grid-cols-3">
-            <InfoField label="Name" value={booking.patientName} />
-            <InfoField label="Code" value={booking.patientCode} />
-            <InfoField label="Contact" value={booking.patientContact} />
-            <InfoField label="Email" value={booking.patientEmail} />
+      <div className="mx-auto max-w-doctor-record space-y-lg">
+        <Link href="/admin/bookings" className="inline-flex min-h-11 items-center gap-xs text-label-md font-medium text-primary hover:underline">
+          <Icon name="chevron_left" className="text-[14px]" />All bookings
+        </Link>
+        <header className="flex flex-wrap items-start justify-between gap-md">
+          <div className="min-w-0 space-y-xs">
+            <p className="text-label-md text-on-surface-variant">Booking for</p>
+            <h1 className="break-words text-headline-lg-mobile text-on-surface sm:text-headline-lg">{booking.patientName || "Unknown patient"}</h1>
+            <p className="text-body-md text-on-surface-variant">
+              <span className="tabular-nums">{formatClinicDate(booking.appointmentDate)}</span> · {booking.doctorName || "Doctor not recorded"}
+            </p>
           </div>
-        </Card>
-
-        <Card>
-          <h2 className="mb-md text-headline-sm text-on-surface">Doctor</h2>
-          <div className="grid grid-cols-2 gap-md text-body-md">
-            <InfoField label="Name" value={booking.doctorName} />
-            <InfoField label="Specialization" value={booking.doctorSpecialization} />
-          </div>
-        </Card>
-
-        <Card>
-          <div className="mb-md flex items-start justify-between">
-            <div>
-              <h2 className="text-headline-sm text-on-surface">Appointment</h2>
-            </div>
+          <div className="flex flex-wrap gap-sm">
             <StatusPill status={booking.status} />
+            {showPayment && <StatusPill status={booking.paymentStatus} />}
           </div>
-          <div className="mb-md">
+        </header>
+
+        {pageError && <FormAlert>{pageError}</FormAlert>}
+
+        {timelineIndex >= 0 && (
+          <Card>
+            <h2 className="sr-only">Progress</h2>
             <BookingTimeline steps={TIMELINE} currentIndex={timelineIndex} />
-          </div>
-          <div className="flex flex-wrap gap-md text-label-md text-on-surface-variant">
-            <span>{booking.appointmentDate}</span>
-            <StatusPill status={booking.paymentStatus} />
-          </div>
-        </Card>
+          </Card>
+        )}
 
-        <Card>
-          <h2 className="mb-md text-headline-sm text-on-surface">Payment</h2>
-          <div className="grid grid-cols-2 gap-md text-body-md sm:grid-cols-3">
-            <InfoField label="Mode" value={booking.paymentMode === "PayAtClinic" ? "Pay at Clinic" : "Online"} />
-            <InfoField label="Amount Due" value={`₱${booking.amountDue}`} />
-            {(booking.paymentStatus === "Paid" || booking.paymentStatus === "Waived") && booking.orNumber && (
-              <InfoField label="OR Number" value={booking.orNumber} />
-            )}
-          </div>
-        </Card>
+        <div className="grid grid-cols-1 gap-lg md:grid-cols-2">
+          <Card>
+            <h2 className="mb-md text-headline-sm text-on-surface">Patient</h2>
+            <dl className="grid grid-cols-1 gap-md sm:grid-cols-2">
+              <InfoField label="Patient code" value={booking.patientCode} mono />
+              <InfoField label="Contact" value={booking.patientContact} />
+              <InfoField label="Email" value={booking.patientEmail} className="break-all sm:col-span-2" />
+            </dl>
+            <Link href={`/admin/patients/${booking.patientId}`} className="mt-md inline-flex min-h-11 items-center text-label-md font-medium text-primary hover:underline">
+              Open patient record
+            </Link>
+          </Card>
 
-        <Card className="flex flex-wrap gap-md">
+          <Card>
+            <h2 className="mb-md text-headline-sm text-on-surface">Visit and payment</h2>
+            <dl className="grid grid-cols-1 gap-md sm:grid-cols-2">
+              <InfoField label="Doctor" value={booking.doctorName} />
+              <InfoField label="Specialty" value={booking.doctorSpecialization} />
+              <InfoField label="Payment mode" value={booking.paymentMode === "PayAtClinic" ? "Pay at clinic" : "Online"} />
+              <InfoField label="Amount due" value={<span className="tabular-nums">{formatPeso(booking.amountDue)}</span>} />
+              {(booking.paymentStatus === "Paid" || booking.paymentStatus === "Waived") && booking.orNumber && (
+                <InfoField label="OR number" value={booking.orNumber} mono />
+              )}
+            </dl>
+          </Card>
+        </div>
+
+        <Card className="space-y-md">
+          <h2 className="text-headline-sm text-on-surface">Actions</h2>
+          <div className="flex flex-wrap gap-sm">
           {booking.status === "Pending" && (
             <>
-              <Button onClick={() => updateBooking({ status: "Confirmed" })}>Confirm Booking</Button>
-              <Button variant="danger" onClick={() => setReasonModal("reject")}>Reject Booking</Button>
-              <Button variant="danger" onClick={() => setReasonModal("cancel")}>Cancel Booking</Button>
+              <Button loading={busy === "confirm"} disabled={anyBusy} onClick={() => act("confirm", () => updateBooking({ status: "Confirmed" }))}>Confirm booking</Button>
+              <Button variant="secondary" disabled={anyBusy} onClick={() => setReasonModal("reject")}>Reject booking</Button>
+              <Button variant="ghost" className="text-status-danger hover:bg-status-danger-surface" disabled={anyBusy} onClick={() => setReasonModal("cancel")}>Cancel booking</Button>
             </>
           )}
           {booking.status === "ProofSubmitted" && (
             <>
               <Button
-                onClick={async () => {
+                loading={busy === "pay"}
+                disabled={anyBusy}
+                onClick={() => act("pay", async () => {
                   await updateBooking({ status: "Confirmed" });
                   await updatePayment({ status: "Paid", withOrNumber: true });
-                }}
+                })}
               >
-                Confirm Payment
+                Confirm payment
               </Button>
-              <Button variant="danger" onClick={() => setReasonModal("reject")}>Reject Proof</Button>
+              <Button variant="secondary" disabled={anyBusy} onClick={() => setReasonModal("reject")}>Reject proof</Button>
             </>
           )}
           {booking.status === "Confirmed" && (
             <>
-              <Button onClick={() => updateBooking({ status: "Completed" })}>Mark Complete</Button>
-              <Button variant="secondary" onClick={() => setNoShowOpen(true)}>Mark No Show</Button>
-              <Button variant="secondary" onClick={() => setRescheduleOpen(true)}>Reschedule</Button>
-              <Button variant="danger" onClick={() => setReasonModal("cancel")}>Cancel Booking</Button>
+              <Button loading={busy === "complete"} disabled={anyBusy} onClick={() => act("complete", () => updateBooking({ status: "Completed" }))}>Mark complete</Button>
+              <Button variant="secondary" disabled={anyBusy} onClick={() => setNoShowOpen(true)}>Mark no-show</Button>
+              <Button variant="secondary" disabled={anyBusy} onClick={() => setRescheduleOpen(true)}>Reschedule</Button>
+              <Button variant="ghost" className="text-status-danger hover:bg-status-danger-surface" disabled={anyBusy} onClick={() => setReasonModal("cancel")}>Cancel booking</Button>
             </>
           )}
           {booking.status === "Completed" && (
@@ -221,7 +287,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                   );
                 }}
               >
-                Print Receipt
+                <Icon name="print" className="text-[14px]" />Print receipt
               </Button>
               <Button
                 variant="secondary"
@@ -239,26 +305,28 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                   );
                 }}
               >
-                Print Appointment Summary
+                <Icon name="print" className="text-[14px]" />Print summary
               </Button>
             </>
           )}
-          {booking.paymentStatus === "Unpaid" && <Button variant="secondary" onClick={() => setWaiveOpen(true)}>Waive Payment</Button>}
-          {booking.paymentStatus === "Paid" && <Button variant="secondary" onClick={() => setRefundOpen(true)}>Refund Payment</Button>}
+          {booking.paymentStatus === "Unpaid" && <Button variant="secondary" disabled={anyBusy} onClick={() => setWaiveOpen(true)}>Waive payment</Button>}
+          {booking.paymentStatus === "Paid" && <Button variant="secondary" disabled={anyBusy} onClick={() => setRefundOpen(true)}>Refund payment</Button>}
+          </div>
         </Card>
       </div>
 
       <Modal
         isOpen={reasonModal !== null}
-        onClose={() => { setReasonModal(null); setReasonText(""); }}
-        title={reasonModal === "cancel" ? "Cancel Booking" : "Reject"}
+        onClose={() => { if (!actionSubmitting) { setReasonModal(null); setReasonText(""); setActionError(""); } }}
+        title={reasonModal === "cancel" ? "Cancel this booking?" : booking.status === "ProofSubmitted" ? "Reject this payment proof?" : "Reject this booking?"}
         footer={
           <>
-            <Button variant="secondary" onClick={() => { setReasonModal(null); setReasonText(""); }}>Back</Button>
+            <Button variant="secondary" disabled={actionSubmitting} onClick={() => { setReasonModal(null); setReasonText(""); setActionError(""); }}>Back</Button>
             <Button
               variant="danger"
               disabled={!reasonText.trim()}
-              onClick={async () => {
+              loading={actionSubmitting}
+              onClick={() => submitModal(async () => {
                 // Patient.md's BookingStatus enum has no separate "Rejected" value,
                 // so Reject Booking/Reject Proof/Cancel Booking all terminate in
                 // "Cancelled" — the only terminal-negative status that exists.
@@ -267,102 +335,90 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                 // "Pending" so the patient can resubmit, rather than cancelling
                 // outright? Left as Cancelled until that's confirmed.
                 await updateBooking({ status: "Cancelled", cancellationReason: reasonText });
-                setReasonModal(null);
-                setReasonText("");
-              }}
+              }, () => setReasonModal(null))}
             >
-              Confirm
-            </Button>
-          </>
-        }
-      >
-        <textarea
-          placeholder="Reason (required)"
-          value={reasonText}
-          onChange={(e) => setReasonText(e.target.value)}
-          className="w-full rounded-lg border border-outline-variant p-md"
-          rows={3}
-        />
-      </Modal>
-
-      <Modal
-        isOpen={waiveOpen}
-        onClose={() => { setWaiveOpen(false); setReasonText(""); }}
-        title="Waive Payment"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => { setWaiveOpen(false); setReasonText(""); }}>Cancel</Button>
-            <Button
-              disabled={!reasonText.trim()}
-              onClick={async () => {
-                await updatePayment({ status: "Waived", waivedReason: reasonText, withOrNumber: true });
-                setWaiveOpen(false);
-                setReasonText("");
-              }}
-            >
-              Confirm Waiver
-            </Button>
-          </>
-        }
-      >
-        <textarea
-          placeholder="Reason (required)"
-          value={reasonText}
-          onChange={(e) => setReasonText(e.target.value)}
-          className="w-full rounded-lg border border-outline-variant p-md"
-          rows={3}
-        />
-      </Modal>
-
-      <Modal
-        isOpen={refundOpen}
-        onClose={() => { setRefundOpen(false); setReasonText(""); setRefundAmount(""); }}
-        title="Refund Payment"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => { setRefundOpen(false); setReasonText(""); setRefundAmount(""); }}>Cancel</Button>
-            <Button
-              variant="danger"
-              disabled={!reasonText.trim() || !refundAmount.trim()}
-              onClick={async () => {
-                await updatePayment({ status: "Refunded", refundReason: reasonText, refundAmount: Number(refundAmount) || 0 });
-                setRefundOpen(false);
-                setReasonText("");
-                setRefundAmount("");
-              }}
-            >
-              Confirm Refund
+              {reasonModal === "cancel" ? "Cancel booking" : "Reject"}
             </Button>
           </>
         }
       >
         <div className="space-y-md">
-          <textarea
-            placeholder="Reason (required)"
-            value={reasonText}
-            onChange={(e) => setReasonText(e.target.value)}
-            className="w-full rounded-lg border border-outline-variant p-md"
-            rows={3}
-          />
-          <input
-            placeholder="Amount"
-            value={refundAmount}
-            onChange={(e) => setRefundAmount(e.target.value)}
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
+          <p className="text-body-md text-on-surface-variant">The booking will end as Cancelled. Your reason is kept on the booking.</p>
+          {actionError && <FormAlert>{actionError}</FormAlert>}
+          <div className="space-y-xs">
+            <label htmlFor="reason-cancel" className={labelStyles}>Reason</label>
+            <textarea id="reason-cancel" required value={reasonText} onChange={(e) => setReasonText(e.target.value)} className={inputStyles("py-md")} rows={3} />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={waiveOpen}
+        onClose={() => { if (!actionSubmitting) { setWaiveOpen(false); setReasonText(""); setActionError(""); } }}
+        title={`Waive ${formatPeso(booking.amountDue)}?`}
+        footer={
+          <>
+            <Button variant="secondary" disabled={actionSubmitting} onClick={() => { setWaiveOpen(false); setReasonText(""); setActionError(""); }}>Cancel</Button>
+            <Button
+              disabled={!reasonText.trim()}
+              loading={actionSubmitting}
+              onClick={() => submitModal(() => updatePayment({ status: "Waived", waivedReason: reasonText, withOrNumber: true }), () => setWaiveOpen(false))}
+            >
+              Waive payment
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-md">
+          {actionError && <FormAlert>{actionError}</FormAlert>}
+          <div className="space-y-xs">
+            <label htmlFor="reason-waive" className={labelStyles}>Reason</label>
+            <textarea id="reason-waive" required value={reasonText} onChange={(e) => setReasonText(e.target.value)} className={inputStyles("py-md")} rows={3} />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={refundOpen}
+        onClose={() => { if (!actionSubmitting) { setRefundOpen(false); setReasonText(""); setRefundAmount(""); setActionError(""); } }}
+        title="Refund this payment?"
+        footer={
+          <>
+            <Button variant="secondary" disabled={actionSubmitting} onClick={() => { setRefundOpen(false); setReasonText(""); setRefundAmount(""); setActionError(""); }}>Cancel</Button>
+            <Button
+              variant="danger"
+              disabled={!reasonText.trim() || !refundAmount.trim()}
+              loading={actionSubmitting}
+              onClick={() => submitModal(() => updatePayment({ status: "Refunded", refundReason: reasonText, refundAmount: Number(refundAmount) || 0 }), () => setRefundOpen(false))}
+            >
+              Refund
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-md">
+          {actionError && <FormAlert>{actionError}</FormAlert>}
+          <div className="space-y-xs">
+            <label htmlFor="refund-amount" className={labelStyles}>Amount (₱)</label>
+            <input id="refund-amount" inputMode="decimal" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} placeholder={String(booking.amountDue)} className={inputStyles("tabular-nums")} />
+          </div>
+          <div className="space-y-xs">
+            <label htmlFor="reason-refund" className={labelStyles}>Reason</label>
+            <textarea id="reason-refund" required value={reasonText} onChange={(e) => setReasonText(e.target.value)} className={inputStyles("py-md")} rows={3} />
+          </div>
         </div>
       </Modal>
 
       <Modal
         isOpen={noShowOpen}
         onClose={() => { if (!actionSubmitting) { setNoShowOpen(false); setReasonText(""); setActionError(""); } }}
-        title="Mark No Show"
+        title="Mark as no-show?"
         footer={
           <>
             <Button variant="secondary" disabled={actionSubmitting} onClick={() => { setNoShowOpen(false); setReasonText(""); setActionError(""); }}>Back</Button>
             <Button
               variant="danger"
-              disabled={actionSubmitting}
+              loading={actionSubmitting}
               onClick={async () => {
                 setActionError("");
                 setActionSubmitting(true);
@@ -377,20 +433,15 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
                 }
               }}
             >
-              Confirm No Show
+              Mark no-show
             </Button>
           </>
         }
       >
         <p className="mb-md text-body-md text-on-surface-variant">Mark this appointment as a no-show?</p>
-        {actionError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{actionError}</p>}
-        <textarea
-          value={reasonText}
-          onChange={(e) => setReasonText(e.target.value)}
-          placeholder="Reason (optional)"
-          className="w-full rounded-lg border border-outline-variant p-md text-body-md"
-          rows={3}
-        />
+        {actionError && <FormAlert className="mb-md">{actionError}</FormAlert>}
+        <label htmlFor="reason-noshow" className={labelStyles}>Reason <span className="font-normal text-on-surface-variant">(optional)</span></label>
+        <textarea id="reason-noshow" value={reasonText} onChange={(e) => setReasonText(e.target.value)} className={inputStyles("mt-xs py-md")} rows={3} />
       </Modal>
 
       <RescheduleBookingModal
@@ -414,14 +465,5 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
         }}
       />
     </AppShell>
-  );
-}
-
-function InfoField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-label-sm text-on-surface-variant">{label}</p>
-      <p className="text-body-md text-on-surface">{value}</p>
-    </div>
   );
 }

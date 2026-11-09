@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -9,6 +10,14 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Toast } from "@/components/ui/Toast";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { Icon } from "@/components/ui/Icon";
+import { InfoField } from "@/components/ui/InfoField";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate, formatClinicDateShort } from "@/lib/format";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 import { queryPatientById, updatePatient, toTitleCase } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
@@ -16,7 +25,7 @@ import { queryBookings } from "@/lib/data/bookings";
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "bookings", label: "Bookings" },
-  { id: "records", label: "Medical Records" },
+  { id: "records", label: "Consultations" },
 ];
 
 interface PatientDetail {
@@ -63,15 +72,26 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveError, setSaveError] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
       const supabase = null as never;
-      const [patientRow, bookingRows, consultRes] = await Promise.all([
-        queryPatientById(supabase, id),
-        queryBookings(supabase, { patientId: id }),
-        queryConsultations(supabase, { patientId: id }),
-      ]);
+      let patientRow, bookingRows, consultRes;
+      try {
+        [patientRow, bookingRows, consultRes] = await Promise.all([
+          queryPatientById(supabase, id),
+          queryBookings(supabase, { patientId: id }),
+          queryConsultations(supabase, { patientId: id }),
+        ]);
+      } catch {
+        if (!cancelled) setLoadError(true);
+        return;
+      }
+      if (cancelled) return;
+      setLoadError(false);
 
       if (!patientRow) {
         setPatient(null);
@@ -107,13 +127,18 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
       );
     }
     load();
-  }, [id]);
+    return () => { cancelled = true; };
+  }, [id, reloadKey]);
 
   if (patient === null) notFound();
   if (patient === undefined) {
     return (
       <AppShell role="admin">
-        <p className="text-body-md text-on-surface-variant">Loading patient…</p>
+        <div className="mx-auto max-w-doctor-record">
+          {loadError
+            ? <ErrorState title="Patient unavailable" message="This patient's record could not be loaded. Nothing has changed; try again." onRetry={() => { setLoadError(false); setReloadKey((k) => k + 1); }} />
+            : <><p className="sr-only" role="status">Loading patient…</p><SkeletonCard lines={4} /></>}
+        </div>
       </AppShell>
     );
   }
@@ -169,137 +194,120 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
   }
 
   const fullName = `${patient.firstName} ${patient.lastName}`;
+  const tabs = TABS.map((t) => t.id === "bookings" ? { ...t, label: `Bookings (${bookings.length})` } : t.id === "records" ? { ...t, label: `Consultations (${consultations.length})` } : t);
+  const field = (key: keyof typeof editForm) => `edit-patient-${key}`;
 
   return (
     <AppShell role="admin">
-      <div className="mx-auto max-w-[44rem] space-y-lg">
+      <div className="mx-auto max-w-doctor-record space-y-lg">
         {savedAt && <Toast key={savedAt} variant="success" message={`Patient saved at ${savedAt}.`} />}
-        <Card className="flex flex-wrap items-center justify-between gap-md">
-          <div>
-            <h1 className="text-headline-md text-on-surface">{fullName}</h1>
-            <p className="text-label-md text-on-surface-variant">{patient.patientCode}</p>
+        <Link href="/admin/patients" className="inline-flex min-h-11 items-center gap-xs text-label-md font-medium text-primary hover:underline">
+          <Icon name="chevron_left" className="text-[14px]" />All patients
+        </Link>
+        <header className="flex flex-wrap items-start justify-between gap-md">
+          <div className="min-w-0 space-y-xs">
+            <h1 className="break-words text-headline-lg-mobile text-on-surface sm:text-headline-lg">{fullName}</h1>
+            <p className="text-body-md text-on-surface-variant">
+              <span className="font-mono text-body-sm">{patient.patientCode}</span> · {patient.sex} · Born {formatClinicDate(patient.dateOfBirth)}
+            </p>
           </div>
           <Button variant="secondary" onClick={openEdit}>
-            Edit Patient
+            <Icon name="edit" className="text-[14px]" />Edit details
           </Button>
-        </Card>
+        </header>
 
         <Card>
-          <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
+          <Tabs tabs={tabs} activeId={tab} onChange={setTab} className="mb-lg" />
           {tab === "overview" && (
-            <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-              <Info label="Sex" value={patient.sex} />
-              <Info label="Date of Birth" value={patient.dateOfBirth} />
-              <Info label="Contact Number" value={patient.contactNumber || "—"} />
-              <Info label="Email" value={patient.email || "—"} />
-            </div>
+            <dl className="grid grid-cols-1 gap-md sm:grid-cols-2">
+              <InfoField label="Sex" value={patient.sex} />
+              <InfoField label="Date of birth" value={formatClinicDate(patient.dateOfBirth)} />
+              <InfoField label="Contact number" value={patient.contactNumber} />
+              <InfoField label="Email" value={patient.email} className="break-all" />
+            </dl>
           )}
           {tab === "bookings" && (
-            <div className="space-y-sm">
+            <ul className="divide-y divide-outline-variant">
               {bookings.length === 0 ? (
-                <p className="text-body-md text-on-surface-variant">No bookings for this patient.</p>
+                <li className="py-md text-body-md text-on-surface-variant">No bookings for this patient yet.</li>
               ) : (
                 bookings.map((b) => (
-                  <div key={b.id} className="rounded-lg border border-outline-variant p-md text-body-md">
-                    {b.doctorName} — {b.appointmentDate} ({b.status})
-                  </div>
+                  <li key={b.id}>
+                    <Link href={`/admin/bookings/${b.id}`} className="-mx-sm flex min-h-11 flex-wrap items-center justify-between gap-sm rounded-md px-sm py-sm hover:bg-surface-container-low">
+                      <span className="min-w-0">
+                        <span className="block text-body-md font-medium tabular-nums text-on-surface">{formatClinicDate(b.appointmentDate)}</span>
+                        <span className="block text-label-md text-on-surface-variant">{b.doctorName}</span>
+                      </span>
+                      <StatusPill status={b.status} />
+                    </Link>
+                  </li>
                 ))
               )}
-            </div>
+            </ul>
           )}
           {tab === "records" && (
-            <div className="space-y-sm">
+            <ul className="divide-y divide-outline-variant">
               {consultations.length === 0 ? (
-                <p className="text-body-md text-on-surface-variant">No medical records for this patient.</p>
+                <li className="py-md text-body-md text-on-surface-variant">No consultations recorded for this patient.</li>
               ) : (
                 consultations.map((c) => (
-                  <div key={c.id} className="rounded-lg border border-outline-variant p-md text-body-md text-on-surface-variant">
-                    {c.appointmentDate || "—"} — {c.chiefComplaint || "No chief complaint"}
-                  </div>
+                  <li key={c.id} className="py-sm">
+                    <p className="text-label-md tabular-nums text-on-surface-variant">{formatClinicDateShort(c.appointmentDate, "Date not recorded")}</p>
+                    <p className="text-body-md text-on-surface">{c.chiefComplaint || "No chief complaint recorded"}</p>
+                  </li>
                 ))
               )}
-            </div>
+            </ul>
           )}
         </Card>
       </div>
 
       <Modal
         isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        title="Edit Patient"
+        onClose={() => { if (!saving) setEditOpen(false); }}
+        title="Edit patient details"
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : "Save"}
+            <Button onClick={handleSave} loading={saving}>
+              {saving ? "Saving…" : "Save changes"}
             </Button>
           </>
         }
       >
         <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-          {saveError && (
-            <p className="sm:col-span-2 rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{saveError}</p>
-          )}
+          {saveError && <FormAlert className="sm:col-span-2">{saveError}</FormAlert>}
           <div className="space-y-xs">
-            <label className="text-label-md text-on-surface-variant">First Name</label>
-            <input
-              value={editForm.firstName}
-              onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
-              className="w-full rounded-lg border border-outline-variant px-md py-sm"
-            />
+            <label htmlFor={field("firstName")} className={labelStyles}>First name</label>
+            <input id={field("firstName")} value={editForm.firstName} onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))} className={inputStyles()} />
           </div>
           <div className="space-y-xs">
-            <label className="text-label-md text-on-surface-variant">Last Name</label>
-            <input
-              value={editForm.lastName}
-              onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
-              className="w-full rounded-lg border border-outline-variant px-md py-sm"
-            />
+            <label htmlFor={field("lastName")} className={labelStyles}>Last name</label>
+            <input id={field("lastName")} value={editForm.lastName} onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))} className={inputStyles()} />
           </div>
           <div className="space-y-xs">
-            <label className="text-label-md text-on-surface-variant">Date of Birth</label>
+            <span className={labelStyles}>Date of birth</span>
             <DatePicker value={editForm.dateOfBirth} onChange={(v) => setEditForm((f) => ({ ...f, dateOfBirth: v }))} />
           </div>
           <div className="space-y-xs">
-            <label className="text-label-md text-on-surface-variant">Sex</label>
-            <select
-              value={editForm.sex}
-              onChange={(e) => setEditForm((f) => ({ ...f, sex: e.target.value as "Male" | "Female" }))}
-              className="w-full rounded-lg border border-outline-variant px-md py-sm"
-            >
+            <label htmlFor={field("sex")} className={labelStyles}>Sex</label>
+            <select id={field("sex")} value={editForm.sex} onChange={(e) => setEditForm((f) => ({ ...f, sex: e.target.value as "Male" | "Female" }))} className={inputStyles()}>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
           </div>
           <div className="space-y-xs">
-            <label className="text-label-md text-on-surface-variant">Contact Number</label>
-            <input
-              value={editForm.contactNumber}
-              onChange={(e) => setEditForm((f) => ({ ...f, contactNumber: e.target.value }))}
-              className="w-full rounded-lg border border-outline-variant px-md py-sm"
-            />
+            <label htmlFor={field("contactNumber")} className={labelStyles}>Contact number</label>
+            <input id={field("contactNumber")} type="tel" value={editForm.contactNumber} onChange={(e) => setEditForm((f) => ({ ...f, contactNumber: e.target.value }))} className={inputStyles()} />
           </div>
           <div className="space-y-xs">
-            <label className="text-label-md text-on-surface-variant">Email</label>
-            <input
-              value={editForm.email}
-              onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-              className="w-full rounded-lg border border-outline-variant px-md py-sm"
-            />
+            <label htmlFor={field("email")} className={labelStyles}>Email</label>
+            <input id={field("email")} type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} className={inputStyles()} />
           </div>
         </div>
       </Modal>
     </AppShell>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-label-sm text-on-surface-variant">{label}</p>
-      <p className="text-body-md text-on-surface">{value}</p>
-    </div>
   );
 }

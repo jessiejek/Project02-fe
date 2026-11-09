@@ -100,6 +100,11 @@
 
   /* Type scale -> text-headline-lg, text-body-md, etc. (size + line-height +
      letter-spacing + weight bundled per Tailwind v4's --text-*--property syntax) */
+  --text-display-sm: 48px;
+  --text-display-sm--line-height: 56px;
+  --text-display-sm--letter-spacing: -0.02em;
+  --text-display-sm--font-weight: 600;
+
   --text-headline-lg: 30px;
   --text-headline-lg--line-height: 38px;
   --text-headline-lg--letter-spacing: -0.02em;

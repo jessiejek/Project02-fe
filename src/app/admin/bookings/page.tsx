@@ -3,10 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
-import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
-import { StatusPill } from "@/components/ui/StatusPill";
+import { StatusPill, statusLabel } from "@/components/ui/StatusPill";
+import { buttonStyles } from "@/components/ui/buttonStyles";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { inputStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDateShort, formatClockTime, orDash } from "@/lib/format";
+import { showPaymentStatus } from "@/lib/paymentDisplay";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Tabs } from "@/components/ui/Tabs";
 import { manilaTodayAsLocalDate } from "@/lib/clock";
@@ -88,17 +94,16 @@ export default function AdminBookingsPage() {
   return (
     <AppShell role="admin">
       <div className="space-y-lg">
-        <div className="flex flex-wrap items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">Bookings</h2>
-          <Link href="/admin/walk-in">
-            <Button>New Walk-In</Button>
-          </Link>
-        </div>
+        <PageHeader
+          title="Bookings"
+          description="Every visit across all doctors. Search by patient or booking ID, or switch to the week view to see the schedule."
+          actions={<Link href="/admin/walk-in" className={buttonStyles("primary")}><Icon name="add_circle" className="text-[16px]" />New walk-in</Link>}
+        />
 
         <Tabs
           tabs={[
             { id: "list", label: "List" },
-            { id: "week", label: "Week" },
+            { id: "week", label: "Week view" },
           ]}
           activeId={view}
           onChange={(id) => setView(id as "list" | "week")}
@@ -118,6 +123,8 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
   const [search, setSearch] = useState("");
   // admin.md §2: date filter was a fully decorative input with no value/onChange at all.
   const [dateFilter, setDateFilter] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,6 +139,7 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
       try {
         const rows = await queryStaffBookings(supabase, "all", { q: search.trim() || undefined });
         if (cancelled) return;
+        setLoadError("");
         setBookings(
           rows.map((b) => ({
             id: b.booking_id,
@@ -144,6 +152,8 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
             paymentStatus: b.payments?.status ?? "Unpaid",
           })),
         );
+      } catch {
+        if (!cancelled) setLoadError("Bookings could not be loaded. Nothing has changed; try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -152,7 +162,7 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [search]);
+  }, [search, reloadKey]);
 
   const rows = bookings.filter((b) => {
     if (doctorFilter !== "all" && b.doctorId !== doctorFilter) return false;
@@ -162,45 +172,75 @@ function BookingsList({ doctors }: { doctors: DoctorOption[] }) {
     return true;
   });
 
+  const filtered = doctorFilter !== "all" || statusFilter !== "all" || Boolean(dateFilter) || Boolean(search);
+
   return (
     <>
-      <Card className="grid grid-cols-1 gap-md sm:grid-cols-4">
-        <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className="rounded-lg border border-outline-variant px-md py-sm">
-          <option value="all">All Doctors</option>
-          {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="rounded-lg border border-outline-variant px-md py-sm">
-          <option value="all">All Statuses</option>
-          {ALL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <DatePicker value={dateFilter} onChange={setDateFilter} placeholder="Any date" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search patient/booking ID" className="rounded-lg border border-outline-variant px-md py-sm" />
-      </Card>
+      <div role="search" className="grid grid-cols-1 gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-md sm:grid-cols-2 lg:grid-cols-4">
+        <label className="space-y-xs">
+          <span className="text-label-md text-on-surface-variant">Search</span>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Patient name, code or booking ID" className={inputStyles()} />
+        </label>
+        <label className="space-y-xs">
+          <span className="text-label-md text-on-surface-variant">Doctor</span>
+          <select value={doctorFilter} onChange={(e) => setDoctorFilter(e.target.value)} className={inputStyles()}>
+            <option value="all">All doctors</option>
+            {doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </label>
+        <label className="space-y-xs">
+          <span className="text-label-md text-on-surface-variant">Status</span>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={inputStyles()}>
+            <option value="all">All statuses</option>
+            {ALL_STATUSES.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
+          </select>
+        </label>
+        <div className="space-y-xs">
+          <span className="block text-label-md text-on-surface-variant">Visit date</span>
+          <DatePicker value={dateFilter} onChange={setDateFilter} placeholder="Any date" />
+        </div>
+      </div>
 
-      <DataTable
-        columns={[
-          { header: "Patient", render: (r) => `${r.patientName} (${r.patientCode})` },
-          { header: "Doctor", render: (r) => r.doctorName },
-          { header: "Status", render: (r) => <StatusPill status={r.status} /> },
-          { header: "Payment", render: (r) => <StatusPill status={r.paymentStatus} /> },
-        ]}
-        rows={rows}
-        rowKey={(r) => r.id}
-        rowHref={(r) => `/admin/bookings/${r.id}`}
-        loading={loading}
-        renderMobileCard={(r) => (
-          <div className="space-y-xs">
-            <div className="flex items-center justify-between">
-              <p className="text-body-md font-medium text-on-surface">{r.patientName} <span className="text-label-sm text-on-surface-variant">({r.patientCode})</span></p>
-              <StatusPill status={r.status} />
+      {loadError ? (
+        <ErrorState title="Bookings unavailable" message={loadError} onRetry={() => setReloadKey((k) => k + 1)} retrying={loading} />
+      ) : (
+        <>
+          {!loading && (
+            <div className="flex flex-wrap items-center justify-between gap-sm text-label-md text-on-surface-variant">
+              <p className="tabular-nums" aria-live="polite">{rows.length} {rows.length === 1 ? "booking" : "bookings"}{filtered ? " match these filters" : ""}</p>
+              {filtered && (
+                <Button variant="ghost" className="min-h-9 px-md py-xs" onClick={() => { setDoctorFilter("all"); setStatusFilter("all"); setDateFilter(""); setSearch(""); }}>
+                  Clear filters
+                </Button>
+              )}
             </div>
-            <p className="text-label-md text-on-surface-variant">{r.doctorName}</p>
-            <div className="flex justify-end">
-              <StatusPill status={r.paymentStatus} />
-            </div>
-          </div>
-        )}
-      />
+          )}
+          <DataTable
+            columns={[
+              { header: "Patient", render: (r) => <span><span className="font-medium text-on-surface">{orDash(r.patientName)}</span> {r.patientCode && <span className="ml-xs font-mono text-body-sm text-on-surface-variant">{r.patientCode}</span>}</span> },
+              { header: "Visit date", render: (r) => <span className="tabular-nums">{formatClinicDateShort(r.appointmentDate)}</span> },
+              { header: "Doctor", render: (r) => orDash(r.doctorName) },
+              { header: "Status", render: (r) => <StatusPill status={r.status} /> },
+              { header: "Payment", render: (r) => showPaymentStatus(r.status, r.paymentStatus) ? <StatusPill status={r.paymentStatus} /> : <span className="text-on-surface-variant">—</span> },
+            ]}
+            rows={rows}
+            rowKey={(r) => r.id}
+            rowHref={(r) => `/admin/bookings/${r.id}`}
+            loading={loading}
+            emptyMessage={filtered ? "No bookings match these filters." : "No bookings yet."}
+            renderMobileCard={(r) => (
+              <div className="space-y-xs">
+                <div className="flex items-start justify-between gap-md">
+                  <p className="min-w-0 text-body-md font-medium text-on-surface">{orDash(r.patientName)} {r.patientCode && <span className="font-mono text-body-sm font-normal text-on-surface-variant">{r.patientCode}</span>}</p>
+                  <StatusPill status={r.status} />
+                </div>
+                <p className="text-label-md text-on-surface-variant"><span className="tabular-nums">{formatClinicDateShort(r.appointmentDate)}</span> · {orDash(r.doctorName)}</p>
+                {showPaymentStatus(r.status, r.paymentStatus) && <StatusPill status={r.paymentStatus} />}
+              </div>
+            )}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -214,6 +254,8 @@ function BookingsWeek() {
   const [bookings, setBookings] = useState<WeekVisit[]>([]);
   const [activeDoctors, setActiveDoctors] = useState<DoctorOption[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [weekError, setWeekError] = useState(false);
+  const [weekReload, setWeekReload] = useState(0);
 
   const weekStart = useMemo(() => addDays(mondayOf(manilaTodayAsLocalDate()), weekOffset * 7), [weekOffset]);
   const weekDates = useMemo(() => DAYS.map((_, i) => addDays(weekStart, i)), [weekStart]);
@@ -239,8 +281,15 @@ function BookingsWeek() {
     async function loadBookings() {
       setLoaded(false);
       const supabase = null as never;
-      const rows = await queryBookings(supabase, { from: weekStartIso, to: weekEndIso });
+      let rows: Awaited<ReturnType<typeof queryBookings>>;
+      try {
+        rows = await queryBookings(supabase, { from: weekStartIso, to: weekEndIso });
+      } catch {
+        if (!cancelled) { setWeekError(true); setLoaded(true); }
+        return;
+      }
       if (cancelled) return;
+      setWeekError(false);
       setBookings(
         rows
           .filter((b) => b.status !== "Cancelled" && b.status !== "Expired")
@@ -259,24 +308,34 @@ function BookingsWeek() {
     return () => {
       cancelled = true;
     };
-  }, [weekStartIso, weekEndIso]);
+  }, [weekStartIso, weekEndIso, weekReload]);
 
   return (
     <div className="space-y-lg">
       <div className="flex flex-col gap-md sm:flex-row sm:items-center sm:justify-between">
-        <button type="button" onClick={() => setWeekOffset((w) => w - 1)} className="rounded-lg border border-outline-variant px-md py-sm">
-          ◀ Prev Week
-        </button>
-        <h3 className="text-center text-headline-sm text-on-surface">
-          {formatShort(weekStart)} - {formatShort(weekEnd)}, {weekEnd.getFullYear()}
-        </h3>
-        <button type="button" onClick={() => setWeekOffset((w) => w + 1)} className="rounded-lg border border-outline-variant px-md py-sm">
-          Next Week ▶
-        </button>
+        <Button variant="secondary" onClick={() => setWeekOffset((w) => w - 1)}>
+          <Icon name="chevron_left" className="text-[14px]" />Previous week
+        </Button>
+        <div className="text-center">
+          <h2 className="text-headline-sm tabular-nums text-on-surface" aria-live="polite">
+            {formatShort(weekStart)} – {formatShort(weekEnd)}, {weekEnd.getFullYear()}
+          </h2>
+          {weekOffset !== 0 && (
+            <button type="button" onClick={() => setWeekOffset(0)} className="min-h-9 text-label-md font-medium text-primary hover:underline">Back to this week</button>
+          )}
+        </div>
+        <Button variant="secondary" onClick={() => setWeekOffset((w) => w + 1)}>
+          Next week<Icon name="chevron_right" className="text-[14px]" />
+        </Button>
       </div>
 
-      {!loaded ? (
-        <p className="text-body-md text-on-surface-variant">Loading week…</p>
+      {loaded && weekError ? (
+        <ErrorState title="Week unavailable" message="This week's visits could not be loaded. Try again." onRetry={() => setWeekReload((k) => k + 1)} />
+      ) : !loaded ? (
+        <div role="status" aria-busy="true" className="space-y-sm">
+          <p className="sr-only">Loading week…</p>
+          {[0, 1, 2].map((i) => <div key={i} className="h-14 animate-pulse rounded-lg bg-surface-container-high motion-reduce:animate-none" />)}
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-outline-variant bg-surface-container-lowest">
           <table className="w-full border-collapse">
@@ -287,7 +346,7 @@ function BookingsWeek() {
                 )}
                 {DAYS.map((d, i) => (
                   <th key={d} className="border-b border-outline-variant px-md py-sm text-left text-label-md text-on-surface-variant">
-                    {d} <span className="text-on-surface-variant/70">{weekDates[i].getDate()}</span>
+                    {d} <span className="tabular-nums text-on-surface">{weekDates[i].getDate()}</span>
                   </th>
                 ))}
               </tr>
@@ -311,15 +370,16 @@ function BookingsWeek() {
                       return (
                         <td key={iso} className="px-md py-md align-top">
                           {dayBookings.length === 0 ? (
-                            <span className="text-label-sm text-on-surface-variant/60">—</span>
+                            <span className="text-label-md text-on-surface-variant" aria-label="No visits">—</span>
                           ) : (
                             dayBookings.map((b) => (
                               <Link
                                 key={b.id}
                                 href={`/admin/bookings/${b.id}`}
-                                className="mb-xs block rounded bg-primary/10 px-xs py-1 text-[11px] text-primary hover:bg-primary/20"
+                                className="mb-xs block rounded-md bg-primary/10 px-sm py-xs text-label-md text-on-primary-fixed-variant hover:bg-primary/20"
                               >
-                                {b.patientName} · {b.slotStartTime}
+                                <span className="block break-words">{b.patientName}</span>
+                                <span className="tabular-nums text-on-surface-variant">{formatClockTime(b.slotStartTime)}</span>
                               </Link>
                             ))
                           )}

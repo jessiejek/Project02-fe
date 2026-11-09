@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { addDaysToDate, todayManila } from "@/lib/clock";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { AppShell } from "@/components/shell/AppShell";
@@ -11,6 +12,9 @@ import { queryDoctors } from "@/lib/data/doctors";
 import { queryReport } from "@/lib/data/admin";
 import { queryBookings } from "@/lib/data/bookings";
 import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
+import { formatClinicDate, formatClockTime, formatPeso, orDash } from "@/lib/format";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 interface BookingRow {
@@ -109,7 +113,7 @@ export default function AdminDashboardPage() {
           id: b.booking_id,
           patientName: b.patients ? `${b.patients.first_name} ${b.patients.last_name}` : "",
           doctorName: b.doctors?.staff_accounts?.full_name ?? "",
-          slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
+          slotStartTime: formatClockTime(b.slot_start_time),
           queueNumber: b.queue_number,
           status: b.status,
         })),
@@ -144,7 +148,8 @@ export default function AdminDashboardPage() {
   if (!loaded) {
     return (
       <AppShell role="admin">
-        <div className="space-y-xl">
+        <div className="space-y-xl" aria-busy="true">
+          <p className="sr-only" role="status">Loading clinic overview…</p>
           <SkeletonStats count={8} />
           <SkeletonTable rows={5} columns={4} />
         </div>
@@ -159,47 +164,67 @@ export default function AdminDashboardPage() {
   return (
     <AppShell role="admin">
       <div className="space-y-xl">
-        <h2 className="text-headline-lg text-on-surface">Admin Dashboard</h2>
+        <PageHeader
+          title="Clinic overview"
+          description={<>Today is {formatClinicDate(todayManila())}. Figures refresh automatically when the queue or payments change.</>}
+          actions={<Button variant="secondary" onClick={load} loading={refreshing}>Refresh</Button>}
+        />
 
-        <div className="grid grid-cols-1 gap-lg sm:grid-cols-2 md:grid-cols-4">
-          <StatCard icon="event_note" value={todaysCount} label="Today's Appointments" />
-          <StatCard icon="calendar_month" value={monthlyCount} label="Monthly Appointments" />
-          <StatCard icon="payments" value={`₱${revenueToday.toLocaleString()}`} label="Revenue Today" />
-          <StatCard icon="pending_actions" value={pendingVerifications} label="Pending Verifications" />
-          <StatCard icon="hourglass_top" value={onHoldThisMonth} label="On Hold (month)" />
-          <StatCard icon="receipt_long" value={unpaidCompleted} label="Unpaid Completed" />
-          <StatCard icon="event_busy" value={noShowsToday} label="No Shows Today" />
-          <StatCard icon="follow_the_signs" value={followUpsDue} label="Follow-Ups Due in 7 Days" />
-        </div>
+        <section aria-labelledby="today-heading" className="space-y-md">
+          <h2 id="today-heading" className="text-headline-md text-on-surface">Today</h2>
+          <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
+            <StatCard icon="event_note" value={todaysCount} label="Appointments today" href="/admin/bookings" />
+            <StatCard icon="payments" value={formatPeso(revenueToday, "₱0")} label="Revenue today" href="/admin/reports" />
+            <StatCard icon="event_busy" value={noShowsToday} label="No-shows today" />
+          </div>
+        </section>
 
-        <div className="grid grid-cols-1 gap-lg lg:grid-cols-2">
-          <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
-            <h3 className="mb-md text-headline-sm text-on-surface">Doctors in the latest 20 bookings</h3>
-            <div className="space-y-sm">
+        <section aria-labelledby="action-heading" className="space-y-md">
+          <h2 id="action-heading" className="text-headline-md text-on-surface">Needs follow-up</h2>
+          <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard icon="pending_actions" value={pendingVerifications} label="Payment proofs to verify" href="/admin/bookings" />
+            <StatCard icon="receipt_long" value={unpaidCompleted} label="Completed visits not yet paid" href="/admin/reports" />
+            <StatCard icon="hourglass_top" value={onHoldThisMonth} label="On hold this month" href="/admin/bookings" />
+            <StatCard icon="follow_the_signs" value={followUpsDue} label="Follow-ups due in 7 days" />
+          </div>
+        </section>
+
+        <div className="grid grid-cols-1 gap-lg lg:grid-cols-3">
+          <section aria-labelledby="month-heading" className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
+            <h2 id="month-heading" className="text-headline-sm text-on-surface">This month</h2>
+            <p className="mt-md text-headline-lg tabular-nums text-on-surface">{formatPeso(revenueThisMonth, "₱0")}</p>
+            <p className="text-label-md text-on-surface-variant">Revenue</p>
+            <p className="mt-md text-headline-md tabular-nums text-on-surface">{monthlyCount}</p>
+            <p className="text-label-md text-on-surface-variant">Appointments</p>
+          </section>
+          <section aria-labelledby="load-heading" className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg lg:col-span-2">
+            <h2 id="load-heading" className="text-headline-sm text-on-surface">Doctor share of the latest 20 bookings</h2>
+            <div className="mt-md space-y-sm">
               {doctorLoads.length === 0 && <p className="text-body-md text-on-surface-variant">No doctors to show.</p>}
               {doctorLoads.map((d) => (
-                <div key={d.id} className="flex items-center gap-md">
-                  <span className="w-32 truncate text-label-md text-on-surface-variant">{d.name}</span>
-                  <div aria-hidden="true" className="h-3 flex-1 rounded-full bg-surface-container-high">
-                    <div className="h-3 rounded-full bg-primary" style={{ width: `${(d.bookingCount / maxLoad) * 100}%` }} />
+                <div key={d.id} className="grid grid-cols-[minmax(0,10rem)_1fr_2.5rem] items-center gap-md">
+                  <span className="break-words text-label-md text-on-surface">{orDash(d.name)}</span>
+                  <div aria-hidden="true" className="h-2 rounded-full bg-surface-container-high">
+                    <div className="h-2 rounded-full bg-primary transition-[width] duration-300" style={{ width: `${(d.bookingCount / maxLoad) * 100}%` }} />
                   </div>
-                  <span className="text-label-md tabular-nums text-on-surface">{d.bookingCount}</span>
+                  <span className="text-right text-label-md tabular-nums text-on-surface">{d.bookingCount}</span>
                 </div>
               ))}
             </div>
-          </div>
-          <div className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
-            <h3 className="mb-md text-headline-sm text-on-surface">Revenue This Month</h3>
-            <p className="text-body-md text-on-surface-variant">₱{revenueThisMonth.toLocaleString()}</p>
-          </div>
+          </section>
         </div>
 
+        <section aria-labelledby="recent-heading" className="space-y-md">
+          <div className="flex flex-wrap items-baseline justify-between gap-md">
+            <h2 id="recent-heading" className="text-headline-md text-on-surface">Latest bookings</h2>
+            <Link href="/admin/bookings" className="text-label-md font-medium text-primary hover:underline">All bookings</Link>
+          </div>
         <DataTable
           columns={[
-            { header: "Patient", render: (r) => r.patientName },
-            { header: "Doctor", render: (r) => r.doctorName },
+            { header: "Patient", render: (r) => <span className="font-medium text-on-surface">{orDash(r.patientName)}</span> },
+            { header: "Doctor", render: (r) => orDash(r.doctorName) },
             { header: "Time", render: (r) => r.slotStartTime },
-            { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
+            { header: "Queue", align: "center", render: (r) => <span className="tabular-nums">{r.queueNumber ?? "—"}</span> },
             { header: "Status", render: (r) => <StatusPill status={r.status} /> },
           ]}
           rows={recentBookings}
@@ -213,11 +238,13 @@ export default function AdminDashboardPage() {
               </div>
               <p className="text-label-md text-on-surface-variant">{r.doctorName}</p>
               <p className="text-label-sm text-on-surface-variant">
-                {r.slotStartTime} · Q#{r.queueNumber ?? "—"}
+                <span className="tabular-nums">{r.slotStartTime} · Queue {r.queueNumber ?? "—"}</span>
               </p>
             </div>
           )}
+          emptyMessage="No bookings yet."
         />
+        </section>
       </div>
     </AppShell>
   );
