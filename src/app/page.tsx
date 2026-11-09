@@ -3,6 +3,8 @@ import { buttonStyles } from "@/components/ui/buttonStyles";
 import Link from "next/link";
 import { API_BASE_URL } from "@/lib/api/client";
 import { VersionFooter } from "@/components/shell/VersionFooter";
+import { CLINIC_NAME } from "@/components/auth/AuthShell";
+import { cn } from "@/lib/cn";
 
 interface Settings {
   address: string;
@@ -41,8 +43,11 @@ function fmtTime(t: string | null) {
 
 const peso = (n: number) => Number.isFinite(n) ? `₱${n.toLocaleString("en-PH", { maximumFractionDigits: 0 })}` : "Not provided";
 
-const primaryLink = buttonStyles("primary");
-const secondaryLink = buttonStyles("secondary");
+const primaryLink = buttonStyles("primary", "px-xl");
+const secondaryLink = buttonStyles("ghost");
+const panel = "rounded-xl border border-outline-variant bg-surface-container-lowest p-lg";
+/** Day of week in the clinic's own timezone (Asia/Manila, UTC+8, no DST). */
+const manilaDay = () => new Date(Date.now() + 8 * 60 * 60 * 1000).getUTCDay();
 
 const STEPS = [
   { n: "1", title: "Create an account", body: "Sign up once with your name, birth date and email." },
@@ -57,22 +62,23 @@ export default async function Home() {
     load<OperatingHour[]>("/api/admin/operating-hours"),
   ]);
   const byDay = new Map((hours ?? []).map((h) => [h.day_of_week, h]));
+  const today = manilaDay();
 
   return (
     <div className="flex min-h-screen flex-col bg-surface-container-low">
       <header className="border-b border-outline-variant bg-surface-container-lowest">
-        <div className="mx-auto flex max-w-[56rem] items-center justify-between gap-md px-md py-md">
-          <span className="text-body-lg font-semibold text-primary">Dr. Grace Gavino Medical Clinic</span>
-          <Link href="/login" className="shrink-0 whitespace-nowrap text-body-md text-on-surface-variant hover:underline">
+        <div className="mx-auto flex max-w-public items-center justify-between gap-md px-md py-sm">
+          <Link href="/" className="min-w-0 text-body-lg font-semibold text-primary">{CLINIC_NAME}</Link>
+          <Link href="/login" className={buttonStyles("secondary", "shrink-0 whitespace-nowrap px-md py-sm")}>
             Log in
           </Link>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[56rem] flex-1 space-y-xl px-md py-xl">
-        <section className="space-y-md text-center">
-          <h1 className="text-headline-lg text-on-surface">Get your queue number before you arrive</h1>
-          <p className="mx-auto max-w-[36rem] text-body-lg text-on-surface-variant">
+      <main className="mx-auto w-full max-w-public flex-1 space-y-xl px-md py-xl">
+        <section className="space-y-md py-lg text-center">
+          <h1 className="mx-auto max-w-copy text-balance text-headline-lg-mobile text-on-surface sm:text-headline-lg">Get your queue number before you arrive</h1>
+          <p className="mx-auto max-w-copy text-pretty text-body-lg text-on-surface-variant">
             Walk in on any open day, or book online first. You are seen in queue order either way.
           </p>
           <div className="flex flex-col items-center justify-center gap-sm sm:flex-row">
@@ -95,8 +101,8 @@ export default async function Home() {
           <h2 id="how" className="text-headline-md text-on-surface">How booking works</h2>
           <ol className="grid gap-md sm:grid-cols-3">
             {STEPS.map((s) => (
-              <li key={s.n} className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-sm">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-label-md text-on-primary">{s.n}</span>
+              <li key={s.n} className={panel}>
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-label-md font-semibold tabular-nums text-primary">{s.n}</span>
                 <p className="mt-sm text-body-lg font-medium text-on-surface">{s.title}</p>
                 <p className="mt-xs text-body-md text-on-surface-variant">{s.body}</p>
               </li>
@@ -105,7 +111,7 @@ export default async function Home() {
         </section>
 
         {(!settings || !hours?.length) && (
-          <section role="status" className="space-y-md rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
+          <section role="status" className={cn(panel, "space-y-md")}>
             <h2 className="text-headline-md text-on-surface">Some clinic details are unavailable</h2>
             <p className="text-body-md text-on-surface-variant">{!hours?.length && "Clinic hours are unavailable. "}{!settings && "Fees and contact details are unavailable. "}Please confirm these details before your visit.</p>
             <RefreshButton />
@@ -114,15 +120,17 @@ export default async function Home() {
 
         <div className="grid gap-md md:grid-cols-2">
           {hours && hours.length > 0 && (
-            <section aria-labelledby="hours" className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-sm">
+            <section aria-labelledby="hours" className={panel}>
               <h2 id="hours" className="text-headline-md text-on-surface">Clinic hours</h2>
-              <dl className="mt-md space-y-xs">
+              <dl className="mt-md">
                 {DAY_ORDER.map((d) => {
                   const h = byDay.get(d);
+                  const isToday = d === today;
                   return (
-                    <div key={d} className="flex justify-between gap-md text-body-md">
-                      <dt className="text-on-surface-variant">{DAYS[d]}</dt>
-                      <dd className="text-on-surface">
+                    <div key={d} aria-current={isToday ? "date" : undefined}
+                      className={cn("-mx-sm flex justify-between gap-md rounded-md px-sm py-xs text-body-md", isToday && "bg-primary/10 font-medium")}>
+                      <dt className={isToday ? "text-primary" : "text-on-surface-variant"}>{DAYS[d]}{isToday && <span className="sr-only"> (today)</span>}</dt>
+                      <dd className="text-right text-on-surface">
                         {!h ? "Not provided" : h.is_closed ? "Closed" : h.open_time && h.close_time ? `${fmtTime(h.open_time)} – ${fmtTime(h.close_time)}` : "Not provided"}
                       </dd>
                     </div>
@@ -133,9 +141,9 @@ export default async function Home() {
           )}
 
           {settings && (
-            <section aria-labelledby="fees" className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-sm">
+            <section aria-labelledby="fees" className={panel}>
               <h2 id="fees" className="text-headline-md text-on-surface">Consultation fees</h2>
-              <dl className="mt-md space-y-xs">
+              <dl className="mt-md space-y-sm">
                 <div className="flex justify-between gap-md text-body-md">
                   <dt className="text-on-surface-variant">New consultation</dt>
                   <dd className="text-on-surface">{peso(settings.fee_consultation)}</dd>
@@ -159,7 +167,7 @@ export default async function Home() {
         </div>
 
         {settings && (
-          <section aria-labelledby="find" className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg shadow-sm">
+          <section aria-labelledby="find" className={panel}>
             <h2 id="find" className="text-headline-md text-on-surface">Find us</h2>
             <p className="mt-sm text-body-md text-on-surface">{settings.address}</p>
             {settings.contact_number && (

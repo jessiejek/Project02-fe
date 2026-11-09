@@ -2,7 +2,7 @@
 
 All application page routes, grouped by portal. API handlers and framework-generated error routes are not page routes.
 
-Status: the prior doctor portal pass and consultation workspace refinement are complete. Remaining portals are pending deep review and were not started today.
+Status: doctor portal complete. Public and auth pass complete (shared `AuthShell`, `FormAlert`, `fieldStyles`, `PageHeader`; `--text-body-sm` token). Remaining portals are in progress in order: admin, staff, patient.
 
 ## Doctor (14)
 
@@ -23,13 +23,13 @@ Status: the prior doctor portal pass and consultation workspace refinement are c
 
 ## Public (1)
 
-- [ ] `/` — `src/app/page.tsx`
+- [x] `/` — `src/app/page.tsx`
 
 ## Auth (3)
 
-- [ ] `/forgot-password` — `src/app/forgot-password/page.tsx`
-- [ ] `/login` — `src/app/login/page.tsx`
-- [ ] `/register` — `src/app/register/page.tsx`
+- [x] `/forgot-password` — `src/app/forgot-password/page.tsx`
+- [x] `/login` — `src/app/login/page.tsx`
+- [x] `/register` — `src/app/register/page.tsx`
 
 ## Admin (15)
 

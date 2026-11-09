@@ -3,55 +3,48 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { AuthShell } from "@/components/auth/AuthShell";
+import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { requestPasswordReset } from "@/lib/auth/account";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [sentTo, setSentTo] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError("");
-    setSuccess("");
+    setSentTo("");
     setSubmitting(true);
-    await requestPasswordReset(email.trim());
+    const target = email.trim();
+    await requestPasswordReset(target);
     setSubmitting(false);
-    setSuccess("If an account exists for that email, a reset link has been sent.");
+    setSentTo(target);
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface-container-low p-lg">
-      <div className="w-full max-w-[26rem] rounded-xl border border-outline-variant bg-surface-container-lowest p-xl shadow-sm">
-        <div className="mb-lg text-center">
-          <h1 className="text-headline-md text-primary">Forgot password</h1>
-          <p className="mt-xs text-body-md text-on-surface-variant">Enter your account email to receive a reset link.</p>
+    <AuthShell
+      title="Reset your password"
+      description="Enter the email on your account and we'll send a link to choose a new password."
+      footer={<Link href="/login" className="font-medium text-primary hover:underline">Back to log in</Link>}
+    >
+      <form className="space-y-md" onSubmit={handleSubmit}>
+        {/* Deliberately identical for every address: never reveals whether an account exists. */}
+        {sentTo && (
+          <FormAlert tone="success">
+            If an account exists for <span className="break-all font-medium">{sentTo}</span>, a reset link has been sent. Check your inbox and spam folder.
+          </FormAlert>
+        )}
+        <div className="space-y-xs">
+          <label htmlFor="email" className={labelStyles}>Email</label>
+          <input id="email" type="email" autoComplete="email" required value={email}
+            onChange={(e) => setEmail(e.target.value)} className={inputStyles()} />
         </div>
-        <form className="space-y-md" onSubmit={handleSubmit}>
-          {error && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{error}</p>}
-          {success && <p className="rounded-lg bg-green-50 px-md py-sm text-body-sm text-green-800">{success}</p>}
-          <div className="space-y-xs">
-            <label htmlFor="email" className="text-label-md text-on-surface-variant">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-outline-variant px-md py-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-          <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? "Sending..." : "Send reset link"}
-          </Button>
-        </form>
-        <Link href="/login" className="mt-lg inline-block text-label-md text-primary hover:underline">
-          Back to login
-        </Link>
-      </div>
-    </div>
+        <Button type="submit" className="w-full" loading={submitting}>
+          {submitting ? "Sending link…" : sentTo ? "Send another link" : "Send reset link"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
