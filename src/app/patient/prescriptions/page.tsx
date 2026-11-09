@@ -11,6 +11,12 @@ import { queryClinicSettings, type ClinicSettingsRow } from "@/lib/data/admin";
 import { queryPatientById } from "@/lib/data/patients";
 import { printPrescription } from "@/lib/print-forms";
 import type { Database } from "@/data/supabase-types";
+import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { inputStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate } from "@/lib/format";
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
 
@@ -43,6 +49,8 @@ export default function PrescriptionsPage() {
   const [search, setSearch] = useState("");
   const [groups, setGroups] = useState<PrescriptionGroupRow[]>([]);
   const [clinic, setClinic] = useState<ClinicSettingsRow | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [retryKey, setRetryKey] = useState(0);
   const [me, setMe] = useState<{ name: string; code?: string; dob: string | null; sex: string | null; address: string | null } | null>(null);
 
   useEffect(() => {
@@ -50,11 +58,17 @@ export default function PrescriptionsPage() {
     const patientId = session.patientId;
     async function load() {
       const supabase = null as never;
-      const [data, settings, pat] = await Promise.all([
-        queryRxGroups(supabase, { patientId }),
-        queryClinicSettings(supabase),
-        queryPatientById(supabase, patientId),
-      ]);
+      let data, settings, pat;
+      try {
+        [data, settings, pat] = await Promise.all([
+          queryRxGroups(supabase, { patientId }),
+          queryClinicSettings(supabase),
+          queryPatientById(supabase, patientId),
+        ]);
+      } catch {
+        setStatus("error");
+        return;
+      }
       setClinic(settings);
       if (pat) {
         setMe({
@@ -85,10 +99,10 @@ export default function PrescriptionsPage() {
       }));
       mapped.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setGroups(mapped);
+      setStatus("ready");
     }
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.patientId]);
+  }, [session?.patientId, retryKey]);
 
   const filtered = groups.filter((g) =>
     `${g.doctorName} ${g.createdAt} ${g.items.map((i) => i.genericName).join(" ")}`.toLowerCase().includes(search.toLowerCase()),
@@ -125,50 +139,52 @@ export default function PrescriptionsPage() {
 
   return (
     <AppShell role="patient">
-      <div className="space-y-lg">
-        <h2 className="text-headline-lg text-on-surface">Prescriptions</h2>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search prescriptions..."
-          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md sm:w-80"
-        />
+      <div className="mx-auto max-w-[48rem] space-y-lg">
+        <PageHeader title="Prescriptions" description="Medicines your doctor prescribed, one card per visit. Print one to bring to the pharmacy." />
+        <label className="block max-w-doctor-search space-y-xs">
+          <span className="text-label-md text-on-surface-variant">Search prescriptions</span>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Medicine, doctor or date" className={inputStyles()} />
+        </label>
 
-        {filtered.length === 0 ? (
-          <EmptyState icon="prescriptions" message="No prescriptions found." />
+        {status === "loading" ? (
+          <div className="space-y-md" aria-busy="true"><SkeletonCard lines={3} /><SkeletonCard lines={3} /></div>
+        ) : status === "error" ? (
+          <ErrorState title="Your prescriptions didn’t load" message="Check your connection, then try again." onRetry={() => { setStatus("loading"); setRetryKey((k) => k + 1); }} />
+        ) : filtered.length === 0 ? (
+          <EmptyState icon="medication" message={groups.length === 0 ? "No prescriptions yet." : `No prescriptions match “${search.trim()}”.`} />
         ) : (
-          <div className="space-y-md">
+          <ul className="space-y-md">
             {filtered.map((group) => (
-              <Card key={group.id}>
-                <div className="flex items-center justify-between border-b border-outline-variant pb-sm">
-                  <div>
-                    <p className="text-headline-sm text-on-surface">{group.createdAt}</p>
-                    <p className="text-label-md text-on-surface-variant">{group.doctorName || "—"}</p>
+              <li key={group.id}>
+                <Card>
+                  <div className="flex flex-wrap items-start justify-between gap-md border-b border-outline-variant pb-md">
+                    <div className="min-w-0">
+                      <h2 className="text-headline-sm tabular-nums text-on-surface">{formatClinicDate(group.createdAt)}</h2>
+                      <p className="text-label-md text-on-surface-variant">{group.doctorName || "—"}</p>
+                    </div>
+                    <Button variant="secondary" onClick={() => printGroup(group)}>
+                      <Icon name="print" className="text-[16px]" />
+                      Print
+                    </Button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => printGroup(group)}
-                    aria-label="Print prescription"
-                    className="text-primary"
-                    title="Print"
-                  >
-                    <Icon name="print" />
-                  </button>
-                </div>
-                <div className="mt-md space-y-sm">
-                  {group.items.map((item, i) => (
-                    <p key={item.id} className="text-body-md text-on-surface-variant">
-                      <span className="text-on-surface">
-                        {i + 1}. {item.genericName} #{item.quantity}
-                      </span>
-                      <br />
-                      Sig. {item.dosage} {item.instruction}
-                    </p>
-                  ))}
-                </div>
-              </Card>
+                  <ol className="mt-md space-y-md">
+                    {group.items.map((item, i) => (
+                      <li key={item.id || i} className="flex gap-md">
+                        <span className="w-5 shrink-0 text-right text-body-md tabular-nums text-on-surface-variant">{i + 1}.</span>
+                        <div className="min-w-0">
+                          <p className="text-body-md font-medium text-on-surface">
+                            {item.genericName} <span className="font-normal tabular-nums text-on-surface-variant">#{item.quantity}</span>
+                          </p>
+                          <p className="text-body-md text-on-surface">Sig. {item.dosage} {item.instruction}</p>
+                          {item.isControlledSubstance && <p className="text-label-md text-status-warning">Controlled medicine. Bring the printed prescription.</p>}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </Card>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </AppShell>

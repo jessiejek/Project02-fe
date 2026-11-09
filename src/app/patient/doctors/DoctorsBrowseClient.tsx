@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
-import { Button } from "@/components/ui/Button";
+import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { Icon } from "@/components/ui/Icon";
 
 export interface BrowseDoctorCard {
@@ -48,60 +48,57 @@ export function DoctorsBrowseClient({
 
   return (
     <div className="space-y-lg">
-      <Card className="flex flex-col gap-md sm:flex-row">
-        <select
-          value={specialization}
-          onChange={(e) => setSpecialization(e.target.value)}
-          className="rounded-lg border border-outline-variant px-md py-sm text-body-md"
-        >
-          <option value="all">All Specializations</option>
-          {specializations.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as "alpha" | "soonest")}
-          className="rounded-lg border border-outline-variant px-md py-sm text-body-md"
-        >
-          <option value="alpha">Alphabetical</option>
-          <option value="soonest">Soonest Available</option>
-        </select>
-      </Card>
+      <div className="flex flex-wrap gap-md">
+        <div className="w-full space-y-xs sm:w-64">
+          <label htmlFor="specialty" className={labelStyles}>Specialty</label>
+          <select id="specialty" value={specialization} onChange={(e) => setSpecialization(e.target.value)} className={inputStyles()}>
+            <option value="all">All specialties</option>
+            {specializations.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full space-y-xs sm:w-64">
+          <label htmlFor="sortBy" className={labelStyles}>Sort by</label>
+          <select id="sortBy" value={sortBy} onChange={(e) => setSortBy(e.target.value as "alpha" | "soonest")} className={inputStyles()}>
+            <option value="alpha">Name</option>
+            <option value="soonest">Available today first</option>
+          </select>
+        </div>
+      </div>
 
       {visible.length === 0 ? (
-        <p className="text-body-md text-on-surface-variant">No doctors match these filters.</p>
+        <p className="rounded-xl border border-dashed border-outline-variant p-lg text-body-md text-on-surface-variant">No doctors match this specialty.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-lg sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid grid-cols-1 gap-lg sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((doc) => (
-            <Card key={doc.id}>
-              <div className="mb-md flex items-center gap-md">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-high">
-                  <Icon name="person" className="text-[28px] text-on-surface-variant" />
-                </div>
-                <div>
-                  <h3 className="text-headline-sm text-on-surface">{doc.name}</h3>
-                  <p className="text-label-md text-on-surface-variant">{doc.specialization}</p>
-                </div>
-              </div>
-              <div className="mb-md flex items-center justify-between">
-                <div className="flex items-center gap-xs">
-                  <Icon name="star" className="text-sm text-tertiary" />
-                  <span className="text-label-sm font-bold">{doc.rating}</span>
-                  <span className="text-label-sm text-on-surface-variant">({doc.reviewCount})</span>
-                </div>
-                <StatusPill status={doc.dayStatus} />
-              </div>
-              <Link href={`/patient/doctors/${doc.id}`}>
-                <Button variant="secondary" className="w-full">
-                  View Profile
-                </Button>
+            <li key={doc.id}>
+              <Link href={`/patient/doctors/${doc.id}`} className="block h-full">
+                <Card hoverable className="flex h-full flex-col gap-md">
+                  <div className="flex items-start justify-between gap-md">
+                    <div className="min-w-0">
+                      <h2 className="break-words text-headline-sm text-on-surface">{doc.name}</h2>
+                      <p className="text-label-md text-on-surface-variant">{doc.specialization}</p>
+                    </div>
+                    <StatusPill status={doc.dayStatus} />
+                  </div>
+                  <div className="mt-auto flex items-center justify-between text-label-md text-on-surface-variant">
+                    {doc.reviewCount > 0 ? (
+                      <span className="flex items-center gap-xs">
+                        <Icon name="star" className="text-[14px] text-tertiary" />
+                        <span className="font-medium tabular-nums text-on-surface">{doc.rating}</span>
+                        <span className="tabular-nums">({doc.reviewCount} {doc.reviewCount === 1 ? "review" : "reviews"})</span>
+                      </span>
+                    ) : (
+                      <span>No reviews yet</span>
+                    )}
+                    <span className="flex items-center gap-xs font-medium text-primary">Profile<Icon name="chevron_right" className="text-[12px]" /></span>
+                  </div>
+                </Card>
               </Link>
-            </Card>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

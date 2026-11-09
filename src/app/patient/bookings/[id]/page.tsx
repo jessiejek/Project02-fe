@@ -12,6 +12,14 @@ import { BookingTimeline } from "@/components/ui/BookingTimeline";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryBookingById, cancelMyBooking } from "@/lib/data/bookings";
 import { showPaymentStatus, isVoidBooking } from "@/lib/paymentDisplay";
+import { Icon } from "@/components/ui/Icon";
+import { InfoField } from "@/components/ui/InfoField";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { buttonStyles } from "@/components/ui/buttonStyles";
+import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate, formatClockTime, formatPeso } from "@/lib/format";
 
 const TIMELINE = ["Pending", "Confirmed", "CheckedIn", "Completed"];
 
@@ -43,6 +51,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const [cancelReason, setCancelReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     // Ownership gate: only load once we know who the patient is, and only
@@ -53,7 +63,14 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     const patientId = session.patientId;
     async function load() {
       const supabase = null as never;
-      const b = await queryBookingById(supabase, id);
+      let b;
+      try {
+        b = await queryBookingById(supabase, id);
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
+        return;
+      }
       if (!b || b.patient_id !== patientId) {
         setBooking(null);
         return;
@@ -75,13 +92,19 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
       });
     }
     load();
-  }, [id, session?.patientId]);
+  }, [id, session?.patientId, retryKey]);
 
   if (booking === null) notFound();
   if (booking === undefined) {
     return (
       <AppShell role="patient">
-        <p className="text-body-md text-on-surface-variant">Loading booking…</p>
+        <div className="mx-auto max-w-[40rem] space-y-lg">
+          {loadError ? (
+            <ErrorState title="This booking didn’t load" message="Check your connection, then try again." onRetry={() => setRetryKey((k) => k + 1)} />
+          ) : (
+            <div aria-busy="true" className="space-y-lg"><SkeletonCard lines={4} /><SkeletonCard lines={2} /></div>
+          )}
+        </div>
       </AppShell>
     );
   }
@@ -132,107 +155,93 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
   const timelineIndex = TIMELINE.indexOf(booking.status);
   const orNumber = `OR-${booking.id.toUpperCase()}`;
 
+  const hasTime = booking.slotStartTime !== "00:00";
+  const showFee = showPaymentStatus(booking.status, booking.paymentStatus);
+
   return (
     <AppShell role="patient">
       <div className="mx-auto max-w-[40rem] space-y-lg">
-        {isClosed && (
-          <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
-            This booking is no longer active.
-          </p>
-        )}
+        <Link href="/patient/bookings" className="inline-flex min-h-11 items-center gap-xs text-label-md font-medium text-primary hover:underline">
+          <Icon name="chevron_left" className="text-[14px]" />
+          Your bookings
+        </Link>
 
-        <Card>
-          <div className="mb-md flex items-start justify-between">
+        <header className="flex flex-wrap items-start justify-between gap-md">
+          <div className="min-w-0 space-y-xs">
+            <h1 className="text-balance text-headline-lg-mobile text-on-surface sm:text-headline-lg">{formatClinicDate(booking.appointmentDate)}</h1>
+            <p className="text-body-md tabular-nums text-on-surface-variant">
+              {hasTime && <>{formatClockTime(booking.slotStartTime)}–{formatClockTime(booking.slotEndTime)} · </>}
+              {booking.doctorName || "Doctor to be confirmed"}
+              {booking.queueNumber && (isCompleted || isClosed) && <> · {booking.queueNumber}</>}
+            </p>
+          </div>
+          <StatusPill status={booking.status} />
+        </header>
+
+        {isClosed && <FormAlert tone="info">This booking is no longer active.</FormAlert>}
+
+        {booking.queueNumber && !isClosed && !isCompleted && (
+          <Card className="flex items-center justify-between gap-md">
             <div>
-              <h1 className="text-headline-md text-on-surface">{booking.doctorName}</h1>
+              <p className="text-label-md text-on-surface-variant">Your queue number</p>
+              <p className="whitespace-nowrap text-headline-lg tabular-nums text-primary sm:text-display-sm">{booking.queueNumber}</p>
             </div>
-            <StatusPill status={booking.status} />
-          </div>
-          <div className="mb-md flex flex-wrap gap-md text-label-md text-on-surface-variant">
-            <span>{booking.appointmentDate}</span>
-            {booking.slotStartTime !== "00:00" && <span>{booking.slotStartTime} - {booking.slotEndTime}</span>}
-            {booking.queueNumber && <span>Queue #{booking.queueNumber}</span>}
-          </div>
-
-          {!isClosed && (
-            <div className="mb-md">
-              <BookingTimeline steps={TIMELINE} currentIndex={timelineIndex} />
-            </div>
-          )}
-
-          {showPaymentStatus(booking.status, booking.paymentStatus) ? (
-            <div className="mb-md flex flex-wrap items-center gap-sm text-body-md">
-              <span className="font-bold">Amount Due:</span> ₱{booking.amountDue}
-              <StatusPill status={booking.paymentStatus} />
-              {booking.paymentStatus === "Waived" && booking.waivedReason && (
-                <span className="text-label-sm text-on-surface-variant">
-                  (PF waived: {booking.waivedReason})
-                </span>
-              )}
-            </div>
-          ) : (
-            !isVoidBooking(booking.status) && (
-              <div className="mb-md flex flex-wrap items-center gap-sm text-body-md">
-                <span className="font-bold">Estimated fee:</span> ₱{booking.amountDue}
-                <span className="text-label-sm text-on-surface-variant">Paid at the clinic after your visit</span>
-              </div>
-            )
-          )}
-          <div className="flex flex-wrap gap-md text-label-sm text-on-surface-variant">
-            <span>Payment mode: {booking.paymentMode === "PayAtClinic" ? "Pay at Clinic" : "Online"}</span>
-            <span>Created: {booking.createdAt}</span>
-          </div>
-        </Card>
-
-        {canShowReceipt && (
-          <Card className="flex flex-wrap items-center justify-between gap-md">
-            <p className="text-body-md text-on-surface">Receipt available</p>
-            <Button variant="secondary" onClick={() => setReceiptOpen(true)}>
-              View / Print Receipt
-            </Button>
-          </Card>
-        )}
-
-        {isCompleted && (
-          <Card className="flex flex-wrap items-center justify-between gap-md">
-            <div>
-              <h3 className="text-headline-sm text-on-surface">How was your appointment?</h3>
-              <p className="text-label-md text-on-surface-variant">Share your experience with {booking.doctorName}.</p>
-            </div>
-            <Link href={`/patient/reviews/${booking.id}`}>
-              <Button>Leave a Review</Button>
-            </Link>
-          </Card>
-        )}
-
-        {canPatientCancel && (
-          <Card>
-            <Button variant="danger" onClick={() => setCancelOpen(true)}>
-              Cancel Booking
-            </Button>
+            <p className="max-w-[14rem] text-right text-body-sm text-on-surface-variant">Show this at the front desk when you arrive.</p>
           </Card>
         )}
 
         {!isClosed && (
-          <div className="flex flex-col gap-sm text-label-md text-primary sm:flex-row sm:gap-lg">
-            <Link href="/patient/documents" className="hover:underline">
-              Jump to My Documents
-            </Link>
-            <Link href="/patient/lab-results" className="hover:underline">
-              Jump to My Labs
-            </Link>
-          </div>
+          <Card>
+            <h2 className="sr-only">Progress</h2>
+            <BookingTimeline steps={TIMELINE} currentIndex={timelineIndex} />
+          </Card>
         )}
-        {isClosed && (
-          <div className="flex flex-col gap-sm text-label-md text-primary sm:flex-row sm:gap-lg">
-            <Link href="/patient/documents" className="hover:underline">
-              My Documents
-            </Link>
-            <Link href="/patient/lab-results" className="hover:underline">
-              My Labs
-            </Link>
-          </div>
+
+        <Card>
+          <h2 className="mb-md text-headline-sm text-on-surface">Payment</h2>
+          <dl className="grid grid-cols-2 gap-md">
+            {showFee ? (
+              <InfoField label="Amount due" value={<span className="flex flex-wrap items-center gap-sm"><span className="tabular-nums">{formatPeso(booking.amountDue)}</span><StatusPill status={booking.paymentStatus} /></span>} className="col-span-2" />
+            ) : (
+              !isVoidBooking(booking.status) && (
+                <InfoField label="Estimated fee" value={<><span className="tabular-nums">{formatPeso(booking.amountDue)}</span><span className="block text-label-md text-on-surface-variant">Paid at the clinic after your visit</span></>} className="col-span-2" />
+              )
+            )}
+            <InfoField label="Payment mode" value={booking.paymentMode === "PayAtClinic" ? "Pay at clinic" : "Online"} />
+            <InfoField label="Booked on" value={formatClinicDate(booking.createdAt)} />
+          </dl>
+          {booking.paymentStatus === "Waived" && booking.waivedReason && (
+            <p className="mt-md rounded-lg bg-surface-container-low px-md py-sm text-body-sm text-on-surface">Professional fee waived: {booking.waivedReason}</p>
+          )}
+          {canShowReceipt && (
+            <div className="mt-md border-t border-outline-variant pt-md">
+              <Button variant="secondary" onClick={() => setReceiptOpen(true)}>
+                <Icon name="print" className="text-[16px]" />
+                View receipt
+              </Button>
+            </div>
+          )}
+        </Card>
+
+        {isCompleted && (
+          <Card className="flex flex-wrap items-center justify-between gap-md">
+            <div>
+              <h2 className="text-headline-sm text-on-surface">How was your visit?</h2>
+              <p className="text-body-md text-on-surface-variant">Rate {booking.doctorName || "your doctor"} to help other patients.</p>
+            </div>
+            <Link href={`/patient/reviews/${booking.id}`} className={buttonStyles("primary")}>Leave a review</Link>
+          </Card>
         )}
+
+        <nav aria-label="Related records" className="flex flex-wrap gap-sm">
+          <Link href="/patient/documents" className={buttonStyles("ghost", "!px-md")}>Documents</Link>
+          <Link href="/patient/lab-results" className={buttonStyles("ghost", "!px-md")}>Lab results</Link>
+          {canPatientCancel && (
+            <Button variant="ghost" className="!px-md text-error sm:ml-auto" onClick={() => setCancelOpen(true)}>
+              Cancel booking
+            </Button>
+          )}
+        </nav>
       </div>
 
       <Modal
@@ -242,7 +251,7 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           setCancelReason("");
           setActionError("");
         }}
-        title="Cancel Booking"
+        title="Cancel this booking?"
         footer={
           <>
             <Button
@@ -254,23 +263,20 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
               }}
               disabled={submitting}
             >
-              Keep Booking
+              Keep booking
             </Button>
-            <Button variant="danger" onClick={handleCancel} disabled={submitting}>
-              {submitting ? "Cancelling..." : "Confirm Cancel"}
+            <Button variant="danger" onClick={handleCancel} loading={submitting}>
+              {submitting ? "Cancelling…" : "Cancel booking"}
             </Button>
           </>
         }
       >
-        <p className="mb-md text-body-md text-on-surface-variant">Are you sure you want to cancel this booking?</p>
-        {actionError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{actionError}</p>}
-        <textarea
-          value={cancelReason}
-          onChange={(e) => setCancelReason(e.target.value)}
-          placeholder="Reason (optional)"
-          className="w-full rounded-lg border border-outline-variant p-md text-body-md"
-          rows={3}
-        />
+        <div className="space-y-xs">
+          <p className="text-body-md text-on-surface-variant">You&apos;ll lose your place in the queue. You can book again afterwards.</p>
+          {actionError && <FormAlert>{actionError}</FormAlert>}
+          <label htmlFor="cancelReason" className={labelStyles}>Reason <span className="font-normal text-on-surface-variant">(optional)</span></label>
+          <textarea id="cancelReason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} className={inputStyles("py-md")} rows={3} />
+        </div>
       </Modal>
 
       {/* Patient.md §7: "modal with OR number, names, services, amount,
@@ -281,28 +287,18 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
         title="Receipt"
         footer={<Button onClick={() => setReceiptOpen(false)}>Close</Button>}
       >
-        <div className="space-y-sm text-body-md">
-          <p className="text-center text-headline-sm text-on-surface">OR #{orNumber}</p>
-          <div className="border-t border-outline-variant pt-sm">
-            <ReceiptField label="Doctor" value={booking.doctorName} />
-            <ReceiptField label="Date" value={booking.appointmentDate} />
-            <ReceiptField label="Amount" value={`₱${booking.totalFee}`} />
-            <ReceiptField label="Method" value={booking.paymentMode === "PayAtClinic" ? "Pay at Clinic" : "Online"} />
-            {booking.waivedReason && (
-              <ReceiptField label="Waived Reason" value={booking.waivedReason} />
-            )}
-          </div>
+        <div className="space-y-md">
+          <p className="break-all text-center font-mono text-body-md text-on-surface">OR {orNumber}</p>
+          <dl className="grid grid-cols-2 gap-md border-t border-outline-variant pt-md">
+            <InfoField label="Doctor" value={booking.doctorName} />
+            <InfoField label="Visit date" value={formatClinicDate(booking.appointmentDate)} />
+            <InfoField label="Amount" value={<span className="tabular-nums">{formatPeso(booking.totalFee)}</span>} />
+            <InfoField label="Method" value={booking.paymentMode === "PayAtClinic" ? "Pay at clinic" : "Online"} />
+            {booking.waivedReason && <InfoField label="Waived reason" value={booking.waivedReason} className="col-span-2" />}
+          </dl>
         </div>
       </Modal>
     </AppShell>
   );
 }
 
-function ReceiptField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-label-sm text-on-surface-variant">{label}</p>
-      <p className="text-body-md text-on-surface">{value}</p>
-    </div>
-  );
-}

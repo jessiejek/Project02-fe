@@ -5,6 +5,7 @@ import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorRatings } from "@/lib/data/admin";
 import { queryDayStatuses } from "@/lib/data/scheduling";
 import { DoctorsBrowseClient } from "./DoctorsBrowseClient";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 // Stitch screen_4_browse_doctors. Retiring mockDoctors per
 // Implementation-Phases/05-doctors-staff.md — real doctors only from here on.
@@ -43,7 +44,7 @@ export default async function BrowseDoctorsPage() {
   return (
     <AppShell role="patient">
       <div className="space-y-lg">
-        <h2 className="text-headline-lg text-on-surface">Browse Doctors</h2>
+        <PageHeader title="Clinic doctors" description="See who is in today, their specialty and what other patients say." />
         <DoctorsBrowseClient doctors={cards} specializations={specializations} />
       </div>
     </AppShell>

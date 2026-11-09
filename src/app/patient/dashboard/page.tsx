@@ -11,6 +11,9 @@ import { StatCard } from "@/components/ui/Card";
 import { Toast } from "@/components/ui/Toast";
 import { buttonStyles } from "@/components/ui/buttonStyles";
 import { Icon } from "@/components/ui/Icon";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { formatClinicDate, formatClockTime } from "@/lib/format";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDoctorRatings } from "@/lib/data/admin";
@@ -32,7 +35,7 @@ interface RecentItem {
   kind: "record" | "prescription";
   date: string;
   title: string;
-  subtitle: string;
+  doctor: string;
 }
 
 interface DoctorCard {
@@ -103,7 +106,7 @@ export default function PatientDashboardPage() {
 
         const recordItems: RecentItem[] = consultRes.map((c) => {
           const date = c.bookings?.appointment_date ?? "";
-          return { kind: "record" as const, date, title: c.chief_complaint ?? "", subtitle: `${c.doctors?.staff_accounts?.full_name ?? ""} • ${date}` };
+          return { kind: "record" as const, date, title: c.chief_complaint ?? "", doctor: c.doctors?.staff_accounts?.full_name ?? "" };
         });
         const rxItems: RecentItem[] = rxRes.map((g) => {
           const staff = g.bookings?.doctors?.staff_accounts;
@@ -112,7 +115,7 @@ export default function PatientDashboardPage() {
             kind: "prescription" as const,
             date,
             title: (g.prescription_line_items ?? []).map((i) => i.generic_name).join(", "),
-            subtitle: `${staff?.full_name ?? ""} • ${date}`,
+            doctor: staff?.full_name ?? "",
           };
         });
         setRecentItems([...recordItems, ...rxItems].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 2));
@@ -148,8 +151,8 @@ export default function PatientDashboardPage() {
   if (!loaded) {
     return (
       <AppShell role="patient">
-        <div className="space-y-xl">
-          <p role="status" className="text-body-md text-on-surface-variant">Loading your dashboard…</p>
+        <div className="space-y-xl" aria-busy="true">
+          <p role="status" className="sr-only">Loading your dashboard…</p>
           <SkeletonCard lines={3} />
           <SkeletonStats count={4} />
         </div>
@@ -196,7 +199,7 @@ export default function PatientDashboardPage() {
             <Toast
               variant="warning"
               message="Please verify the email address used for clinic messages."
-              actionLabel="Resend Verification Email"
+              actionLabel="Resend verification email"
               onAction={handleResendVerification}
               actionLoading={resending}
             />
@@ -204,143 +207,153 @@ export default function PatientDashboardPage() {
           {!consentedAt && (
             <Toast
               variant="warning"
-              message="Please review your privacy consent."
-              actionLabel="Review Now"
+              message="Please review how the clinic uses your information."
+              actionLabel="Review consent"
               actionHref="/patient/privacy-consent"
             />
           )}
         </div>
 
-        <div>
-          <h2 className="text-headline-lg text-on-surface">Welcome back, {firstName}</h2>
-          <p className="text-body-lg text-on-surface-variant">
-            Manage your appointments, payments, and medical documents.
-          </p>
-        </div>
+        <PageHeader
+          title={firstName ? `Welcome back, ${firstName}` : "Welcome back"}
+          description="Your visits, what you owe, and your records from the clinic."
+          actions={
+            <Link href="/patient/bookings" className={buttonStyles("primary")}>
+              <Icon name="add_circle" className="text-[16px]" />
+              Book a visit
+            </Link>
+          }
+        />
 
-        {nextBooking && (
-              <div className="relative overflow-hidden rounded-xl bg-primary p-lg text-on-primary shadow-lg">
-                <h3 className="mb-md text-label-sm uppercase tracking-widest opacity-80">Next Appointment</h3>
-                <h4 className="text-headline-md">{nextBooking.doctorName}</h4>
-                <div className="mb-lg flex items-center justify-between rounded-lg bg-on-primary/10 p-md">
-                  <div className="flex items-center gap-sm">
-                    <Icon name="calendar_today" />
-                    <span className="text-label-md">{nextBooking.appointmentDate}</span>
-                  </div>
-                  <div className="flex items-center gap-sm">
-                    <Icon name="schedule" />
-                    <span className="text-label-md">{nextBooking.slotStartTime}</span>
-                  </div>
-                </div>
-                <Link href={`/patient/bookings/${nextBooking.id}`} className={buttonStyles("secondary", "w-full !bg-on-primary !text-primary")}>
-                    View Booking
-                  </Link>
+        {nextBooking ? (
+          <section aria-labelledby="next-appointment" className="rounded-xl bg-primary p-lg text-on-primary shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-md">
+              <div className="min-w-0 space-y-xs">
+                <h2 id="next-appointment" className="text-label-md font-medium text-on-primary/80">Next Appointment</h2>
+                <p className="text-balance text-headline-md">{formatClinicDate(nextBooking.appointmentDate)}</p>
+                <p className="text-body-md tabular-nums text-on-primary/90">
+                  {formatClockTime(nextBooking.slotStartTime)} · {nextBooking.doctorName || "Doctor to be confirmed"}
+                </p>
               </div>
+              <Link
+                href={`/patient/bookings/${nextBooking.id}`}
+                className={buttonStyles("secondary", "!border-transparent !bg-on-primary !text-primary hover:!bg-on-primary/90")}
+              >
+                View booking
+              </Link>
+            </div>
+          </section>
+        ) : (
+          <section className="flex flex-wrap items-center justify-between gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
+            <div className="space-y-xs">
+              <h2 className="text-headline-sm text-on-surface">No upcoming appointment</h2>
+              <p className="text-body-md text-on-surface-variant">Pick a doctor and a day that works for you.</p>
+            </div>
+            <Link href="/patient/doctors" className={buttonStyles("secondary")}>Find a doctor</Link>
+          </section>
         )}
 
-        <div className="grid grid-cols-1 gap-lg md:grid-cols-4">
+        <section aria-label="Your numbers" className="grid grid-cols-2 gap-md lg:grid-cols-4">
           <StatCard icon="calendar_today" value={upcoming.length} label="Active Appointments" href="/patient/bookings" />
-          <StatCard icon="receipt_long" value={paymentDue.length} label="Payment Due" href="/patient/bookings" />
-          <StatCard icon="check_circle" value={completed.length} label="Completed Appointments" href="/patient/bookings" />
+          <StatCard icon="receipt_long" value={paymentDue.length} label="Visits to pay for" href="/patient/bookings" />
+          <StatCard icon="check_circle" value={completed.length} label="Completed visits" href="/patient/bookings" />
           <StatCard icon="medication" value={prescriptionCount} label="Prescriptions" href="/patient/prescriptions" />
-        </div>
+        </section>
 
-        <div className="pb-sm">
-          <h3 className="mb-md text-headline-sm text-on-surface">Quick Actions</h3>
-          <div className="flex flex-wrap gap-sm">
-            <Link href="/patient/bookings" className={buttonStyles("primary")}>
-                <Icon name="add_circle" className="text-[20px]" />
-                Book a Visit
-              </Link>
-            <Link href="/patient/doctors" className={buttonStyles("secondary")}>
-                <Icon name="medical_services" className="text-[20px]" />
-                Find a Doctor
-              </Link>
-            <Link href="/patient/bookings" className={buttonStyles("secondary")}>
-                <Icon name="calendar_month" className="text-[20px]" />
-                My Bookings
-              </Link>
-            <Link href="/patient/privacy-consent" className={buttonStyles("secondary")}>
-                <Icon name="gavel" className="text-[20px]" />
-                Review Consent
-              </Link>
-            <Link href="/patient/medical-records" className={buttonStyles("secondary")}>
-                <Icon name="folder_shared" className="text-[20px]" />
-                Medical Records
-              </Link>
-            <Link href="/patient/prescriptions" className={buttonStyles("secondary")}>
-                <Icon name="prescriptions" className="text-[20px]" />
-                Prescriptions
-              </Link>
-            <Link href="/patient/documents" className={buttonStyles("secondary")}>
-                <Icon name="description" className="text-[20px]" />
-                My Documents
-              </Link>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-lg lg:grid-cols-12">
-          <div className="space-y-lg lg:col-span-12">
-            <section>
-              <div className="mb-md flex items-center justify-between">
-                <h3 className="text-headline-sm text-on-surface">Clinic Doctors</h3>
-                <Link href="/patient/doctors" className="text-label-md text-primary hover:underline">
-                  View All
-                </Link>
-              </div>
-              <div className="flex gap-lg overflow-x-auto pb-md">
-                {doctors.length === 0 && <p className="text-body-md text-on-surface-variant">No doctors are listed yet.</p>}
-                {doctors.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex min-w-[240px] flex-col items-center rounded-xl border border-outline-variant bg-surface-container-lowest p-md text-center sm:min-w-[280px]"
-                  >
-                    <div className="mb-md flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary-fixed bg-surface-container-high">
-                      <Icon name="person" className="text-[32px] text-on-surface-variant" />
-                    </div>
-                    <h4 className="text-headline-sm text-on-surface">{doc.name}</h4>
-                    <p className="mb-md text-label-md text-on-surface-variant">{doc.specialization}</p>
-                    <div className="mb-lg flex items-center gap-xs">
-                      {doc.reviewsUnavailable ? <span className="text-label-sm text-on-surface-variant">Reviews unavailable</span> : doc.reviewCount > 0 ? <>
-                      <Icon name="star" className="text-sm text-tertiary" />
-                      <span className="text-label-sm font-bold">{doc.rating}</span>
-                      <span className="text-label-sm text-on-surface-variant">({doc.reviewCount} reviews)</span>
-                      </> : <span className="text-label-sm text-on-surface-variant">No reviews yet</span>}
-                    </div>
-                    <Link href={`/patient/doctors/${doc.id}`} className={buttonStyles("secondary", "w-full")}>
-                        Profile
-                      </Link>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section>
-              <h3 className="mb-md text-headline-sm text-on-surface">Recent Medical Records &amp; Prescriptions</h3>
-              <div className="space-y-sm">
-                {recentItems.length === 0 && (
-                  <p className="text-body-md text-on-surface-variant">No records yet.</p>
-                )}
+        <div className="grid grid-cols-1 gap-xl lg:grid-cols-2">
+          <section className="space-y-md">
+            <div className="flex items-center justify-between gap-md">
+              <h2 className="text-headline-sm text-on-surface">Latest records</h2>
+              <Link href="/patient/medical-records" className="text-label-md font-medium text-primary hover:underline">All records</Link>
+            </div>
+            {recentItems.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-outline-variant p-lg text-body-md text-on-surface-variant">
+                Records and prescriptions appear here after your first visit.
+              </p>
+            ) : (
+              <ul className="space-y-sm">
                 {recentItems.map((item, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-xl border border-outline-variant bg-surface-container-lowest p-md">
-                    <div className="flex items-center gap-md">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant">
-                        <Icon name={item.kind === "record" ? "analytics" : "medication"} />
-                      </div>
-                      <div>
-                        <h5 className="text-headline-sm text-on-surface">{item.title}</h5>
-                        <p className="text-label-md text-on-surface-variant">{item.subtitle}</p>
-                      </div>
-                    </div>
-                    <Link href={item.kind === "record" ? "/patient/medical-records" : "/patient/prescriptions"} className="rounded-lg p-xs text-primary hover:underline" aria-label={`View ${item.kind === "record" ? "medical records" : "prescriptions"}`}>View</Link>
-                  </div>
+                  <li key={i}>
+                    <Link
+                      href={item.kind === "record" ? "/patient/medical-records" : "/patient/prescriptions"}
+                      className="flex items-center gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-md transition-colors hover:border-primary"
+                    >
+                      <Icon name={item.kind === "record" ? "description" : "medication"} className="shrink-0 text-primary" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-label-md text-on-surface-variant">
+                          {item.kind === "record" ? "Visit record" : "Prescription"} · <span className="tabular-nums">{formatClinicDate(item.date)}</span>
+                        </span>
+                        <span className="block truncate text-body-md font-medium text-on-surface">{item.title || "Details on file"}</span>
+                        {item.doctor && <span className="block text-label-md text-on-surface-variant">{item.doctor}</span>}
+                      </span>
+                      <Icon name="chevron_right" className="shrink-0 text-[14px] text-on-surface-variant" />
+                    </Link>
+                  </li>
                 ))}
-              </div>
-            </section>
-          </div>
+              </ul>
+            )}
+            <nav aria-label="More records" className="flex flex-wrap gap-sm">
+              <Link href="/patient/prescriptions" className={buttonStyles("ghost", "!px-md")}>Prescriptions</Link>
+              <Link href="/patient/lab-results" className={buttonStyles("ghost", "!px-md")}>Lab results</Link>
+              <Link href="/patient/documents" className={buttonStyles("ghost", "!px-md")}>Documents</Link>
+            </nav>
+          </section>
 
-
+          <section className="space-y-md">
+            <div className="flex items-center justify-between gap-md">
+              <h2 className="text-headline-sm text-on-surface">Clinic doctors</h2>
+              <Link href="/patient/doctors" className="text-label-md font-medium text-primary hover:underline">All doctors</Link>
+            </div>
+            {doctors.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-outline-variant p-lg text-body-md text-on-surface-variant">No doctors are listed yet.</p>
+            ) : (
+              <ul className="space-y-sm">
+                {doctors.slice(0, 4).map((doc) => (
+                  <li key={doc.id}>
+                    <Link
+                      href={`/patient/doctors/${doc.id}`}
+                      className="flex items-center justify-between gap-md rounded-xl border border-outline-variant bg-surface-container-lowest p-md transition-colors hover:border-primary"
+                    >
+                      <span className="min-w-0">
+                        <span className="block break-words text-body-md font-medium text-on-surface">{doc.name}</span>
+                        <span className="block text-label-md text-on-surface-variant">{doc.specialization}</span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-xs text-label-md text-on-surface-variant">
+                        {doc.reviewsUnavailable ? (
+                          "Reviews unavailable"
+                        ) : doc.reviewCount > 0 ? (
+                          <>
+                            <Icon name="star" className="text-[14px] text-tertiary" />
+                            <span className="font-medium tabular-nums text-on-surface">{doc.rating}</span>
+                            <span className="tabular-nums">({doc.reviewCount})</span>
+                          </>
+                        ) : (
+                          "No reviews yet"
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
+
+        {upcoming.length > 1 && (
+          <section className="space-y-md">
+            <h2 className="text-headline-sm text-on-surface">Also coming up</h2>
+            <ul className="divide-y divide-outline-variant/40 rounded-xl border border-outline-variant bg-surface-container-lowest">
+              {upcoming.slice(1, 4).map((b) => (
+                <li key={b.id}>
+                  <Link href={`/patient/bookings/${b.id}`} className="flex flex-wrap items-center justify-between gap-sm px-lg py-md hover:bg-surface-container-low">
+                    <span className="text-body-md tabular-nums text-on-surface">{formatClinicDate(b.appointmentDate)} · {formatClockTime(b.slotStartTime)}</span>
+                    <span className="flex items-center gap-sm text-label-md text-on-surface-variant">{b.doctorName}<StatusPill status={b.status} /></span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </AppShell>
   );

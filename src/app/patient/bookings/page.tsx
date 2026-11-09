@@ -12,11 +12,18 @@ import { queryMyBookings, createOnlineBooking, cancelMyBooking } from "@/lib/dat
 import { ApiError } from "@/lib/api/client";
 import { todayManila } from "@/lib/clock";
 import { showPaymentStatus } from "@/lib/paymentDisplay";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { Card } from "@/components/ui/Card";
+import { SkeletonTable } from "@/components/ui/Skeleton";
+import { inputStyles, labelStyles, hintStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate, formatClinicDateShort } from "@/lib/format";
 
 const TABS = [
   { id: "all", label: "All" },
   { id: "upcoming", label: "Upcoming" },
-  { id: "forPayment", label: "For Payment" },
+  { id: "forPayment", label: "To pay" },
   { id: "completed", label: "Completed" },
   { id: "cancelled", label: "Cancelled" },
 ];
@@ -57,6 +64,8 @@ export default function MyBookingsPage() {
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState("");
   const [cancelling, setCancelling] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [bookedNote, setBookedNote] = useState("");
   const todayStr = todayManila();
   const [bookDate, setBookDate] = useState(todayStr);
 
@@ -77,6 +86,9 @@ export default function MyBookingsPage() {
     try {
       const rows = await queryMyBookings(supabase, patientId);
       setBookings(project(rows));
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
     } finally {
       setBookingsLoading(false);
     }
@@ -84,7 +96,8 @@ export default function MyBookingsPage() {
 
   useEffect(() => {
     if (!session?.patientId) return;
-    loadBookings(session.patientId);
+    const patientId = session.patientId;
+    queueMicrotask(() => { void loadBookings(patientId); });
   }, [session?.patientId]);
 
   function closeCancel() {
@@ -111,9 +124,11 @@ export default function MyBookingsPage() {
   async function handleBookToday() {
     if (!session?.patientId) return;
     setBookError("");
+    setBookedNote("");
     setBooking(true);
     try {
       await createOnlineBooking({ appointmentDate: bookDate });
+      setBookedNote(bookDate === todayStr ? "You’re in today’s queue. Your number is in the list below." : `You’re booked for ${formatClinicDate(bookDate)}.`);
       await loadBookings(session.patientId);
     } catch (err) {
       setBookError(err instanceof ApiError ? String((err.body as { message?: string })?.message ?? err.message) : "Could not join the queue. Please try again.");
@@ -125,80 +140,104 @@ export default function MyBookingsPage() {
   if (loading || !session?.patientId) {
     return (
       <AppShell role="patient">
-        <p className="text-body-md text-on-surface-variant">Loading your bookings...</p>
+        <div className="space-y-lg" aria-busy="true">
+          <p role="status" className="sr-only">Loading your bookings…</p>
+          <SkeletonTable rows={5} columns={5} />
+        </div>
       </AppShell>
     );
   }
 
   const rows = bookings.filter((b) => matchesTab(b, tab));
+  const tabs = TABS.map((t) => {
+    const n = bookings.filter((b) => matchesTab(b, t.id)).length;
+    return { ...t, label: bookingsLoading || t.id === "all" ? t.label : `${t.label} (${n})` };
+  });
+  const cancelTarget = bookings.find((x) => x.id === cancelId);
+  const cancelButton = (r: BookingRow, label: string) => (
+    <Button variant="ghost" className="!min-h-9 !px-sm !py-xs text-label-md text-error" onClick={(e) => { e.stopPropagation(); setCancelId(r.id); }}>
+      {label}
+    </Button>
+  );
 
   return (
     <AppShell role="patient">
       <div className="space-y-lg">
-        <div className="flex items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">My Bookings</h2>
-          <div className="flex items-center gap-sm">
-            <input
-              type="date"
-              aria-label="Visit date"
-              value={bookDate}
-              min={todayStr}
-              onChange={(e) => setBookDate(e.target.value || todayStr)}
-              className="rounded-lg border border-outline-variant px-md py-sm text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <Button onClick={handleBookToday} loading={booking}>
-              {booking ? "Booking…" : bookDate === todayStr ? "Join today's queue" : "Book this day"}
-            </Button>
-          </div>
-        </div>
-        {bookError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{bookError}</p>}
-        <Tabs tabs={TABS} activeId={tab} onChange={setTab} />
-        <DataTable
-          columns={[
-            { header: "Doctor", render: (r) => r.doctorName },
-            { header: "Date", render: (r) => r.appointmentDate },
-            { header: "Queue #", align: "center", render: (r) => r.queueNumber ?? "—" },
-            { header: "Status", render: (r) => <StatusPill status={r.status} /> },
-            { header: "Payment", render: (r) => (showPaymentStatus(r.status, r.paymentStatus) ? <StatusPill status={r.paymentStatus} /> : <span className="text-on-surface-variant">—</span>) },
-            {
-              header: "",
-              render: (r) =>
-                r.status === "Pending" ? (
-                  <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" onClick={(e) => { e.stopPropagation(); setCancelId(r.id); }}>
-                    Cancel
-                  </Button>
-                ) : null,
-            },
-          ]}
-          rows={rows}
-          rowKey={(r) => r.id}
-          rowHref={(r) => `/patient/bookings/${r.id}`}
-          loading={bookingsLoading}
-          emptyMessage="No bookings in this category."
-          renderMobileCard={(r) => (
-            <div className="space-y-xs">
-              <div className="flex items-center justify-between">
-                <p className="text-body-md font-medium text-on-surface">{r.doctorName}</p>
-                <StatusPill status={r.status} />
-              </div>
-              <div className="flex items-center justify-between text-label-sm text-on-surface-variant">
-                <span>{r.appointmentDate}</span>
-                {showPaymentStatus(r.status, r.paymentStatus) && <StatusPill status={r.paymentStatus} />}
-              </div>
-              {r.status === "Pending" && (
-                <Button variant="ghost" className="!px-sm !py-xs text-label-sm text-error" onClick={(e) => { e.stopPropagation(); setCancelId(r.id); }}>
-                  Cancel booking
-                </Button>
-              )}
+        <PageHeader title="Your bookings" description="Book a visit, check your queue number, and see what you’ve paid." />
+
+        <Card>
+          <form
+            className="flex flex-wrap items-end gap-md"
+            onSubmit={(e) => { e.preventDefault(); handleBookToday(); }}
+          >
+            <div className="min-w-0 flex-1 space-y-xs sm:max-w-[16rem]">
+              <label htmlFor="bookDate" className={labelStyles}>Visit date</label>
+              <input
+                id="bookDate"
+                type="date"
+                value={bookDate}
+                min={todayStr}
+                onChange={(e) => setBookDate(e.target.value || todayStr)}
+                className={inputStyles("tabular-nums")}
+              />
             </div>
-          )}
-        />
+            <Button type="submit" loading={booking}>
+              {booking ? "Booking…" : bookDate === todayStr ? "Join today’s queue" : "Book this day"}
+            </Button>
+            <p className={`${hintStyles} basis-full`}>First come, first served. You get a queue number when you book; pay at the clinic after your visit.</p>
+          </form>
+        </Card>
+        {bookError && <FormAlert>{bookError}</FormAlert>}
+        {bookedNote && <FormAlert tone="success">{bookedNote}</FormAlert>}
+
+        {loadError ? (
+          <ErrorState
+            title="Your bookings didn’t load"
+            message="Check your connection, then try again."
+            retrying={bookingsLoading}
+            onRetry={() => { setBookingsLoading(true); loadBookings(session.patientId!); }}
+          />
+        ) : (
+          <>
+            <Tabs tabs={tabs} activeId={tab} onChange={setTab} />
+            <DataTable
+              columns={[
+                { header: "Visit date", render: (r) => <span className="font-medium tabular-nums text-on-surface">{formatClinicDateShort(r.appointmentDate)}</span> },
+                { header: "Doctor", render: (r) => r.doctorName || "—" },
+                { header: "Queue", align: "right", render: (r) => <span className="tabular-nums">{r.queueNumber ?? "—"}</span> },
+                { header: "Status", render: (r) => <StatusPill status={r.status} /> },
+                { header: "Payment", render: (r) => (showPaymentStatus(r.status, r.paymentStatus) ? <StatusPill status={r.paymentStatus} /> : <span className="text-on-surface-variant">—</span>) },
+                { header: "", align: "right", render: (r) => (r.status === "Pending" ? cancelButton(r, "Cancel") : null) },
+              ]}
+              rows={rows}
+              rowKey={(r) => r.id}
+              rowHref={(r) => `/patient/bookings/${r.id}`}
+              loading={bookingsLoading}
+              emptyMessage={bookings.length === 0 ? "No bookings yet. Pick a date above to book your first visit." : "No bookings in this list."}
+              renderMobileCard={(r) => (
+                <div className="space-y-xs">
+                  <div className="flex items-start justify-between gap-md">
+                    <div className="min-w-0">
+                      <p className="text-body-md font-medium tabular-nums text-on-surface">{formatClinicDateShort(r.appointmentDate)}</p>
+                      <p className="text-label-md text-on-surface-variant">{r.doctorName || "—"}{r.queueNumber && <> · <span className="tabular-nums">{r.queueNumber}</span></>}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-xs">
+                      <StatusPill status={r.status} />
+                      {showPaymentStatus(r.status, r.paymentStatus) && <StatusPill status={r.paymentStatus} />}
+                    </div>
+                  </div>
+                  {r.status === "Pending" && cancelButton(r, "Cancel booking")}
+                </div>
+              )}
+            />
+          </>
+        )}
       </div>
 
       <Modal
         isOpen={cancelId !== null}
         onClose={closeCancel}
-        title="Cancel booking"
+        title={cancelTarget ? `Cancel your ${formatClinicDateShort(cancelTarget.appointmentDate)} visit?` : "Cancel booking"}
         footer={
           <>
             <Button variant="secondary" onClick={closeCancel} disabled={cancelling}>
@@ -211,12 +250,10 @@ export default function MyBookingsPage() {
         }
       >
         <div className="space-y-sm text-body-md text-on-surface">
-          {cancelError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{cancelError}</p>}
+          {cancelError && <FormAlert>{cancelError}</FormAlert>}
           <p>
-            Cancel your booking{(() => {
-              const b = bookings.find((x) => x.id === cancelId);
-              return b ? ` for ${b.appointmentDate} (queue ${b.queueNumber ?? "—"})` : "";
-            })()}? You&apos;ll lose your place in the queue.
+            {cancelTarget?.queueNumber ? <>You&apos;ll lose queue number <span className="font-medium tabular-nums">{cancelTarget.queueNumber}</span>.</> : <>You&apos;ll lose your place in the queue.</>}{" "}
+            You can book again afterwards.
           </p>
         </div>
       </Modal>

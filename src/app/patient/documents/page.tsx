@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { openPatientFile, queryPatientDocuments, uploadPatientDocument } from "@/lib/data/patientFiles";
 import { queryMyBookings } from "@/lib/data/bookings";
+import { PatientFileUpload, PatientFileRow } from "@/components/patient/PatientFileUpload";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { inputStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate, formatClinicDateShort } from "@/lib/format";
 
 interface BookingOption {
   id: string;
@@ -38,21 +41,29 @@ export default function DocumentsPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [listStatus, setListStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (!session?.patientId) return;
     const patientId = session.patientId;
 
     async function load() {
-      const [bookingRows, docsData] = await Promise.all([
-        queryMyBookings(null as never, patientId),
-        queryPatientDocuments(null as never, { patientId }),
-      ]);
+      let bookingRows, docsData;
+      try {
+        [bookingRows, docsData] = await Promise.all([
+          queryMyBookings(null as never, patientId),
+          queryPatientDocuments(null as never, { patientId }),
+        ]);
+      } catch {
+        setListStatus("error");
+        return;
+      }
 
       setBookings(
         bookingRows.map((b) => ({
           id: b.booking_id,
-          label: `${b.doctors?.staff_accounts?.full_name ?? "Doctor"} — ${b.appointment_date}`,
+          label: `${formatClinicDateShort(b.appointment_date)} · ${b.doctors?.staff_accounts?.full_name ?? "Doctor"}`,
         })),
       );
 
@@ -72,10 +83,11 @@ export default function DocumentsPage() {
           };
         }),
       );
+      setListStatus("ready");
     }
 
     load();
-  }, [session?.patientId]);
+  }, [session?.patientId, retryKey]);
 
   // Patient.md §8: "Can search by title/description/doctor" — doctor is
   // resolved via the document's linked booking.
@@ -135,102 +147,63 @@ export default function DocumentsPage() {
     setSuccess("Document uploaded.");
   }
 
-  if (loading || !session?.patientId) {
-    return (
-      <AppShell role="patient">
-        <p className="text-body-md text-on-surface-variant">Loading your documents...</p>
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell role="patient">
-      <div className="space-y-lg">
-        <h2 className="text-headline-lg text-on-surface">My Documents</h2>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by title, description, or doctor..."
-          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md sm:w-80"
-        />
-
-        <Card>
-          {error && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{error}</p>}
-          {success && <p className="mb-md rounded-lg bg-green-50 px-md py-sm text-body-sm text-green-800">{success}</p>}
-          <label className="mb-md flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-outline-variant p-xl text-center text-body-md text-on-surface-variant hover:bg-surface-container-low">
-            <Icon name="upload_file" className="mb-sm text-[28px]" />
-            {file ? file.name : "Drop a file here or click to upload"}
-            <span className="mt-xs text-label-sm">PDF / images / DOC — max 10 MB</span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,application/pdf,image/*"
-              onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
-                setError("");
-                setSuccess("");
-              }}
-            />
-          </label>
-          <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-            <div className="space-y-xs">
-              <label className="text-label-md text-on-surface-variant">Link to Booking *</label>
-              <select
-                value={bookingId}
-                onChange={(e) => setBookingId(e.target.value)}
-                className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
-              >
-                <option value="">Select a booking</option>
-                {bookings.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
-              <p className="text-label-sm text-on-surface-variant">Required</p>
-            </div>
-            <div className="space-y-xs">
-              <label className="text-label-md text-on-surface-variant">Title (optional)</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
-              />
-            </div>
-          </div>
-          <Button className="mt-md" onClick={handleUpload} disabled={uploading || !bookingId || !file}>
-            {uploading ? "Uploading..." : "Upload"}
-          </Button>
-        </Card>
-
-        {filtered.length === 0 ? (
-          <EmptyState icon="folder_open" message="No documents yet" />
+      <div className="mx-auto max-w-[48rem] space-y-lg">
+        <PageHeader title="Documents" description="Referral letters, IDs and other papers for a visit. Your doctor can open them." />
+        {loading || !session?.patientId || listStatus === "loading" ? (
+          <div className="space-y-lg" aria-busy="true"><SkeletonCard lines={4} /><SkeletonCard lines={2} /></div>
+        ) : listStatus === "error" ? (
+          <ErrorState title="Your documents didn’t load" message="Check your connection, then try again." onRetry={() => { setListStatus("loading"); setRetryKey((k) => k + 1); }} />
         ) : (
-          <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((doc) => (
-              <Card key={doc.id} className="flex items-center gap-md">
-                <Icon name="description" className="text-[28px] text-on-surface-variant" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-body-md text-on-surface">{doc.title ?? doc.fileName}</p>
-                  <p className="text-label-sm text-on-surface-variant">{doc.uploadedAt}</p>
-                </div>
-                <button
-                  type="button"
-                  aria-label={`Open ${doc.title ?? doc.fileName}`}
-                  className="text-on-surface-variant"
-                  onClick={() => {
-                    setError("");
-                    openPatientFile("document", doc.id).catch((e) =>
-                      setError(e instanceof Error ? e.message : "Could not open the file."),
-                    );
-                  }}
-                >
-                  <Icon name="download" />
-                </button>
-              </Card>
-            ))}
-          </div>
+          <>
+            <PatientFileUpload
+              heading="Add a document"
+              file={file}
+              fileInputRef={fileInputRef}
+              onFile={(f) => { setFile(f); setError(""); setSuccess(""); }}
+              bookings={bookings}
+              bookingId={bookingId}
+              onBooking={setBookingId}
+              textLabel="Title"
+              textValue={title}
+              onText={setTitle}
+              uploading={uploading}
+              onSubmit={handleUpload}
+              error={error}
+              success={success}
+              submitLabel="Upload document"
+            />
+            <section className="space-y-md">
+              <div className="flex flex-wrap items-end justify-between gap-md">
+                <h2 className="text-headline-sm text-on-surface">Your documents <span className="font-normal tabular-nums text-on-surface-variant">({documents.length})</span></h2>
+                {documents.length > 0 && (
+                  <label className="block w-full space-y-xs sm:w-72">
+                    <span className="text-label-md text-on-surface-variant">Search documents</span>
+                    <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title, description or doctor" className={inputStyles()} />
+                  </label>
+                )}
+              </div>
+              {filtered.length === 0 ? (
+                <EmptyState icon="folder_open" message={documents.length === 0 ? "No documents yet." : `No documents match “${search.trim()}”.`} />
+              ) : (
+                <ul className="divide-y divide-outline-variant/40 rounded-xl border border-outline-variant bg-surface-container-lowest">
+                  {filtered.map((doc) => (
+                    <PatientFileRow
+                      key={doc.id}
+                      icon="description"
+                      title={doc.title || doc.fileName}
+                      meta={<><span className="tabular-nums">{formatClinicDate(doc.uploadedAt)}</span>{doc.doctorName && <> · {doc.doctorName}</>}{doc.description && <> · {doc.description}</>}</>}
+                      onOpen={() => {
+                        setError("");
+                        openPatientFile("document", doc.id).catch((e) => setError(e instanceof Error ? e.message : "Could not open the file."));
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
         )}
       </div>
     </AppShell>

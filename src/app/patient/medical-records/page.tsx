@@ -9,6 +9,11 @@ import { Icon } from "@/components/ui/Icon";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryConsultations } from "@/lib/data/clinical";
 import { printHtml, escapeHtml } from "@/lib/print";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { inputStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate } from "@/lib/format";
 
 interface MedicalRecordEntry {
   id: string;
@@ -33,13 +38,21 @@ export default function MedicalRecordsPage() {
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [records, setRecords] = useState<MedicalRecordEntry[]>([]);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
       const supabase = null as never;
-      const data = await queryConsultations(supabase, { patientId });
+      let data;
+      try {
+        data = await queryConsultations(supabase, { patientId });
+      } catch {
+        setStatus("error");
+        return;
+      }
       const mapped: MedicalRecordEntry[] = data.map((c) => {
         const diagnoses = c.consultation_diagnoses ?? [];
         const primary = diagnoses.find((d) => d.type === "Primary") ?? diagnoses[0];
@@ -59,10 +72,10 @@ export default function MedicalRecordsPage() {
       });
       mapped.sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate));
       setRecords(mapped);
+      setStatus("ready");
     }
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.patientId]);
+  }, [session?.patientId, retryKey]);
 
   const filtered = records.filter((c) =>
     `${c.doctorName} ${c.chiefComplaint} ${c.assessment}`.toLowerCase().includes(search.toLowerCase()),
@@ -96,55 +109,76 @@ export default function MedicalRecordsPage() {
     );
   }
 
+  const field = (label: string, value?: string) => (
+    <div className="space-y-xs">
+      <dt className="text-label-md text-on-surface-variant">{label}</dt>
+      <dd className={value?.trim() ? "whitespace-pre-line text-body-md text-on-surface" : "text-body-md text-on-surface-variant"}>{value?.trim() || "—"}</dd>
+    </div>
+  );
+
   return (
     <AppShell role="patient">
-      <div className="space-y-lg">
-        <div className="flex flex-wrap items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">Medical Records</h2>
-          <Button variant="secondary" onClick={printAll} disabled={filtered.length === 0}>
-            Print / Save as PDF
-          </Button>
-        </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search records..."
-          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md sm:w-80"
+      <div className="mx-auto max-w-[48rem] space-y-lg">
+        <PageHeader
+          title="Medical records"
+          description="Notes from each visit, newest first. Only your doctor can change them."
+          actions={
+            <Button variant="secondary" onClick={printAll} disabled={filtered.length === 0}>
+              <Icon name="print" className="text-[16px]" />
+              Print or save as PDF
+            </Button>
+          }
         />
+        <label className="block max-w-doctor-search space-y-xs">
+          <span className="text-label-md text-on-surface-variant">Search records</span>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Doctor, complaint or assessment" className={inputStyles()} />
+        </label>
 
-        {filtered.length === 0 ? (
-          <EmptyState icon="clinical_notes" message="No medical records found." />
+        {status === "loading" ? (
+          <div className="space-y-md" aria-busy="true"><SkeletonCard lines={2} /><SkeletonCard lines={2} /></div>
+        ) : status === "error" ? (
+          <ErrorState title="Your records didn’t load" message="Check your connection, then try again." onRetry={() => { setStatus("loading"); setRetryKey((k) => k + 1); }} />
+        ) : filtered.length === 0 ? (
+          <EmptyState icon="description" message={records.length === 0 ? "Records appear here after your first visit." : `No records match “${search.trim()}”.`} />
         ) : (
-          <div className="space-y-md">
+          <ul className="space-y-md">
             {filtered.map((c) => {
               const isOpen = expanded === c.id;
               return (
-                <Card key={c.id}>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(isOpen ? null : c.id)}
-                    className="flex w-full items-center justify-between text-left"
-                  >
-                    <div>
-                      <p className="text-headline-sm text-on-surface">{c.appointmentDate} — {c.doctorName}</p>
-                      <p className="text-label-md text-on-surface-variant">{c.primaryDiagnosis}</p>
-                    </div>
-                    <Icon name={isOpen ? "expand_less" : "expand_more"} className="text-on-surface-variant" />
-                  </button>
-                  {isOpen && (
-                    <div className="mt-md space-y-sm border-t border-outline-variant pt-md text-body-md text-on-surface-variant">
-                      <p><strong>Chief Complaint:</strong> {c.chiefComplaint}</p>
-                      <p><strong>Subjective:</strong> {c.subjective}</p>
-                      <p><strong>Objective:</strong> {c.objective}</p>
-                      <p><strong>Assessment:</strong> {c.assessment}</p>
-                      <p><strong>Plan:</strong> {c.plan}</p>
-                      {c.followUpDate && <p><strong>Follow-up:</strong> {c.followUpDate} — {c.followUpInstructions}</p>}
-                    </div>
-                  )}
-                </Card>
+                <li key={c.id}>
+                  <Card className="!p-0">
+                    <button
+                      type="button"
+                      aria-expanded={isOpen}
+                      aria-controls={`record-${c.id}`}
+                      onClick={() => setExpanded(isOpen ? null : c.id)}
+                      className="flex min-h-11 w-full items-center justify-between gap-md rounded-xl p-lg text-left hover:bg-surface-container-low"
+                    >
+                      <span className="min-w-0">
+                        <span className="block text-label-md tabular-nums text-on-surface-variant">{formatClinicDate(c.appointmentDate)} · {c.doctorName || "—"}</span>
+                        <span className="block text-headline-sm text-on-surface">{c.primaryDiagnosis || c.chiefComplaint || "Visit notes"}</span>
+                      </span>
+                      <Icon name={isOpen ? "expand_less" : "expand_more"} className="shrink-0 text-on-surface-variant" />
+                    </button>
+                    {isOpen && (
+                      <dl id={`record-${c.id}`} className="grid animate-surface-in grid-cols-1 gap-md border-t border-outline-variant p-lg sm:grid-cols-2">
+                        {field("Chief complaint", c.chiefComplaint)}
+                        {field("Subjective", c.subjective)}
+                        {field("Objective", c.objective)}
+                        {field("Assessment", c.assessment)}
+                        <div className="sm:col-span-2">{field("Plan", c.plan)}</div>
+                        {c.followUpDate && (
+                          <div className="rounded-lg bg-surface-container-low p-md sm:col-span-2">
+                            {field(`Follow-up on ${formatClinicDate(c.followUpDate)}`, c.followUpInstructions)}
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                  </Card>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
       </div>
     </AppShell>

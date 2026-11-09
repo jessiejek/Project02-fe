@@ -5,7 +5,14 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
-import { Toast } from "@/components/ui/Toast";
+import Link from "next/link";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { buttonStyles } from "@/components/ui/buttonStyles";
+import { inputStyles, labelStyles, hintStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDateTime } from "@/lib/format";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryPatientById, updatePatient } from "@/lib/data/patients";
@@ -13,9 +20,9 @@ import { changePassword } from "@/lib/auth/account";
 import type { Patient } from "@/data/types";
 
 const TABS = [
-  { id: "info", label: "Profile Info" },
-  { id: "password", label: "Change Password" },
-  { id: "consent", label: "Privacy Consent" },
+  { id: "info", label: "Details" },
+  { id: "password", label: "Password" },
+  { id: "consent", label: "Privacy" },
 ];
 
 // Stitch screen_21_profile — 3 tabs per Patient.md §13. Previously fully
@@ -29,13 +36,22 @@ export default function PatientProfilePage() {
   const patientId = session?.patientId;
   const [tab, setTab] = useState("info");
   const [patient, setPatient] = useState<Patient | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (!patientId) return;
     const id = patientId;
     async function load() {
       const supabase = null as never;
-      const data = await queryPatientById(supabase, id);
+      let data;
+      try {
+        data = await queryPatientById(supabase, id);
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
+        return;
+      }
       if (data) {
         setPatient({
           id: data.patient_id,
@@ -65,32 +81,43 @@ export default function PatientProfilePage() {
       }
     }
     load();
-  }, [patientId]);
-
-  if (!patient) {
-    return (
-      <AppShell role="patient">
-        <p className="text-body-md text-on-surface-variant">Loading your profile…</p>
-      </AppShell>
-    );
-  }
+  }, [patientId, retryKey]);
 
   return (
     <AppShell role="patient">
-      <Card className="mx-auto max-w-[40rem]">
-        <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
-        {tab === "info" && <ProfileInfoTab key={patient.id} patient={patient} />}
-        {tab === "password" && <ChangePasswordTab />}
-        {tab === "consent" && (
-          <div className="space-y-md text-body-md text-on-surface-variant">
-            {patient.consentedAt ? (
-              <p>You accepted the privacy policy (version {patient.consentVersion}).</p>
-            ) : (
-              <p>You have not yet accepted the current privacy policy. Visit Privacy Consent to review it.</p>
+      <div className="mx-auto max-w-[44rem] space-y-lg">
+        <PageHeader
+          title="Your profile"
+          description={patient ? <>Patient code <span className="font-mono text-body-sm text-on-surface">{patient.patientCode}</span></> : "Your details, password and privacy choice."}
+        />
+        {!patient ? (
+          loadError ? (
+            <ErrorState title="Your profile didn’t load" message="Check your connection, then try again." onRetry={() => setRetryKey((k) => k + 1)} />
+          ) : (
+            <div aria-busy="true"><SkeletonCard lines={6} /></div>
+          )
+        ) : (
+          <Card>
+            <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
+            {tab === "info" && <ProfileInfoTab key={patient.id} patient={patient} />}
+            {tab === "password" && <ChangePasswordTab />}
+            {tab === "consent" && (
+              <div className="space-y-md">
+                {patient.consentedAt ? (
+                  <FormAlert tone="success">
+                    You agreed to the privacy policy (version <span className="tabular-nums">{patient.consentVersion}</span>) on {formatClinicDateTime(patient.consentedAt)}.
+                  </FormAlert>
+                ) : (
+                  <FormAlert tone="warning">You haven&apos;t agreed to the current privacy policy yet.</FormAlert>
+                )}
+                <Link href="/patient/privacy-consent" className={buttonStyles(patient.consentedAt ? "secondary" : "primary")}>
+                  {patient.consentedAt ? "Read the policy" : "Review and agree"}
+                </Link>
+              </div>
             )}
-          </div>
+          </Card>
         )}
-      </Card>
+      </div>
     </AppShell>
   );
 }
@@ -186,65 +213,77 @@ function ProfileInfoTab({ patient }: { patient: Patient }) {
   }
   //JJQR - END
 
+  const legend = "mb-sm text-headline-sm text-on-surface";
+
   return (
-    <div className="space-y-md">
-      {savedAt && <Toast key={savedAt} variant="success" message={`Profile saved at ${savedAt}.`} />}
-      {saveError && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{saveError}</p>}
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
-        <Field label="First Name" value={form.firstName} onChange={(v) => set("firstName", v)} error={fieldErrors.firstName} />
-        <Field label="Middle Name" value={form.middleName ?? ""} onChange={(v) => set("middleName", v)} />
-        <Field label="Last Name" value={form.lastName} onChange={(v) => set("lastName", v)} error={fieldErrors.lastName} />
-      </div>
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-        <div className="space-y-xs">
-          <label className="text-label-md text-on-surface-variant">Date of Birth</label>
-          <DatePicker value={form.dateOfBirth} onChange={(v) => set("dateOfBirth", v)} />
+    <form className="space-y-xl" onSubmit={(e) => { e.preventDefault(); handleSave(); }} noValidate>
+      {savedAt && <FormAlert tone="success">Profile saved at {savedAt}.</FormAlert>}
+      {saveError && <FormAlert>{saveError}</FormAlert>}
+      <fieldset className="min-w-0 space-y-md">
+        <legend className={legend}>About you</legend>
+        <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
+          <Field label="First name" autoComplete="given-name" value={form.firstName} onChange={(v) => set("firstName", v)} error={fieldErrors.firstName} />
+          <Field label="Middle name" autoComplete="additional-name" value={form.middleName ?? ""} onChange={(v) => set("middleName", v)} />
+          <Field label="Last name" autoComplete="family-name" value={form.lastName} onChange={(v) => set("lastName", v)} error={fieldErrors.lastName} />
         </div>
-        <div className="space-y-xs">
-          <label className="text-label-md text-on-surface-variant">Sex</label>
-          <select
-            value={form.sex}
-            onChange={(e) => set("sex", e.target.value as "Male" | "Female")}
-            className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
-          >
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-          </select>
+        <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
+          <div className="space-y-xs">
+            <label className={labelStyles}>Date of birth</label>
+            <DatePicker value={form.dateOfBirth} onChange={(v) => set("dateOfBirth", v)} />
+          </div>
+          <div className="space-y-xs">
+            <label htmlFor="field-sex" className={labelStyles}>Sex</label>
+            <select id="field-sex" value={form.sex} onChange={(e) => set("sex", e.target.value as "Male" | "Female")} className={inputStyles()}>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
+          <Field label="Civil status" value={form.civilStatus} onChange={(v) => set("civilStatus", v)} />
+          <Field label="Blood type" value={form.bloodType ?? ""} onChange={(v) => set("bloodType", v)} />
         </div>
+      </fieldset>
+
+      <fieldset className="min-w-0 space-y-md">
+        <legend className={legend}>Contact</legend>
+        <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
+          <Field label="Contact number" type="tel" autoComplete="tel" value={form.contactNumber} onChange={(v) => set("contactNumber", v)} error={fieldErrors.contactNumber} />
+          <div className="space-y-xs">
+            <label htmlFor="field-email" className={labelStyles}>Email</label>
+            <input id="field-email" readOnly value={form.email} className={inputStyles("bg-surface-container-low text-on-surface-variant")} />
+            <p className={hintStyles}>Ask the front desk to change your email.</p>
+          </div>
+        </div>
+        <Field label="Address" autoComplete="street-address" value={form.address} onChange={(v) => set("address", v)} />
+        <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
+          <Field label="City" autoComplete="address-level2" value={form.city} onChange={(v) => set("city", v)} />
+          <Field label="ZIP code" autoComplete="postal-code" value={form.zipCode} onChange={(v) => set("zipCode", v)} mono />
+        </div>
+      </fieldset>
+
+      <fieldset className="min-w-0 space-y-md">
+        <legend className={legend}>Emergency contact</legend>
+        <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
+          <Field label="Name" value={form.emergencyContactName ?? ""} onChange={(v) => set("emergencyContactName", v)} />
+          <Field label="Relationship" value={form.emergencyContactRelationship ?? ""} onChange={(v) => set("emergencyContactRelationship", v)} />
+          <Field label="Phone" type="tel" value={form.emergencyContactNumber ?? ""} onChange={(v) => set("emergencyContactNumber", v)} />
+        </div>
+      </fieldset>
+
+      <fieldset className="min-w-0 space-y-md">
+        <legend className={legend}>Insurance</legend>
+        <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
+          <Field label="HMO provider" value={form.hmoProvider ?? ""} onChange={(v) => set("hmoProvider", v)} />
+          <Field label="HMO card number" value={form.hmoCardNumber ?? ""} onChange={(v) => set("hmoCardNumber", v)} mono />
+          <Field label="PhilHealth number" value={form.philHealthNumber ?? ""} onChange={(v) => set("philHealthNumber", v)} mono />
+        </div>
+      </fieldset>
+
+      <div className="flex justify-end border-t border-outline-variant pt-md">
+        <Button type="submit" loading={saving}>
+          {saving ? "Saving…" : "Save changes"}
+        </Button>
       </div>
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-        <Field label="Civil Status" value={form.civilStatus} onChange={(v) => set("civilStatus", v)} />
-        <Field label="Blood Type" value={form.bloodType ?? ""} onChange={(v) => set("bloodType", v)} />
-      </div>
-      <Field label="Contact Number" value={form.contactNumber} onChange={(v) => set("contactNumber", v)} error={fieldErrors.contactNumber} />
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
-        <Field label="Address" value={form.address} onChange={(v) => set("address", v)} />
-        <Field label="City" value={form.city} onChange={(v) => set("city", v)} />
-        <Field label="Zip Code" value={form.zipCode} onChange={(v) => set("zipCode", v)} />
-      </div>
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-3">
-        <Field label="Emergency Contact Name" value={form.emergencyContactName ?? ""} onChange={(v) => set("emergencyContactName", v)} />
-        <Field label="Relationship" value={form.emergencyContactRelationship ?? ""} onChange={(v) => set("emergencyContactRelationship", v)} />
-        <Field label="Emergency Contact Number" value={form.emergencyContactNumber ?? ""} onChange={(v) => set("emergencyContactNumber", v)} />
-      </div>
-      <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-        <Field label="HMO Provider" value={form.hmoProvider ?? ""} onChange={(v) => set("hmoProvider", v)} />
-        <Field label="HMO Card #" value={form.hmoCardNumber ?? ""} onChange={(v) => set("hmoCardNumber", v)} />
-      </div>
-      <Field label="PhilHealth #" value={form.philHealthNumber ?? ""} onChange={(v) => set("philHealthNumber", v)} />
-      <div className="space-y-xs">
-        <label className="text-label-md text-on-surface-variant">Email</label>
-        <input
-          readOnly
-          value={form.email}
-          className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-md text-on-surface-variant"
-        />
-        <p className="text-label-sm text-on-surface-variant">Contact staff to update your email.</p>
-      </div>
-      <Button onClick={handleSave} disabled={saving}>
-        {saving ? "Saving…" : "Save"}
-      </Button>
-    </div>
+    </form>
   );
 }
 
@@ -276,17 +315,19 @@ function ChangePasswordTab() {
     setSavedAt(new Date().toLocaleTimeString());
   }
 
+  const mismatch = confirmPassword !== "" && newPassword !== confirmPassword;
+
   return (
-    <div className="space-y-md">
-      {savedAt && <Toast key={savedAt} variant="success" message="Password updated." />}
-      {error && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{error}</p>}
-      <Field label="Current Password" type="password" value={currentPassword} onChange={setCurrentPassword} />
-      <Field label="New Password" type="password" value={newPassword} onChange={setNewPassword} />
-      <Field label="Confirm Password" type="password" value={confirmPassword} onChange={setConfirmPassword} />
-      <Button onClick={handleUpdate} disabled={!canUpdate || updating}>
-        {updating ? "Updating…" : "Update Password"}
+    <form className="max-w-auth space-y-md" onSubmit={(e) => { e.preventDefault(); handleUpdate(); }} noValidate>
+      {savedAt && <FormAlert tone="success">Password updated. Use it the next time you sign in.</FormAlert>}
+      {error && <FormAlert>{error}</FormAlert>}
+      <Field label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={setCurrentPassword} />
+      <Field label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={setNewPassword} hint="At least 6 characters." />
+      <Field label="Confirm new password" type="password" autoComplete="new-password" value={confirmPassword} onChange={setConfirmPassword} error={mismatch ? "Passwords don’t match yet." : undefined} />
+      <Button type="submit" disabled={!canUpdate} loading={updating}>
+        {updating ? "Updating…" : "Update password"}
       </Button>
-    </div>
+    </form>
   );
 }
 
@@ -305,27 +346,37 @@ function Field({
   onChange,
   type = "text",
   error,
+  hint,
+  autoComplete,
+  mono = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   error?: string;
+  hint?: string;
+  autoComplete?: string;
+  mono?: boolean;
 }) {
   const inputId = fieldIdFromLabel(label);
+  const noteId = `${inputId}-note`;
   return (
     <div className="space-y-xs">
-      <label htmlFor={inputId} className="text-label-md text-on-surface-variant">
+      <label htmlFor={inputId} className={labelStyles}>
         {label}
       </label>
       <input
         id={inputId}
         type={type}
         value={value}
+        autoComplete={autoComplete}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error || hint ? noteId : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className={inputStyles(mono ? "font-mono" : type === "tel" ? "tabular-nums" : undefined)}
       />
-      {error && <p className="text-label-sm text-error">{error}</p>}
+      {error ? <p id={noteId} className="text-label-md text-status-danger">{error}</p> : hint ? <p id={noteId} className={hintStyles}>{hint}</p> : null}
     </div>
   );
 }

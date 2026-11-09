@@ -9,6 +9,11 @@ import { SkeletonTable } from "@/components/ui/Skeleton";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVaccinations } from "@/lib/data/patientFiles";
 import { printHtml, escapeHtml } from "@/lib/print";
+import { Icon } from "@/components/ui/Icon";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { inputStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDate, formatClinicDateShort } from "@/lib/format";
 
 interface VaccinationRow {
   id: string;
@@ -25,6 +30,8 @@ export default function VaccinationsPage() {
   const [search, setSearch] = useState("");
   const [vaccinations, setVaccinations] = useState<VaccinationRow[]>([]);
   const [vaxLoading, setVaxLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     if (!session?.patientId) return;
@@ -45,13 +52,16 @@ export default function VaccinationsPage() {
             source: v.source,
           })),
         );
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
       } finally {
         setVaxLoading(false);
       }
     }
 
     load();
-  }, [session?.patientId]);
+  }, [session?.patientId, retryKey]);
 
   if (loading || !session?.patientId) {
     return (
@@ -73,7 +83,7 @@ export default function VaccinationsPage() {
         (v) => `<tr>
           <td>${escapeHtml(v.vaccineName)}</td>
           <td>${escapeHtml(String(v.doseNumber ?? "—"))}</td>
-          <td>${escapeHtml(v.administeredDate ?? "—")}</td>
+          <td>${escapeHtml(formatClinicDate(v.administeredDate))}</td>
           <td>${escapeHtml(v.status)}</td>
           <td>${escapeHtml(v.source)}</td>
         </tr>`,
@@ -90,45 +100,53 @@ export default function VaccinationsPage() {
     );
   }
 
+  const pill = (v: VaccinationRow) => <StatusPill tone={v.status === "Administered" ? "success" : "warning"} label={v.status} />;
+
   return (
     <AppShell role="patient">
       <div className="space-y-lg">
-        <div className="flex flex-wrap items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">Vaccinations</h2>
-          <Button variant="secondary" onClick={printList} disabled={filtered.length === 0}>
-            Print / Save as PDF
-          </Button>
-        </div>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search vaccinations..."
-          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md sm:w-80"
+        <PageHeader
+          title="Vaccinations"
+          description="Shots recorded at the clinic or added from your own records."
+          actions={
+            <Button variant="secondary" onClick={printList} disabled={filtered.length === 0}>
+              <Icon name="print" className="text-[16px]" />
+              Print or save as PDF
+            </Button>
+          }
         />
-        <DataTable
-          columns={[
-            { header: "Vaccine", render: (v) => v.vaccineName },
-            { header: "Dose #", align: "center", render: (v) => v.doseNumber ?? "—" },
-            { header: "Administered Date", render: (v) => v.administeredDate ?? "—" },
-            { header: "Status", render: (v) => <StatusPill tone={v.status === "Administered" ? "success" : "warning"} label={v.status} /> },
-            { header: "Source", render: (v) => v.source },
-          ]}
-          rows={filtered}
-          rowKey={(v) => v.id}
-          loading={vaxLoading}
-          emptyMessage="No vaccination records found."
-          renderMobileCard={(v) => (
-            <div className="space-y-xs">
-              <div className="flex items-center justify-between gap-md">
-                <p className="text-body-md font-medium text-on-surface">{v.vaccineName}</p>
-                <StatusPill tone={v.status === "Administered" ? "success" : "warning"} label={v.status} />
+        <label className="block max-w-doctor-search space-y-xs">
+          <span className="text-label-md text-on-surface-variant">Search vaccinations</span>
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Vaccine, status, source or date" className={inputStyles()} />
+        </label>
+        {loadError ? (
+          <ErrorState title="Your vaccinations didn’t load" message="Check your connection, then try again." retrying={vaxLoading} onRetry={() => { setVaxLoading(true); setRetryKey((k) => k + 1); }} />
+        ) : (
+          <DataTable
+            columns={[
+              { header: "Vaccine", render: (v) => <span className="font-medium text-on-surface">{v.vaccineName}</span> },
+              { header: "Dose", align: "right", render: (v) => <span className="tabular-nums">{v.doseNumber ?? "—"}</span> },
+              { header: "Date given", render: (v) => <span className="tabular-nums">{formatClinicDateShort(v.administeredDate)}</span> },
+              { header: "Status", render: pill },
+              { header: "Source", render: (v) => v.source },
+            ]}
+            rows={filtered}
+            rowKey={(v) => v.id}
+            loading={vaxLoading}
+            emptyMessage={vaccinations.length === 0 ? "No vaccinations recorded yet." : `No vaccinations match “${search.trim()}”.`}
+            renderMobileCard={(v) => (
+              <div className="space-y-xs">
+                <div className="flex items-start justify-between gap-md">
+                  <p className="min-w-0 break-words text-body-md font-medium text-on-surface">{v.vaccineName}</p>
+                  {pill(v)}
+                </div>
+                <p className="text-label-md tabular-nums text-on-surface-variant">
+                  Dose {v.doseNumber ?? "—"} · {formatClinicDateShort(v.administeredDate)} · {v.source}
+                </p>
               </div>
-              <p className="text-label-sm text-on-surface-variant">
-                Dose {v.doseNumber ?? "—"} · {v.administeredDate ?? "—"} · {v.source}
-              </p>
-            </div>
-          )}
-        />
+            )}
+          />
+        )}
       </div>
     </AppShell>
   );

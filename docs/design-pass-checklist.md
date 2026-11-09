@@ -2,7 +2,7 @@
 
 All application page routes, grouped by portal. API handlers and framework-generated error routes are not page routes.
 
-Status: doctor portal complete. Public and auth pass complete (shared `AuthShell`, `FormAlert`, `fieldStyles`, `PageHeader`; `--text-body-sm` token). Admin pass complete (`InfoField`, `lib/format.ts`, shared `WalkInWizard` and `DoctorForm`; `--text-display-sm` token). Staff pass complete (queue mobile cards, payment and booking-detail error handling; missing `view_list`, `add` and `arrow_forward` icons mapped). Remaining portal: patient.
+Status: doctor portal complete. Public and auth pass complete (shared `AuthShell`, `FormAlert`, `fieldStyles`, `PageHeader`; `--text-body-sm` token). Admin pass complete (`InfoField`, `lib/format.ts`, shared `WalkInWizard` and `DoctorForm`; `--text-display-sm` token). Staff pass complete (queue mobile cards, payment and booking-detail error handling; missing `view_list`, `add` and `arrow_forward` icons mapped). Patient pass complete (shared `PatientFileUpload`, load-error and retry on every data page, consent save fix). All portals complete.
 
 ## Doctor (14)
 
@@ -65,19 +65,19 @@ Status: doctor portal complete. Public and auth pass complete (shared `AuthShell
 
 ## Patient (13)
 
-- [ ] `/patient/bookings` — `src/app/patient/bookings/page.tsx`
-- [ ] `/patient/bookings/[id]` — `src/app/patient/bookings/[id]/page.tsx`
-- [ ] `/patient/dashboard` — `src/app/patient/dashboard/page.tsx`
-- [ ] `/patient/doctors` — `src/app/patient/doctors/page.tsx`
-- [ ] `/patient/doctors/[id]` — `src/app/patient/doctors/[id]/page.tsx`
-- [ ] `/patient/documents` — `src/app/patient/documents/page.tsx`
-- [ ] `/patient/lab-results` — `src/app/patient/lab-results/page.tsx`
-- [ ] `/patient/medical-records` — `src/app/patient/medical-records/page.tsx`
-- [ ] `/patient/prescriptions` — `src/app/patient/prescriptions/page.tsx`
-- [ ] `/patient/privacy-consent` — `src/app/patient/privacy-consent/page.tsx`
-- [ ] `/patient/profile` — `src/app/patient/profile/page.tsx`
-- [ ] `/patient/reviews/[bookingId]` — `src/app/patient/reviews/[bookingId]/page.tsx`
-- [ ] `/patient/vaccinations` — `src/app/patient/vaccinations/page.tsx`
+- [x] `/patient/bookings` — `src/app/patient/bookings/page.tsx`
+- [x] `/patient/bookings/[id]` — `src/app/patient/bookings/[id]/page.tsx`
+- [x] `/patient/dashboard` — `src/app/patient/dashboard/page.tsx`
+- [x] `/patient/doctors` — `src/app/patient/doctors/page.tsx`
+- [x] `/patient/doctors/[id]` — `src/app/patient/doctors/[id]/page.tsx`
+- [x] `/patient/documents` — `src/app/patient/documents/page.tsx`
+- [x] `/patient/lab-results` — `src/app/patient/lab-results/page.tsx`
+- [x] `/patient/medical-records` — `src/app/patient/medical-records/page.tsx`
+- [x] `/patient/prescriptions` — `src/app/patient/prescriptions/page.tsx`
+- [x] `/patient/privacy-consent` — `src/app/patient/privacy-consent/page.tsx`
+- [x] `/patient/profile` — `src/app/patient/profile/page.tsx`
+- [x] `/patient/reviews/[bookingId]` — `src/app/patient/reviews/[bookingId]/page.tsx`
+- [x] `/patient/vaccinations` — `src/app/patient/vaccinations/page.tsx`
 
 Total: 57 application page routes.
 

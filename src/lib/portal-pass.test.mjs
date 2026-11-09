@@ -96,3 +96,26 @@ test('every icon name used by the nav exists in the icon map', () => {
   assert.match(map, /\badd: faPlus/);
   assert.match(map, /\barrow_forward: faArrowRight/);
 });
+
+const PATIENT_PAGES = ['dashboard', 'bookings', 'bookings/[id]', 'medical-records', 'prescriptions', 'lab-results', 'vaccinations', 'documents', 'profile', 'reviews/[bookingId]']
+  .map(p => `app/patient/${p}/page.tsx`);
+
+test('patient data pages show a retryable error instead of a blank or endless loading state', () => {
+  for (const p of PATIENT_PAGES) {
+    const src = read(p);
+    assert.match(src, /<ErrorState/, p);
+    assert.doesNotMatch(src, /<Link[^>]*>\s*<Button/, p);
+    assert.doesNotMatch(src, /<h2 className="text-headline-lg/, p);
+  }
+  assert.doesNotMatch(read('app/patient/doctors/DoctorsBrowseClient.tsx'), /<Link[^>]*>\s*<Button/);
+});
+
+test('documents and lab results share one upload form', () => {
+  for (const p of ['app/patient/documents/page.tsx', 'app/patient/lab-results/page.tsx']) assert.match(read(p), /<PatientFileUpload/, p);
+  assert.doesNotMatch(read('components/patient/PatientFileUpload.tsx'), /bg-green-50/);
+});
+
+test('privacy consent save never hangs on a failed settings read', () => {
+  const src = read('app/patient/privacy-consent/page.tsx');
+  assert.ok(src.indexOf('try {') < src.indexOf('queryClinicSettings(supabase)'));
+});

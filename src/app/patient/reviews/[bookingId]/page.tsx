@@ -6,6 +6,11 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import Link from "next/link";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { buttonStyles } from "@/components/ui/buttonStyles";
+import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faStar } from "@fortawesome/free-solid-svg-icons";
@@ -36,6 +41,8 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     // Wait for session so we can enforce that this booking belongs to the
@@ -43,10 +50,17 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
     if (!session?.patientId) return;
     const patientId = session.patientId;
     async function load() {
-      const [b, reviewRows] = await Promise.all([
-        queryBookingById(null as never, bookingId),
-        queryReviews(null as never, { bookingId }),
-      ]);
+      let b, reviewRows;
+      try {
+        [b, reviewRows] = await Promise.all([
+          queryBookingById(null as never, bookingId),
+          queryReviews(null as never, { bookingId }),
+        ]);
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
+        return;
+      }
       if (!b || b.patient_id !== patientId) {
         setBooking(null);
         return;
@@ -59,13 +73,19 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
       setAlreadyReviewed(reviewRows.length > 0);
     }
     load();
-  }, [bookingId, session?.patientId]);
+  }, [bookingId, session?.patientId, retryKey]);
 
   if (booking === null) notFound();
   if (booking === undefined) {
     return (
       <AppShell role="patient">
-        <SkeletonCard lines={3} />
+        <div className="mx-auto max-w-[28rem]">
+          {loadError ? (
+            <ErrorState title="This review page didn’t load" message="Check your connection, then try again." onRetry={() => setRetryKey((k) => k + 1)} />
+          ) : (
+            <SkeletonCard lines={3} />
+          )}
+        </div>
       </AppShell>
     );
   }
@@ -77,7 +97,14 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
     setSubmitting(true);
     // Re-check ownership at submit time so a stale UI cannot insert a review
     // for someone else's booking if the session changed mid-page.
-    const owned = await queryBookingById(null as never, booking.id);
+    let owned;
+    try {
+      owned = await queryBookingById(null as never, booking.id);
+    } catch {
+      setSubmitting(false);
+      setSubmitError("Could not submit your review. Please try again.");
+      return;
+    }
     if (!owned || owned.patient_id !== patientId) {
       setSubmitting(false);
       setSubmitError("You can only review your own appointments.");
@@ -100,45 +127,62 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
     router.push(`/patient/bookings/${booking.id}`);
   }
 
+  const ratingWords = ["", "Poor", "Fair", "Good", "Very good", "Excellent"];
+
   return (
     <AppShell role="patient">
-      <Card className="mx-auto max-w-[28rem] text-center">
-        <div className="mb-md flex items-center justify-center gap-md">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-container-high">
-            <Icon name="person" className="text-[28px] text-on-surface-variant" />
-          </div>
-        </div>
-        <h2 className="mb-xs text-headline-md text-on-surface">{booking.doctorName}</h2>
+      <div className="mx-auto max-w-[28rem] space-y-lg">
+        <Link href={`/patient/bookings/${booking.id}`} className="inline-flex min-h-11 items-center gap-xs text-label-md font-medium text-primary hover:underline">
+          <Icon name="chevron_left" className="text-[14px]" />
+          Back to booking
+        </Link>
+        <Card className="space-y-lg">
+          <header className="space-y-xs">
+            <h1 className="text-balance text-headline-lg-mobile text-on-surface">Rate your visit with {booking.doctorName || "your doctor"}</h1>
+            <p className="text-body-md text-on-surface-variant">Your rating helps other patients choose a doctor.</p>
+          </header>
 
-        {alreadyReviewed ? (
-          <p className="text-body-md text-on-surface-variant">You&apos;ve already submitted a review for this appointment.</p>
-        ) : (
-          <>
-            <p className="mb-lg text-body-md text-on-surface-variant">How was your appointment?</p>
-            {submitError && <p className="mb-md rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{submitError}</p>}
-            <div className="mb-lg flex justify-center gap-xs">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button key={star} type="button" onClick={() => setRating(star)} aria-label={`${star} stars`}>
-                  <FontAwesomeIcon
-                    icon={star <= rating ? faStar : faStarOutline}
-                    className={cn("text-[36px]", star <= rating ? "text-tertiary" : "text-outline-variant")}
-                  />
-                </button>
-              ))}
+          {alreadyReviewed ? (
+            <div className="space-y-md">
+              <FormAlert tone="info">You&apos;ve already reviewed this visit. Thank you.</FormAlert>
+              <Link href={`/patient/bookings/${booking.id}`} className={buttonStyles("secondary")}>Back to booking</Link>
             </div>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Optional comment"
-              rows={4}
-              className="mb-lg w-full rounded-lg border border-outline-variant p-md text-body-md"
-            />
-            <Button disabled={rating === 0 || submitting} className="w-full" onClick={handleSubmit}>
-              {submitting ? "Submitting…" : "Submit Review"}
-            </Button>
-          </>
-        )}
-      </Card>
+          ) : (
+            <form className="space-y-lg" onSubmit={(e) => { e.preventDefault(); handleSubmit(); }}>
+              {submitError && <FormAlert>{submitError}</FormAlert>}
+              <fieldset className="min-w-0 space-y-sm">
+                <legend className={labelStyles}>Rating</legend>
+                <div role="radiogroup" aria-label="Rating" className="flex gap-xs">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      role="radio"
+                      aria-checked={rating === star}
+                      onClick={() => setRating(star)}
+                      aria-label={`${star} ${star === 1 ? "star" : "stars"}`}
+                      className="flex h-11 w-11 items-center justify-center rounded-lg transition-transform duration-150 active:scale-90 motion-reduce:active:scale-100"
+                    >
+                      <FontAwesomeIcon
+                        icon={star <= rating ? faStar : faStarOutline}
+                        className={cn("text-[28px]", star <= rating ? "text-tertiary" : "text-outline")}
+                      />
+                    </button>
+                  ))}
+                </div>
+                <p className="text-label-md text-on-surface-variant" aria-live="polite">{rating ? ratingWords[rating] : "Tap a star"}</p>
+              </fieldset>
+              <div className="space-y-xs">
+                <label htmlFor="comment" className={labelStyles}>Comment <span className="font-normal text-on-surface-variant">(optional)</span></label>
+                <textarea id="comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={4} className={inputStyles("py-md")} />
+              </div>
+              <Button type="submit" disabled={rating === 0} loading={submitting} className="w-full">
+                {submitting ? "Sending…" : "Send review"}
+              </Button>
+            </form>
+          )}
+        </Card>
+      </div>
     </AppShell>
   );
 }
