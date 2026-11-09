@@ -4,8 +4,12 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AppShell } from "@/components/shell/AppShell";
-import { Icon } from "@/components/ui/Icon";
-import { Toast } from "@/components/ui/Toast";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { inputStyles, labelStyles, hintStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDateTime } from "@/lib/format";
 import { useSession } from "@/components/providers/SessionProvider";
 import { updateStaffAccount, queryStaffById } from "@/lib/data/staff";
 import { changePassword } from "@/lib/auth/account";
@@ -20,6 +24,8 @@ interface StaffProfile {
 export default function StaffProfilePage() {
   const { session, loading } = useSession();
   const [profile, setProfile] = useState<StaffProfile | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!session?.staffId) return;
@@ -27,30 +33,39 @@ export default function StaffProfilePage() {
 
     async function load() {
       const supabase = null as never;
-      const data = await queryStaffById(supabase, staffId);
-      if (data) {
-        setProfile({
-          fullName: data.full_name,
-          contactNumber: data.contact_number ?? "",
-          email: data.email,
-        });
+      try {
+        const data = await queryStaffById(supabase, staffId);
+        setLoadError(false);
+        if (data) {
+          setProfile({
+            fullName: data.full_name,
+            contactNumber: data.contact_number ?? "",
+            email: data.email,
+          });
+        }
+      } catch {
+        setLoadError(true);
       }
     }
 
     load();
-  }, [session?.staffId]);
-
-  if (loading || !session?.staffId || !profile) {
-    return (
-      <AppShell role="staff">
-        <p className="text-body-md text-on-surface-variant">Loading your profile...</p>
-      </AppShell>
-    );
-  }
+  }, [session?.staffId, reloadKey]);
 
   return (
     <AppShell role="staff">
-      <ProfileCard key={session.staffId} staffId={session.staffId} initial={profile} />
+      <div className="mx-auto max-w-[36rem] space-y-lg">
+        <PageHeader title="Your profile" description="Your name and number as the clinic sees them, and your sign-in password." />
+        {loadError && !profile ? (
+          <ErrorState title="Your profile didn’t load" message="Check the connection to the clinic server, then try again." onRetry={() => setReloadKey((k) => k + 1)} />
+        ) : loading || !session?.staffId || !profile ? (
+          <div className="space-y-lg" aria-busy="true"><SkeletonCard lines={4} /><SkeletonCard lines={3} /></div>
+        ) : (
+          <>
+            <ProfileCard key={session.staffId} staffId={session.staffId} initial={profile} />
+            <ChangePasswordSection />
+          </>
+        )}
+      </div>
     </AppShell>
   );
 }
@@ -59,64 +74,56 @@ function ProfileCard({ staffId, initial }: { staffId: string; initial: StaffProf
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const dirty = form.fullName !== initial.fullName || form.contactNumber !== initial.contactNumber;
 
-  async function handleSave() {
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.fullName.trim()) {
+      setError("Enter your full name.");
+      return;
+    }
     setSaving(true);
+    setError("");
     const supabase = null as never;
-    await updateStaffAccount(supabase, staffId, {
-      full_name: form.fullName,
-      contact_number: form.contactNumber || null,
-    });
-    setSaving(false);
-    setSavedAt(new Date().toLocaleTimeString());
+    try {
+      await updateStaffAccount(supabase, staffId, {
+        full_name: form.fullName,
+        contact_number: form.contactNumber || null,
+      });
+      setSavedAt(new Date().toISOString());
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : "Your profile wasn’t saved. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
-    <Card className="mx-auto max-w-[36rem] space-y-lg">
-      {savedAt && <Toast key={savedAt} variant="success" message={`Profile saved at ${savedAt}.`} />}
-      <div className="flex items-center gap-lg">
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-surface-container-high">
-          <Icon name="person" className="text-[32px] text-on-surface-variant" />
+    <Card>
+      <form onSubmit={handleSave} className="space-y-md" noValidate>
+        <h2 className="text-headline-sm text-on-surface">Details</h2>
+        {savedAt && <FormAlert tone="success">Saved {formatClinicDateTime(savedAt)}.</FormAlert>}
+        {error && <FormAlert>{error}</FormAlert>}
+        <div className="space-y-xs">
+          <label htmlFor="fullName" className={labelStyles}>Full name</label>
+          <input id="fullName" autoComplete="name" value={form.fullName} onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))} className={inputStyles()} />
         </div>
-        <div>
-          <Button variant="secondary" disabled title="Real photo upload needs Supabase Storage — not wired yet.">
-            Change Photo
+        <div className="space-y-xs">
+          <label htmlFor="contactNumber" className={labelStyles}>Contact number</label>
+          <input id="contactNumber" type="tel" autoComplete="tel" inputMode="tel" value={form.contactNumber} onChange={(e) => setForm((prev) => ({ ...prev, contactNumber: e.target.value }))} className={inputStyles("tabular-nums")} />
+        </div>
+        <div className="space-y-xs">
+          <label htmlFor="email" className={labelStyles}>Email</label>
+          <input id="email" readOnly value={form.email} className={inputStyles("bg-surface-container-low text-on-surface-variant")} />
+          <p className={hintStyles}>Ask an admin to change the email you sign in with.</p>
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" loading={saving} disabled={!dirty && !saving}>
+            {saving ? "Saving…" : "Save changes"}
           </Button>
-          <p className="mt-xs text-label-sm text-on-surface-variant">jpeg/png/gif/webp, max 5MB</p>
         </div>
-      </div>
-
-      <div className="space-y-md">
-        <div className="space-y-xs">
-          <label className="text-label-md text-on-surface-variant">Full Name</label>
-          <input
-            value={form.fullName}
-            onChange={(e) => setForm((prev) => ({ ...prev, fullName: e.target.value }))}
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
-        </div>
-        <div className="space-y-xs">
-          <label className="text-label-md text-on-surface-variant">Contact Number</label>
-          <input
-            value={form.contactNumber}
-            onChange={(e) => setForm((prev) => ({ ...prev, contactNumber: e.target.value }))}
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
-        </div>
-        <div className="space-y-xs">
-          <label className="text-label-md text-on-surface-variant">Email</label>
-          <input
-            readOnly
-            value={form.email}
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-on-surface-variant"
-          />
-        </div>
-        <Button onClick={handleSave} disabled={saving}>
-          {saving ? "Saving..." : "Save"}
-        </Button>
-      </div>
-
-      <ChangePasswordSection />
+      </form>
     </Card>
   );
 }
@@ -127,57 +134,57 @@ function ChangePasswordSection() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updating, setUpdating] = useState(false);
   const [error, setError] = useState("");
-  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
+  const mismatch = confirmPassword !== "" && newPassword !== confirmPassword;
   const canUpdate = currentPassword.trim() !== "" && newPassword.length >= 6 && newPassword === confirmPassword;
 
-  async function handleUpdate() {
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault();
     if (!canUpdate) return;
     setError("");
+    setSaved(false);
     setUpdating(true);
     try {
       await changePassword(currentPassword, newPassword);
-    } catch (e) {
+    } catch (err) {
       setUpdating(false);
-      setError(e instanceof Error ? e.message : "Could not update the password.");
+      setError(err instanceof Error ? err.message : "Could not update the password.");
       return;
     }
     setUpdating(false);
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
-    setSavedAt(new Date().toLocaleTimeString());
+    setSaved(true);
   }
 
   return (
-    <div className="space-y-md border-t border-outline-variant pt-lg">
-      <h3 className="text-headline-sm text-on-surface">Change Password</h3>
-      {savedAt && <Toast key={savedAt} variant="success" message="Password updated." />}
-      {error && <p className="rounded-lg bg-error-container px-md py-sm text-body-sm text-on-error-container">{error}</p>}
-      <input
-        placeholder="Current Password"
-        type="password"
-        value={currentPassword}
-        onChange={(e) => setCurrentPassword(e.target.value)}
-        className="w-full rounded-lg border border-outline-variant px-md py-sm"
-      />
-      <input
-        placeholder="New Password"
-        type="password"
-        value={newPassword}
-        onChange={(e) => setNewPassword(e.target.value)}
-        className="w-full rounded-lg border border-outline-variant px-md py-sm"
-      />
-      <input
-        placeholder="Confirm Password"
-        type="password"
-        value={confirmPassword}
-        onChange={(e) => setConfirmPassword(e.target.value)}
-        className="w-full rounded-lg border border-outline-variant px-md py-sm"
-      />
-      <Button onClick={handleUpdate} disabled={!canUpdate || updating}>
-        {updating ? "Updating..." : "Update Password"}
-      </Button>
-    </div>
+    <Card>
+      <form onSubmit={handleUpdate} className="space-y-md" noValidate>
+        <h2 className="text-headline-sm text-on-surface">Change password</h2>
+        {saved && <FormAlert tone="success">Password updated. Use it the next time you sign in.</FormAlert>}
+        {error && <FormAlert>{error}</FormAlert>}
+        <div className="space-y-xs">
+          <label htmlFor="currentPassword" className={labelStyles}>Current password</label>
+          <input id="currentPassword" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} className={inputStyles()} />
+        </div>
+        <div className="space-y-xs">
+          <label htmlFor="newPassword" className={labelStyles}>New password</label>
+          <input id="newPassword" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} aria-describedby="newPasswordHint" className={inputStyles()} />
+          <p id="newPasswordHint" className={hintStyles}>At least 6 characters.</p>
+        </div>
+        <div className="space-y-xs">
+          <label htmlFor="confirmPassword" className={labelStyles}>Confirm new password</label>
+          <input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} aria-invalid={mismatch || undefined} aria-describedby={mismatch ? "confirmPasswordHint" : undefined} className={inputStyles()} />
+          {mismatch && <p id="confirmPasswordHint" className="text-label-md text-status-danger">Passwords don’t match yet.</p>}
+        </div>
+        <div className="flex justify-end">
+          <Button type="submit" variant="secondary" loading={updating} disabled={!canUpdate}>
+            {updating ? "Updating…" : "Update password"}
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }

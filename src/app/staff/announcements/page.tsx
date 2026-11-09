@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { SkeletonCard } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { formatClinicDateTime } from "@/lib/format";
 import { queryAnnouncements } from "@/lib/data/admin";
 import { queryStaffAccounts } from "@/lib/data/staff";
 
@@ -20,14 +24,22 @@ interface AnnouncementRow {
 export default function StaffAnnouncementsPage() {
   const [loading, setLoading] = useState(true);
   const [announcements, setAnnouncements] = useState<AnnouncementRow[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(async () => {
       const supabase = null as never;
-      const [announcementsRes, staffRes] = await Promise.all([
-        queryAnnouncements(supabase, { activeOnly: true }).then((data) => ({ data })),
-        queryStaffAccounts(supabase).then((data) => ({ data })),
-      ]);
+      let announcementsRes;
+      try {
+        announcementsRes = { data: await queryAnnouncements(supabase, { activeOnly: true }) };
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
+        setLoading(false);
+        return;
+      }
+      // Poster names are a nice-to-have; fall back to "Clinic admin" if the staff list is unavailable.
+      const staffRes = await queryStaffAccounts(supabase).then((data) => ({ data })).catch(() => ({ data: [] as Awaited<ReturnType<typeof queryStaffAccounts>> }));
 
       const nameByUserId = new Map((staffRes.data ?? []).map((s) => [s.user_id, s.full_name]));
       setAnnouncements(
@@ -35,51 +47,53 @@ export default function StaffAnnouncementsPage() {
           id: a.id,
           title: a.title,
           body: a.body,
-          postedDate: a.created_at.slice(0, 10),
-          postedBy: (a.posted_by_user_id && nameByUserId.get(a.posted_by_user_id)) || "Clinic Admin",
+          postedDate: a.created_at,
+          postedBy: (a.posted_by_user_id && nameByUserId.get(a.posted_by_user_id)) || "Clinic admin",
         })),
       );
       setLoading(false);
-    }
-
-    load();
   }, []);
 
-  if (loading) {
-    return (
-      <AppShell role="staff">
-        <div className="space-y-md">
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
-        </div>
-      </AppShell>
-    );
-  }
+  useEffect(() => {
+    queueMicrotask(() => { void load(); });
+  }, [load]);
 
   return (
     <AppShell role="staff">
-      <div className="space-y-lg">
-        <div>
-          <h2 className="text-headline-lg text-on-surface">Announcements</h2>
-          <p className="text-label-md text-on-surface-variant">
-            Announcements are managed by clinic administrators.
-          </p>
-        </div>
-        <div className="space-y-md">
-          {announcements.length === 0 && (
-            <p className="text-body-md text-on-surface-variant">No active announcements.</p>
-          )}
-          {announcements.map((a) => (
-            <Card key={a.id}>
-              <h3 className="text-headline-sm text-on-surface">{a.title}</h3>
-              <p className="mt-xs text-body-md text-on-surface-variant">{a.body}</p>
-              <p className="mt-sm text-label-sm text-on-surface-variant">
-                {a.postedDate} · Posted by {a.postedBy}
-              </p>
-            </Card>
-          ))}
-        </div>
+      <div className="mx-auto max-w-[48rem] space-y-lg">
+        <PageHeader
+          title="Clinic announcements"
+          description="What patients currently see on their portal. Only admins can post or edit these."
+        />
+        {loading ? (
+          <div className="space-y-md" aria-busy="true">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+        ) : loadError ? (
+          <ErrorState
+            title="Announcements didn’t load"
+            message="Check the connection to the clinic server, then try again."
+            retrying={retrying}
+            onRetry={async () => { setRetrying(true); await load(); setRetrying(false); }}
+          />
+        ) : announcements.length === 0 ? (
+          <EmptyState icon="campaign" message="No announcements are showing right now." />
+        ) : (
+          <ul className="space-y-md">
+            {announcements.map((a) => (
+              <li key={a.id}>
+                <Card className="space-y-sm">
+                  <h2 className="text-balance text-headline-sm text-on-surface">{a.title}</h2>
+                  <p className="whitespace-pre-line text-body-md text-on-surface">{a.body}</p>
+                  <p className="text-label-md text-on-surface-variant">
+                    <span className="tabular-nums">{formatClinicDateTime(a.postedDate)}</span> · {a.postedBy}
+                  </p>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </AppShell>
   );

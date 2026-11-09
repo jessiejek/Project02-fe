@@ -6,7 +6,12 @@ import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/ui/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
+import { formatClinicDateShort, formatPeso } from "@/lib/format";
 import { todayManila } from "@/lib/clock";
 import { queryQueue } from "@/lib/data/queue";
 import { queryStaffBookings } from "@/lib/data/bookings";
@@ -52,13 +57,25 @@ export default function PaymentsQueuePage() {
   const [referenceNumber, setReferenceNumber] = useState("");
   const [confirmNotes, setConfirmNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
+  const [lastPaid, setLastPaid] = useState("");
   const activeBooking = useMemo(() => queue.find((q) => q.id === activeId) ?? null, [queue, activeId]);
 
   const totalDue = queue.reduce((sum, b) => sum + b.amountDue, 0);
 
   async function load() {
     const supabase = null as never;
-    const board = await queryQueue(supabase);
+    let board;
+    try {
+      board = await queryQueue(supabase);
+    } catch {
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+    setLoadError(false);
     const today: QueueRow[] = board.items
       .filter((e) => e.status === "Completed" && Number(e.amount_due) > 0)
       .map((e) => ({
@@ -124,15 +141,24 @@ export default function PaymentsQueuePage() {
   async function handleConfirm() {
     if (!activeBooking) return;
     setSubmitting(true);
+    setConfirmError("");
     const supabase = null as never;
-    await confirmPaymentApi(supabase, activeBooking.id, {
-      paymentMethod,
-      amountReceived: Number(amountReceived) || activeBooking.amountDue,
-      referenceNumber: referenceNumber.trim() || null,
-      confirmNotes: confirmNotes.trim() || null,
-      orNumber: newOrNumber(activeBooking.id),
-    });
+    try {
+      await confirmPaymentApi(supabase, activeBooking.id, {
+        paymentMethod,
+        amountReceived: Number(amountReceived) || activeBooking.amountDue,
+        referenceNumber: referenceNumber.trim() || null,
+        confirmNotes: confirmNotes.trim() || null,
+        orNumber: newOrNumber(activeBooking.id),
+      });
+    } catch (e) {
+      // Keep the modal and the typed details so the desk can retry.
+      setConfirmError(e instanceof Error && e.message ? e.message : "The payment was not recorded. Please try again.");
+      setSubmitting(false);
+      return;
+    }
 
+    setLastPaid(`${formatPeso(Number(amountReceived) || activeBooking.amountDue)} recorded for ${activeBooking.patientName}.`);
     setQueue((prev) => prev.filter((b) => b.id !== activeBooking.id));
     setSubmitting(false);
     setActiveId(null);
@@ -142,101 +168,116 @@ export default function PaymentsQueuePage() {
     setConfirmNotes("");
   }
 
-  if (loading) {
-    return (
-      <AppShell role="staff">
-        <SkeletonTable rows={6} columns={5} />
-      </AppShell>
-    );
+  function openPayment(r: QueueRow) {
+    setConfirmError("");
+    setActiveId(r.id);
+    setAmountReceived(String(r.amountDue));
+  }
+
+  function closePayment() {
+    if (submitting) return;
+    setActiveId(null);
+    setConfirmError("");
   }
 
   return (
     <AppShell role="staff">
       <div className="space-y-lg">
-        <h2 className="text-headline-lg text-on-surface">Payments / Collection Queue</h2>
-
-        <div className="flex flex-wrap gap-md">
-          <Card className="flex-1">
-            <p className="text-label-sm uppercase text-on-surface-variant">Ready to collect</p>
-            <p className="text-headline-lg text-on-surface">{queue.length}</p>
-          </Card>
-          <Card className="flex-1">
-            <p className="text-label-sm uppercase text-on-surface-variant">Total due</p>
-            <p className="text-headline-lg text-on-surface">₱{totalDue.toLocaleString()}</p>
-          </Card>
-        </div>
-
-        <DataTable
-          columns={[
-            {
-              header: "Patient",
-              render: (r) => (
-                <>
-                  {r.patientName}
-                  {r.patientCode ? <span className="text-on-surface-variant"> ({r.patientCode})</span> : null}
-                </>
-              ),
-            },
-            { header: "Date / Queue #", render: (r) => `${r.appointmentDate} · ${r.queueNumber ?? "—"}` },
-            { header: "Amount Due", align: "right", render: (r) => `₱${r.amountDue}` },
-            {
-              header: "Action",
-              align: "right",
-              render: (r) => (
-                <Button
-                  onClick={() => {
-                    setActiveId(r.id);
-                    setAmountReceived(String(r.amountDue));
-                  }}
-                >
-                  Confirm Payment
-                </Button>
-              ),
-            },
-          ]}
-          rows={queue}
-          rowKey={(r) => r.id}
-          emptyMessage="No payments pending collection."
-          renderMobileCard={(r) => (
-            <div className="space-y-sm">
-              <div className="flex items-start justify-between gap-md">
-                <div>
-                  <p className="text-body-md font-medium text-on-surface">
-                    {r.patientName}
-                    {r.patientCode ? ` (${r.patientCode})` : ""}
-                  </p>
-                  <p className="text-label-sm text-on-surface-variant">
-                    {r.appointmentDate} · Q#{r.queueNumber ?? "—"}
-                  </p>
-                </div>
-                <p className="text-body-md font-medium text-on-surface">₱{r.amountDue}</p>
-              </div>
-              <Button
-                className="w-full"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveId(r.id);
-                  setAmountReceived(String(r.amountDue));
-                }}
-              >
-                Confirm Payment
-              </Button>
-            </div>
-          )}
+        <PageHeader
+          title="Collect payments"
+          description="Patients whose visit is done and who still owe the fee, today first, then earlier days."
         />
+
+        {loading ? (
+          <div className="space-y-lg" aria-busy="true">
+            <SkeletonStats count={2} />
+            <SkeletonTable rows={6} columns={4} />
+          </div>
+        ) : loadError ? (
+          <ErrorState
+            title="The payment list didn’t load"
+            message="Check the connection to the clinic server, then try again."
+            retrying={retrying}
+            onRetry={async () => { setRetrying(true); await load(); setRetrying(false); }}
+          />
+        ) : (
+          <>
+            <dl className="grid grid-cols-2 gap-md sm:max-w-[32rem]">
+              <Card className="flex flex-col-reverse gap-xs">
+                <dt className="text-label-md text-on-surface-variant">Waiting to pay</dt>
+                <dd className="text-headline-lg tabular-nums text-on-surface">{queue.length}</dd>
+              </Card>
+              <Card className="flex flex-col-reverse gap-xs">
+                <dt className="text-label-md text-on-surface-variant">Total due</dt>
+                <dd className="text-headline-lg tabular-nums text-primary">{formatPeso(totalDue)}</dd>
+              </Card>
+            </dl>
+
+            {lastPaid && <FormAlert tone="success">{lastPaid}</FormAlert>}
+
+            <DataTable
+              columns={[
+                {
+                  header: "Patient",
+                  render: (r) => (
+                    <span className="block min-w-0">
+                      <span className="block font-medium text-on-surface">{r.patientName}</span>
+                      {r.patientCode && <span className="block font-mono text-body-sm text-on-surface-variant">{r.patientCode}</span>}
+                    </span>
+                  ),
+                },
+                { header: "Visit date", render: (r) => <span className="tabular-nums">{formatClinicDateShort(r.appointmentDate)}</span> },
+                { header: "Queue", align: "right", render: (r) => <span className="tabular-nums">{r.queueNumber ?? "—"}</span> },
+                { header: "Amount due", align: "right", render: (r) => <span className="font-medium tabular-nums">{formatPeso(r.amountDue)}</span> },
+                {
+                  header: "",
+                  align: "right",
+                  render: (r) => <Button variant="secondary" onClick={() => openPayment(r)}>Record payment</Button>,
+                },
+              ]}
+              rows={queue}
+              rowKey={(r) => r.id}
+              emptyMessage="Everyone has paid. Nothing to collect right now."
+              renderMobileCard={(r) => (
+                <div className="space-y-sm">
+                  <div className="flex items-start justify-between gap-md">
+                    <div className="min-w-0">
+                      <p className="break-words text-body-md font-medium text-on-surface">{r.patientName}</p>
+                      <p className="text-label-md tabular-nums text-on-surface-variant">
+                        {r.patientCode && <span className="font-mono">{r.patientCode} · </span>}
+                        {formatClinicDateShort(r.appointmentDate)} · Queue {r.queueNumber ?? "—"}
+                      </p>
+                    </div>
+                    <p className="text-body-md font-medium tabular-nums text-on-surface">{formatPeso(r.amountDue)}</p>
+                  </div>
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openPayment(r);
+                    }}
+                  >
+                    Record payment
+                  </Button>
+                </div>
+              )}
+            />
+          </>
+        )}
       </div>
 
       <Modal
         isOpen={activeId !== null}
-        onClose={() => setActiveId(null)}
-        title="Confirm Payment"
+        onClose={closePayment}
+        title={activeBooking ? `Record payment of ${formatPeso(activeBooking.amountDue)}` : "Record payment"}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setActiveId(null)} disabled={submitting}>
-              Cancel
+            <Button variant="secondary" onClick={closePayment} disabled={submitting}>
+              Back
             </Button>
-            <Button onClick={handleConfirm} disabled={submitting || !activeBooking}>
-              {submitting ? "Confirming..." : "Confirm"}
+            <Button onClick={handleConfirm} loading={submitting} disabled={!activeBooking}>
+              {submitting ? "Recording…" : "Record payment"}
             </Button>
           </>
         }
@@ -244,34 +285,32 @@ export default function PaymentsQueuePage() {
         <div className="space-y-md">
           {activeBooking && (
             <p className="text-body-md text-on-surface">
-              <strong>Patient:</strong> {activeBooking.patientName}
-              {activeBooking.patientCode ? ` (${activeBooking.patientCode})` : ""}
+              {activeBooking.patientName}
+              {activeBooking.patientCode && <span className="font-mono text-body-sm text-on-surface-variant"> · {activeBooking.patientCode}</span>}
             </p>
           )}
-          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm">
-            <option>Cash</option>
-            <option>GCash</option>
-            <option>Maya</option>
-            <option>BankTransfer</option>
-          </select>
-          <input
-            value={amountReceived}
-            onChange={(e) => setAmountReceived(e.target.value)}
-            placeholder="Amount Received"
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
-          <input
-            value={referenceNumber}
-            onChange={(e) => setReferenceNumber(e.target.value)}
-            placeholder="Reference Number (optional)"
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
-          <input
-            value={confirmNotes}
-            onChange={(e) => setConfirmNotes(e.target.value)}
-            placeholder="Notes (optional)"
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          />
+          {confirmError && <FormAlert>{confirmError}</FormAlert>}
+          <div className="space-y-xs">
+            <label htmlFor="payMethod" className={labelStyles}>Method</label>
+            <select id="payMethod" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className={inputStyles()}>
+              <option value="Cash">Cash</option>
+              <option value="GCash">GCash</option>
+              <option value="Maya">Maya</option>
+              <option value="BankTransfer">Bank transfer</option>
+            </select>
+          </div>
+          <div className="space-y-xs">
+            <label htmlFor="payAmount" className={labelStyles}>Amount received (₱)</label>
+            <input id="payAmount" inputMode="decimal" value={amountReceived} onChange={(e) => setAmountReceived(e.target.value)} className={inputStyles("tabular-nums")} />
+          </div>
+          <div className="space-y-xs">
+            <label htmlFor="payRef" className={labelStyles}>Reference number <span className="font-normal text-on-surface-variant">(optional)</span></label>
+            <input id="payRef" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} className={inputStyles("font-mono")} />
+          </div>
+          <div className="space-y-xs">
+            <label htmlFor="payNotes" className={labelStyles}>Notes <span className="font-normal text-on-surface-variant">(optional)</span></label>
+            <input id="payNotes" value={confirmNotes} onChange={(e) => setConfirmNotes(e.target.value)} className={inputStyles()} />
+          </div>
         </div>
       </Modal>
     </AppShell>

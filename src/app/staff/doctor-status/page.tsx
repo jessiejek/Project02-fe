@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { todayManila } from "@/lib/clock";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
-import { SkeletonTable } from "@/components/ui/Skeleton";
+import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { FormAlert } from "@/components/ui/FormAlert";
+import { cn } from "@/lib/cn";
+
+const STATUS_OPTIONS: { value: DayStatus; label: string }[] = [
+  { value: "Available", label: "Available" },
+  { value: "RunningLate", label: "Running late" },
+  { value: "UnavailableToday", label: "Out today" },
+];
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryDayStatuses, setDayStatus } from "@/lib/data/scheduling";
 
@@ -26,15 +36,27 @@ export default function DoctorStatusPage() {
   const [doctors, setDoctors] = useState<DoctorRow[]>([]);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [bulkPending, setBulkPending] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
-  useEffect(() => {
-    async function load() {
+  const load = useCallback(async () => {
       const supabase = null as never;
       const today = todayManila();
-      const [allDoctors, statuses] = await Promise.all([
-        queryDoctors(supabase),
-        queryDayStatuses(supabase, today),
-      ]);
+      let allDoctors, statuses;
+      try {
+        [allDoctors, statuses] = await Promise.all([
+          queryDoctors(supabase),
+          queryDayStatuses(supabase, today),
+        ]);
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
+        setLoading(false);
+        return;
+      }
 
       const statusByDoctor = new Map(statuses.map((row) => [row.doctor_id, row.status as DayStatus]));
       const rows: DoctorRow[] = allDoctors
@@ -47,10 +69,11 @@ export default function DoctorStatusPage() {
 
       setDoctors(rows);
       setLoading(false);
-    }
-
-    load();
   }, []);
+
+  useEffect(() => {
+    queueMicrotask(() => { void load(); });
+  }, [load]);
 
   const available = doctors.filter((d) => d.dayStatus === "Available").length;
   const runningLate = doctors.filter((d) => d.dayStatus === "RunningLate").length;
@@ -59,8 +82,16 @@ export default function DoctorStatusPage() {
   async function setStatus(id: string, status: DayStatus) {
     const supabase = null as never;
     const today = todayManila();
-    await setDayStatus(supabase, id, today, status);
-    setDoctors((prev) => prev.map((d) => (d.id === id ? { ...d, dayStatus: status } : d)));
+    setPendingId(id);
+    setSaveError("");
+    try {
+      await setDayStatus(supabase, id, today, status);
+      setDoctors((prev) => prev.map((d) => (d.id === id ? { ...d, dayStatus: status } : d)));
+    } catch {
+      setSaveError("That status change didn’t save. Please try again.");
+    } finally {
+      setPendingId(null);
+    }
   }
 
   function toggleSelect(id: string) {
@@ -70,93 +101,126 @@ export default function DoctorStatusPage() {
   async function applyBulk(status: DayStatus) {
     const supabase = null as never;
     const today = todayManila();
-    await Promise.all(selected.map((doctorId) => setDayStatus(supabase, doctorId, today, status)));
-    setDoctors((prev) => prev.map((d) => (selected.includes(d.id) ? { ...d, dayStatus: status } : d)));
-    setSelected([]);
-    setSelectMode(false);
+    setBulkPending(true);
+    setSaveError("");
+    try {
+      await Promise.all(selected.map((doctorId) => setDayStatus(supabase, doctorId, today, status)));
+      setDoctors((prev) => prev.map((d) => (selected.includes(d.id) ? { ...d, dayStatus: status } : d)));
+      setSelected([]);
+      setSelectMode(false);
+    } catch {
+      setSaveError("Some doctors weren’t updated. Refresh to see what saved, then try again.");
+    } finally {
+      setBulkPending(false);
+    }
   }
 
-  if (loading) {
-    return (
-      <AppShell role="staff">
-        <SkeletonTable rows={4} columns={3} />
-      </AppShell>
-    );
-  }
+  const summary = [
+    { label: "Available", value: available },
+    { label: "Running late", value: runningLate },
+    { label: "Out today", value: unavailable },
+  ];
 
   return (
     <AppShell role="staff">
       <div className="space-y-lg pb-24">
-        <div className="flex flex-wrap items-center justify-between gap-md">
-          <h2 className="text-headline-lg text-on-surface">Doctor Status Management</h2>
-          {/* Bulk actions only earn their keep once there's more than one
-              doctor to apply a status to. */}
-          {doctors.length > 1 && (
-            <Button variant="secondary" onClick={() => setSelectMode(!selectMode)}>
-              Select multiple ▾
-            </Button>
-          )}
-        </div>
+        <PageHeader
+          title="Doctor status today"
+          description="Set who is in, running late or out. Patients see this on the booking screens."
+          actions={
+            /* Bulk actions only earn their keep once there's more than one doctor to apply a status to. */
+            doctors.length > 1 && !loading && !loadError ? (
+              <Button variant="secondary" aria-pressed={selectMode} onClick={() => { setSelectMode(!selectMode); setSelected([]); }}>
+                {selectMode ? "Done selecting" : "Select several"}
+              </Button>
+            ) : undefined
+          }
+        />
 
-        <div className="grid grid-cols-1 gap-lg sm:grid-cols-3">
-          <Card>
-            <p className="text-headline-lg text-on-surface">{available}</p>
-            <p className="text-label-md text-on-surface-variant">Available</p>
-          </Card>
-          <Card>
-            <p className="text-headline-lg text-on-surface">{runningLate}</p>
-            <p className="text-label-md text-on-surface-variant">Running Late</p>
-          </Card>
-          <Card>
-            <p className="text-headline-lg text-on-surface">{unavailable}</p>
-            <p className="text-label-md text-on-surface-variant">Unavailable</p>
-          </Card>
-        </div>
+        {loading ? (
+          <div className="space-y-lg" aria-busy="true"><SkeletonStats count={3} /><SkeletonTable rows={4} columns={3} /></div>
+        ) : loadError ? (
+          <ErrorState
+            title="Doctor status didn’t load"
+            message="Check the connection to the clinic server, then try again."
+            retrying={retrying}
+            onRetry={async () => { setRetrying(true); await load(); setRetrying(false); }}
+          />
+        ) : (
+          <>
+            <dl className="grid grid-cols-3 gap-md sm:max-w-[36rem]">
+              {summary.map((st) => (
+                <Card key={st.label} className="flex flex-col-reverse gap-xs">
+                  <dt className="text-label-md text-on-surface-variant">{st.label}</dt>
+                  <dd className="text-headline-lg tabular-nums text-on-surface">{st.value}</dd>
+                </Card>
+              ))}
+            </dl>
 
-        <div className="grid grid-cols-1 gap-md lg:grid-cols-2">
-          {doctors.map((doc) => (
-            <Card key={doc.id} className="flex items-center gap-md">
-              {selectMode && (
-                <input
-                  type="checkbox"
-                  checked={selected.includes(doc.id)}
-                  onChange={() => toggleSelect(doc.id)}
-                  className="h-5 w-5"
-                />
-              )}
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-container-high">
-                <Icon name="person" className="text-on-surface-variant" />
-              </div>
-              <div className="flex-1">
-                <p className="text-body-md text-on-surface">{doc.name}</p>
-                <StatusPill status={doc.dayStatus} />
-              </div>
-              {!selectMode && (
-                <div className="flex flex-col gap-xs">
-                  <button type="button" onClick={() => setStatus(doc.id, "Available")} className="text-label-sm text-primary hover:underline">
-                    Available
-                  </button>
-                  <button type="button" onClick={() => setStatus(doc.id, "RunningLate")} className="text-label-sm text-primary hover:underline">
-                    Running Late
-                  </button>
-                  <button type="button" onClick={() => setStatus(doc.id, "UnavailableToday")} className="text-label-sm text-primary hover:underline">
-                    Unavailable Today
-                  </button>
-                </div>
-              )}
-            </Card>
-          ))}
-        </div>
+            {saveError && <FormAlert>{saveError}</FormAlert>}
+
+            {doctors.length === 0 ? (
+              <EmptyState icon="person" message="No active doctors yet." />
+            ) : (
+              <ul className="grid grid-cols-1 gap-md lg:grid-cols-2">
+                {doctors.map((doc) => (
+                  <li key={doc.id}>
+                    <Card className="space-y-md" aria-busy={pendingId === doc.id || undefined}>
+                      <div className="flex items-center justify-between gap-md">
+                        <label className={cn("flex min-w-0 items-center gap-md", selectMode && "cursor-pointer")}>
+                          {selectMode && (
+                            <input
+                              type="checkbox"
+                              checked={selected.includes(doc.id)}
+                              onChange={() => toggleSelect(doc.id)}
+                              className="h-5 w-5 accent-primary"
+                            />
+                          )}
+                          <span className="min-w-0 break-words text-body-md font-medium text-on-surface">{doc.name || "—"}</span>
+                        </label>
+                        <StatusPill status={doc.dayStatus} />
+                      </div>
+                      {!selectMode && (
+                        <div role="radiogroup" aria-label={`Status for ${doc.name}`} className="grid grid-cols-3 gap-xs rounded-lg bg-surface-container-low p-xs">
+                          {STATUS_OPTIONS.map((opt) => {
+                            const active = doc.dayStatus === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                disabled={pendingId === doc.id}
+                                onClick={() => !active && setStatus(doc.id, opt.value)}
+                                className={cn(
+                                  "min-h-11 rounded-[calc(var(--radius-lg)-var(--spacing-xs))] px-sm text-label-md font-medium transition-colors duration-150",
+                                  active ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
+                                  "disabled:opacity-60",
+                                )}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
 
         {selectMode && selected.length > 0 && (
-          <div className="fixed inset-x-0 bottom-0 z-20 flex items-center justify-center gap-md border-t border-outline-variant bg-surface-container-lowest p-md md:left-sidebar">
-            <span className="text-label-md text-on-surface">{selected.length} selected — Apply status:</span>
-            <Button onClick={() => applyBulk("Available")}>Available</Button>
-            <Button variant="secondary" onClick={() => applyBulk("RunningLate")}>
-              Running Late
+          <div className="fixed inset-x-0 bottom-0 z-20 flex flex-wrap items-center justify-center gap-sm border-t border-outline-variant bg-surface-container-lowest p-md md:left-sidebar">
+            <span className="text-label-md tabular-nums text-on-surface">{selected.length} selected. Set to:</span>
+            <Button loading={bulkPending} onClick={() => applyBulk("Available")}>Available</Button>
+            <Button variant="secondary" disabled={bulkPending} onClick={() => applyBulk("RunningLate")}>
+              Running late
             </Button>
-            <Button variant="secondary" onClick={() => applyBulk("UnavailableToday")}>
-              Unavailable
+            <Button variant="secondary" disabled={bulkPending} onClick={() => applyBulk("UnavailableToday")}>
+              Out today
             </Button>
           </div>
         )}

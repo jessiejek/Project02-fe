@@ -2,7 +2,7 @@
 
 All application page routes, grouped by portal. API handlers and framework-generated error routes are not page routes.
 
-Status: doctor portal complete. Public and auth pass complete (shared `AuthShell`, `FormAlert`, `fieldStyles`, `PageHeader`; `--text-body-sm` token). Admin pass complete (`InfoField`, `lib/format.ts`, shared `WalkInWizard` and `DoctorForm`; `--text-display-sm` token). Remaining portals in order: staff, patient.
+Status: doctor portal complete. Public and auth pass complete (shared `AuthShell`, `FormAlert`, `fieldStyles`, `PageHeader`; `--text-body-sm` token). Admin pass complete (`InfoField`, `lib/format.ts`, shared `WalkInWizard` and `DoctorForm`; `--text-display-sm` token). Staff pass complete (queue mobile cards, payment and booking-detail error handling; missing `view_list`, `add` and `arrow_forward` icons mapped). Remaining portal: patient.
 
 ## Doctor (14)
 
@@ -51,17 +51,17 @@ Status: doctor portal complete. Public and auth pass complete (shared `AuthShell
 
 ## Staff (11)
 
-- [ ] `/staff/announcements` — `src/app/staff/announcements/page.tsx`
-- [ ] `/staff/bookings` — `src/app/staff/bookings/page.tsx`
-- [ ] `/staff/bookings/[id]` — `src/app/staff/bookings/[id]/page.tsx`
-- [ ] `/staff/dashboard` — `src/app/staff/dashboard/page.tsx`
-- [ ] `/staff/doctor-status` — `src/app/staff/doctor-status/page.tsx`
-- [ ] `/staff/patients` — `src/app/staff/patients/page.tsx`
-- [ ] `/staff/patients/[id]` — `src/app/staff/patients/[id]/page.tsx`
-- [ ] `/staff/payments` — `src/app/staff/payments/page.tsx`
-- [ ] `/staff/profile` — `src/app/staff/profile/page.tsx`
-- [ ] `/staff/queue` — `src/app/staff/queue/page.tsx`
-- [ ] `/staff/walk-in` — `src/app/staff/walk-in/page.tsx`
+- [x] `/staff/announcements` — `src/app/staff/announcements/page.tsx`
+- [x] `/staff/bookings` — `src/app/staff/bookings/page.tsx`
+- [x] `/staff/bookings/[id]` — `src/app/staff/bookings/[id]/page.tsx`
+- [x] `/staff/dashboard` — `src/app/staff/dashboard/page.tsx`
+- [x] `/staff/doctor-status` — `src/app/staff/doctor-status/page.tsx`
+- [x] `/staff/patients` — `src/app/staff/patients/page.tsx`
+- [x] `/staff/patients/[id]` — `src/app/staff/patients/[id]/page.tsx`
+- [x] `/staff/payments` — `src/app/staff/payments/page.tsx`
+- [x] `/staff/profile` — `src/app/staff/profile/page.tsx`
+- [x] `/staff/queue` — `src/app/staff/queue/page.tsx`
+- [x] `/staff/walk-in` — `src/app/staff/walk-in/page.tsx`
 
 ## Patient (13)
 

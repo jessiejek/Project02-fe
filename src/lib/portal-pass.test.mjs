@@ -70,3 +70,29 @@ test('display tokens and helpers back the shared UI', () => {
   assert.doesNotMatch(fmt, /toISOString/);
   assert.match(read('components/ui/BookingTimeline.tsx'), /statusLabel\(step\)/);
 });
+
+const STAFF_PAGES = ['dashboard', 'queue', 'bookings/[id]', 'patients', 'patients/[id]', 'payments', 'doctor-status', 'announcements', 'profile']
+  .map(p => `app/staff/${p}/page.tsx`);
+
+test('staff pages share the header, error and loading patterns', () => {
+  for (const p of STAFF_PAGES) {
+    const src = read(p);
+    assert.match(src, /<ErrorState/, p);
+    assert.doesNotMatch(src, /<Link[^>]*>\s*<Button/, p);
+    assert.doesNotMatch(src, /<h2 className="text-headline-lg/, p);
+  }
+  for (const p of STAFF_PAGES.filter(p => !p.includes('[id]'))) assert.match(read(p), /<PageHeader/, p);
+});
+
+test('staff money writes keep the modal open and show the failure', () => {
+  assert.match(read('app/staff/payments/page.tsx'), /Keep the modal and the typed details so the desk can retry/);
+  assert.match(read('app/staff/bookings/[id]/page.tsx'), /setPayError\(/);
+  assert.match(read('app/staff/bookings/[id]/page.tsx'), /Only record a waiver the doctor has already approved/);
+});
+
+test('every icon name used by the nav exists in the icon map', () => {
+  const map = read('components/ui/Icon.tsx');
+  for (const [, name] of read('lib/nav-config.ts').matchAll(/icon: "([a-z_]+)"/g)) assert.match(map, new RegExp(`\\b${name}: fa`), name);
+  assert.match(map, /\badd: faPlus/);
+  assert.match(map, /\barrow_forward: faArrowRight/);
+});

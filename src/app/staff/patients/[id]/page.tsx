@@ -1,21 +1,23 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
+import { Icon } from "@/components/ui/Icon";
+import { InfoField } from "@/components/ui/InfoField";
+import { StatusPill } from "@/components/ui/StatusPill";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { formatClinicDate, formatClinicDateShort } from "@/lib/format";
 import { queryConsultations } from "@/lib/data/clinical";
 import { queryPatientById } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
 
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "bookings", label: "Bookings" },
-  { id: "records", label: "Medical Records" },
-];
 
 interface PatientDetail {
   id: string;
@@ -51,14 +53,23 @@ export default function StaffPatientDetailPage({ params }: { params: Promise<{ i
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [tab, setTab] = useState("overview");
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      const [patientData, bookingRows, consultationsRes] = await Promise.all([
-        queryPatientById(null as never, id),
-        queryBookings(null as never, { patientId: id }),
-        queryConsultations(null as never, { patientId: id }),
-      ]);
+  const load = useCallback(async () => {
+      let patientData, bookingRows, consultationsRes;
+      try {
+        [patientData, bookingRows, consultationsRes] = await Promise.all([
+          queryPatientById(null as never, id),
+          queryBookings(null as never, { patientId: id }),
+          queryConsultations(null as never, { patientId: id }),
+        ]);
+        setLoadError(false);
+      } catch {
+        setLoadError(true);
+        setLoading(false);
+        return;
+      }
 
       if (!patientData) {
         setPatient(null);
@@ -96,10 +107,26 @@ export default function StaffPatientDetailPage({ params }: { params: Promise<{ i
       );
 
       setLoading(false);
-    }
-
-    load();
   }, [id]);
+
+  useEffect(() => {
+    queueMicrotask(() => { void load(); });
+  }, [load]);
+
+  if (loadError && patient === undefined) {
+    return (
+      <AppShell role="staff">
+        <div className="mx-auto max-w-[48rem]">
+          <ErrorState
+            title="This patient didn’t load"
+            message="Check the connection to the clinic server, then try again."
+            retrying={retrying}
+            onRetry={async () => { setRetrying(true); await load(); setRetrying(false); }}
+          />
+        </div>
+      </AppShell>
+    );
+  }
 
   if (loading || patient === undefined) {
     return (
@@ -114,88 +141,100 @@ export default function StaffPatientDetailPage({ params }: { params: Promise<{ i
 
   if (patient === null) notFound();
 
+  const tabs = [
+    { id: "overview", label: "Overview" },
+    { id: "bookings", label: `Bookings (${bookings.length})` },
+    { id: "records", label: `Medical records (${records.length})` },
+  ];
+
   return (
     <AppShell role="staff">
-      <div className="mx-auto max-w-[44rem] space-y-lg">
-        <Card>
-          <h1 className="text-headline-md text-on-surface">{patient.fullName}</h1>
-          <p className="text-label-md text-on-surface-variant">{patient.patientCode}</p>
-        </Card>
+      <div className="mx-auto max-w-[48rem] space-y-lg">
+        <Link href="/staff/patients" className="inline-flex min-h-11 items-center gap-xs text-label-md font-medium text-primary hover:underline">
+          <Icon name="chevron_left" className="text-[14px]" />
+          All patients
+        </Link>
+
+        <header className="space-y-xs">
+          <h1 className="text-balance break-words text-headline-lg-mobile text-on-surface sm:text-headline-lg">{patient.fullName}</h1>
+          <p className="text-body-md text-on-surface-variant">
+            <span className="font-mono text-body-sm">{patient.patientCode}</span>
+            {patient.sex && <> · {patient.sex}</>}
+            {patient.dateOfBirth && <> · Born {formatClinicDate(patient.dateOfBirth)}</>}
+          </p>
+        </header>
 
         <Card>
-          <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
+          <Tabs tabs={tabs} activeId={tab} onChange={setTab} className="mb-lg" />
 
           {tab === "overview" && (
             <div className="space-y-lg">
-              <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-                <Info label="Sex" value={patient.sex} />
-                <Info label="Date of Birth" value={patient.dateOfBirth} />
-                <Info label="Contact Number" value={patient.contactNumber} />
-                <Info label="Email" value={patient.email} />
+              <dl className="grid grid-cols-1 gap-md sm:grid-cols-2">
+                <InfoField label="Contact number" value={patient.contactNumber} />
+                <InfoField label="Email" value={patient.email} />
+              </dl>
+              <div className="flex flex-wrap items-center justify-between gap-md border-t border-outline-variant pt-md">
+                <div className="flex items-center gap-sm">
+                  <span className="text-label-md text-on-surface-variant">Portal account</span>
+                  <StatusPill status={patient.accountStatus} />
+                </div>
+                {patient.accountStatus === "NoAccount" && !createAccountOpen && (
+                  <Button variant="secondary" onClick={() => setCreateAccountOpen(true)}>
+                    Create portal account
+                  </Button>
+                )}
               </div>
-              {patient.accountStatus === "NoAccount" ? (
-                <>
-                  {!createAccountOpen ? (
-                    <Button variant="secondary" onClick={() => setCreateAccountOpen(true)}>
-                      Create Portal Account
-                    </Button>
-                  ) : (
-                    <div className="space-y-md rounded-lg border border-outline-variant p-md">
-                      <p className="text-body-md text-on-surface-variant">
-                        Portal account creation from this page is not wired yet. Use the admin/staff invite flow when available.
-                      </p>
-                      <Button variant="secondary" onClick={() => setCreateAccountOpen(false)}>Close</Button>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
-                  Portal account: {patient.accountStatus === "LinkedAccount" ? "created" : "pending"}
-                </p>
+              {patient.accountStatus === "NoAccount" && createAccountOpen && (
+                <div className="space-y-md rounded-lg border border-outline-variant p-md">
+                  <p className="text-body-md text-on-surface-variant">
+                    Portal account creation from this page is not wired yet. Use the admin/staff invite flow when available.
+                  </p>
+                  <Button variant="secondary" onClick={() => setCreateAccountOpen(false)}>Close</Button>
+                </div>
               )}
             </div>
           )}
 
           {tab === "bookings" && (
-            <div className="space-y-sm">
-              {bookings.map((b) => (
-                <div key={b.id} className="rounded-lg border border-outline-variant p-md text-body-md">
-                  {b.doctorName} — {b.appointmentDate} ({b.status})
-                </div>
-              ))}
-              {bookings.length === 0 && (
-                <p className="text-body-md text-on-surface-variant">No bookings yet.</p>
-              )}
-            </div>
+            bookings.length === 0 ? (
+              <EmptyState icon="event_note" message="No bookings yet." />
+            ) : (
+              <ul className="divide-y divide-outline-variant/40">
+                {bookings.map((b) => (
+                  <li key={b.id}>
+                    <Link href={`/staff/bookings/${b.id}`} className="flex min-h-11 flex-wrap items-center justify-between gap-sm rounded-lg px-sm py-md hover:bg-surface-container-low">
+                      <span className="min-w-0">
+                        <span className="block text-body-md font-medium tabular-nums text-on-surface">{formatClinicDateShort(b.appointmentDate)}</span>
+                        <span className="block text-label-md text-on-surface-variant">{b.doctorName || "—"}</span>
+                      </span>
+                      <StatusPill status={b.status} />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )
           )}
 
           {tab === "records" && (
-            <div className="space-y-sm">
-              <p className="mb-sm inline-block rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant">
-                Read-only
-              </p>
-              {records.map((c) => (
-                <div key={c.id} className="rounded-lg border border-outline-variant p-md text-body-md text-on-surface-variant">
-                  <p><strong>{c.appointmentDate}</strong> — {c.chiefComplaint}</p>
-                  <p>{c.diagnoses.join(", ")}</p>
-                </div>
-              ))}
-              {records.length === 0 && (
-                <p className="text-body-md text-on-surface-variant">No medical records yet.</p>
+            <div className="space-y-md">
+              <p className="text-label-md text-on-surface-variant">Read-only. Only the doctor can change medical records.</p>
+              {records.length === 0 ? (
+                <EmptyState icon="description" message="No medical records yet." />
+              ) : (
+                <ul className="space-y-sm">
+                  {records.map((c) => (
+                    <li key={c.id} className="rounded-lg border border-outline-variant p-md">
+                      <p className="text-label-md tabular-nums text-on-surface-variant">{formatClinicDate(c.appointmentDate)}</p>
+                      <p className="text-body-md font-medium text-on-surface">{c.chiefComplaint || "No chief complaint recorded"}</p>
+                      {c.diagnoses.length > 0 && <p className="text-body-md text-on-surface-variant">{c.diagnoses.join(", ")}</p>}
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           )}
         </Card>
       </div>
     </AppShell>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-label-sm text-on-surface-variant">{label}</p>
-      <p className="text-body-md text-on-surface">{value}</p>
-    </div>
   );
 }

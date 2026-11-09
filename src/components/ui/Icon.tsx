@@ -2,6 +2,8 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import {
   faBars,
+  faPlus,
+  faArrowRight,
   faBell,
   faMagnifyingGlass,
   faRightFromBracket,
@@ -109,6 +111,8 @@ const ICON_MAP: Record<string, IconDefinition> = {
   account_circle: faCircleUser,
   star: faStar,
   add_circle: faCirclePlus,
+  add: faPlus,
+  arrow_forward: faArrowRight,
   gavel: faGavel,
   folder_shared: faFolderOpen,
   folder_open: faFolderOpen,
