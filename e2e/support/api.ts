@@ -279,3 +279,38 @@ export async function deleteAccountByEmail(email: string, password = PASSWORD): 
   }
 }
 //JJQR - END
+
+//JJQR - AI (Nov 19, 2026) - e2e-full-coverage: announcements + dev password helpers
+/** Create an announcement as admin; returns its id. Caller registers cleanup with deleteAnnouncement. */
+export async function createAnnouncement(admin: APIRequestContext, title: string, body = "E2E body", is_active = true): Promise<{ id: string }> {
+  const res = await admin.post("/api/announcements", { data: { title, body, is_active } });
+  if (!res.ok()) throw new Error(`createAnnouncement → ${res.status()} ${await res.text()}`);
+  return res.json();
+}
+export async function deleteAnnouncement(admin: APIRequestContext, id: string) {
+  await admin.delete(`/api/announcements/${id}`).catch(() => undefined);
+}
+/** Delete every announcement whose title contains `needle` (cleanup for UI-created rows). */
+export async function deleteAnnouncementsByTitle(admin: APIRequestContext, needle: string) {
+  const res = await admin.get("/api/announcements");
+  if (!res.ok()) return;
+  for (const a of (await res.json()) as { id: string; title: string }[]) if (a.title.includes(needle)) await deleteAnnouncement(admin, a.id);
+}
+
+/** Cleanup guard for tests that change a dev account's password: puts ClinicDev123! back whichever password is current. */
+export async function restoreDevPassword(email: string, candidates: string[]): Promise<void> {
+  for (const pw of [DEV_PASSWORD, ...candidates]) {
+    const ctx = await pwRequest.newContext({ baseURL: BE_URL });
+    const r = await ctx.post("/api/auth/login", { data: { email, password: pw } });
+    if (r.ok()) {
+      const tok = (await r.json()).accessToken as string;
+      if (pw !== DEV_PASSWORD) {
+        await ctx.post("/api/auth/change-password", { data: { currentPassword: pw, newPassword: DEV_PASSWORD }, headers: { Authorization: `Bearer ${tok}` } });
+      }
+      await ctx.dispose();
+      return;
+    }
+    await ctx.dispose();
+  }
+}
+//JJQR - END
