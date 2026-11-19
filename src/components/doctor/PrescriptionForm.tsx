@@ -30,6 +30,36 @@ import { mgPerKgDose, mlFromConcentration } from "@/lib/clinical/peds-dosing";
 
 type DbTemplateItem = Database["public"]["Tables"]["prescription_template_items"]["Row"];
 
+//JJQR - AI (Nov 19, 2026) - template items now persist route / meals / timing / duration / indication (they used to be dropped on save)
+type TemplateItemWire = DbTemplateItem & {
+  route?: string | null;
+  meal_relation?: string | null;
+  timing?: string | null;
+  duration_kind?: string | null;
+  duration_value?: number | null;
+  indication?: string | null;
+};
+
+const NIL_MEDICINE_ID = "00000000-0000-0000-0000-000000000000";
+
+export function lineItemToTemplatePayload(i: PrescriptionLineItem) {
+  return {
+    medicine_id: i.rxId || NIL_MEDICINE_ID,
+    generic_name: i.genericName,
+    dosage: i.dosage,
+    quantity: i.quantity,
+    instruction: i.instruction || null,
+    is_controlled_substance: i.isControlledSubstance ?? false,
+    route: i.route ?? null,
+    meal_relation: i.mealRelation ?? null,
+    timing: i.timing ?? null,
+    duration_kind: i.durationKind ?? null,
+    duration_value: i.durationValue ?? null,
+    indication: i.indication ?? null,
+  };
+}
+//JJQR - END
+
 function newId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
@@ -790,7 +820,7 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
     showToast("error", message);
   }
 
-  function toTemplate(t: { template_id: string; doctor_id: string; title: string; is_system_template: boolean; prescription_template_items: DbTemplateItem[] }): PrescriptionTemplate {
+  function toTemplate(t: { template_id: string; doctor_id: string; title: string; is_system_template: boolean; prescription_template_items: TemplateItemWire[] }): PrescriptionTemplate {
     return {
       id: t.template_id,
       doctorId: t.doctor_id,
@@ -804,6 +834,14 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
         quantity: i.quantity,
         instruction: i.instruction ?? "",
         isControlledSubstance: i.is_controlled_substance,
+        //JJQR - AI (Nov 19, 2026) - carry the saved Rx-pad fields into the consultation when a template is applied
+        route: i.route ?? null,
+        mealRelation: i.meal_relation === "Before" || i.meal_relation === "After" ? i.meal_relation : null,
+        timing: i.timing ?? null,
+        durationKind: i.duration_kind === "Maintain" || i.duration_kind === "Days" || i.duration_kind === "Weeks" ? i.duration_kind : null,
+        durationValue: i.duration_value ?? null,
+        indication: i.indication ?? null,
+        //JJQR - END
       })),
     };
   }
@@ -982,14 +1020,7 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
         await createRxTemplate(supabase, doctorId, {
           title: templateTitle.trim(),
           is_system_template: false,
-          items: items.map((i) => ({
-            medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
-            generic_name: i.genericName,
-            dosage: i.dosage,
-            quantity: i.quantity,
-            instruction: i.instruction || null,
-            is_controlled_substance: i.isControlledSubstance ?? false,
-          })),
+          items: items.map(lineItemToTemplatePayload),
         });
       }
 
@@ -1255,14 +1286,7 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
         onClose={() => setTemplateModalOpen(false)}
         onSave={async (title, tplItems) => {
           const supabase = null as never;
-          const items = tplItems.map((i) => ({
-            medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
-            generic_name: i.genericName,
-            dosage: i.dosage,
-            quantity: i.quantity,
-            instruction: i.instruction || null,
-            is_controlled_substance: i.isControlledSubstance ?? false,
-          }));
+          const items = tplItems.map(lineItemToTemplatePayload);
           if (editingTemplate) {
             await updateRxTemplate(supabase, editingTemplate.id, doctorId, { title, is_system_template: false, items });
           } else {

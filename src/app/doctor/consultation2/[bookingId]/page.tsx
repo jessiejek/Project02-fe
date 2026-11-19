@@ -631,7 +631,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (!label || !body) return;
     //JJQR - AI (Nov 19, 2026) - success/error toast instead of a silent failure
     try {
-      const created = await createDiagnosisTemplate(null as never, { label, body });
+      const created = await createDiagnosisTemplate(null as never, { label, body, icd10_code: newDiagnosisIcd });
       templateLib.diagnoses.add(created);
       notifyTpl("success", `Diagnosis “${created.label}” saved.`);
       setSaveTplOpen(false);
@@ -2578,14 +2578,14 @@ Return to patient queue
                           value=""
                           onChange={(e) => {
                             const t = diagnosisTemplates.find((x) => x.id === e.target.value);
-                            if (t) addDiagnosisLine(t.body);
+                            if (t) addDiagnosisLine(t.body, t.icd10_code ?? null);
                           }}
                           aria-label="Insert a saved diagnosis"
                           className="w-full rounded-lg border border-outline-variant bg-transparent px-md py-sm text-body-md text-on-surface-variant"
                         >
                           <option value="">+ Insert saved diagnosis…</option>
                           {diagnosisTemplates.map((t) => (
-                            <option key={t.id} value={t.id}>{t.label} — {t.body}</option>
+                            <option key={t.id} value={t.id}>{t.label}{t.icd10_code ? ` (${t.icd10_code})` : ""} — {t.body}</option>
                           ))}
                         </select>
                       )}

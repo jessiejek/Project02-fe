@@ -20,4 +20,18 @@ test('workspace wiring: route keeps the h1 + e2e selectors, panel is guarded, de
   const soap = read('components/doctor/templates/SoapTab.tsx');
   assert.match(soap, /SPECIALTY_CHIP_LABELS/); // specialty chips come from SPECIALTY_CHIP_LABELS
 });
+
+test('consultation2 + Rx form use the new template data (ICD code on Dx, full Rx-pad fields on Rx sets)', () => {
+  const c2 = read('app/doctor/consultation2/[bookingId]/page.tsx');
+  assert.match(c2, /addDiagnosisLine\(t\.body, t\.icd10_code \?\? null\)/);
+  assert.match(c2, /createDiagnosisTemplate\(null as never, \{ label, body, icd10_code: newDiagnosisIcd \}\)/);
+  const rx = read('components/doctor/PrescriptionForm.tsx');
+  assert.match(rx, /function lineItemToTemplatePayload/);
+  for (const f of ['route', 'meal_relation', 'timing', 'duration_kind', 'duration_value', 'indication']) {
+    assert.match(rx, new RegExp(`${f}: i\\.`), `${f} must be mapped when saving a template`);
+  }
+  // every save path (Add to Template + modal save) goes through the one mapper
+  assert.equal((rx.match(/lineItemToTemplatePayload/g) ?? []).length, 3);
+  assert.match(rx, /mealRelation: i\.meal_relation === "Before"/);
+});
 //JJQR - END
