@@ -14,7 +14,7 @@ const ROUTES: Record<Role, string[]> = {
   ],
   doctor: [
     "/doctor/dashboard", "/doctor/appointments", "/doctor/patients",
-    "/doctor/schedule", "/doctor/settings", "/doctor/profile",
+    "/doctor/schedule", "/doctor/settings", "/doctor/profile", "/doctor/performance", //JJQR - AI (Nov 19, 2026) - new Performance page JJQR - END
   ],
   staff: [
     "/staff/dashboard", "/staff/bookings", "/staff/payments", "/staff/walk-in",
