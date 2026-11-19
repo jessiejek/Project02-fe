@@ -389,6 +389,9 @@ export interface FavoriteMedicineRow {
   dosage: string;
   quantity: string;
   instruction: string | null;
+  //JJQR - AI (Nov 19, 2026) - templates revamp: doctor-chosen order (older API builds omit it)
+  sort_order?: number;
+  //JJQR - END
 }
 
 export async function queryFavoriteMedicines(_supabase: unknown, doctorId: string): Promise<FavoriteMedicineRow[]> {
@@ -413,6 +416,9 @@ export interface SoapPhraseRow {
   field: string;
   label: string;
   body: string;
+  //JJQR - AI (Nov 19, 2026) - templates revamp: doctor-chosen order within a field (older API builds omit it)
+  sort_order?: number;
+  //JJQR - END
 }
 
 export async function querySoapTemplates(_supabase: unknown, doctorId?: string): Promise<SoapTemplateRow[]> {
@@ -442,6 +448,12 @@ export async function updateSoapPhrase(
 export async function deleteSoapPhrase(_supabase: unknown, id: string): Promise<void> {
   await api.delete(`/api/soap-phrases/${id}`);
 }
+
+//JJQR - AI (Nov 19, 2026) - templates revamp: persist the doctor's phrase order (ids in the wanted order; own phrases only)
+export async function reorderSoapPhrases(_supabase: unknown, doctorId: string, ids: string[]): Promise<void> {
+  await api.put(`/api/soap-phrases/order`, { ids }, { query: { doctorId } });
+}
+//JJQR - END
 
 export async function createSoapTemplate(
   _supabase: unknown,
@@ -512,6 +524,9 @@ export interface DiagnosisTemplateRow {
   doctor_id: string;
   label: string;
   body: string;
+  //JJQR - AI (Nov 19, 2026) - templates revamp: optional attached ICD-10 code
+  icd10_code?: string | null;
+  //JJQR - END
 }
 
 export async function queryDiagnosisTemplates(_supabase?: unknown): Promise<DiagnosisTemplateRow[]> {
@@ -520,7 +535,7 @@ export async function queryDiagnosisTemplates(_supabase?: unknown): Promise<Diag
 
 export async function createDiagnosisTemplate(
   _supabase: unknown,
-  input: { label: string; body: string },
+  input: { label: string; body: string; icd10_code?: string | null },
 ): Promise<DiagnosisTemplateRow> {
   return api.post<DiagnosisTemplateRow>("/api/doctor-diagnosis-templates", input);
 }
@@ -528,7 +543,7 @@ export async function createDiagnosisTemplate(
 export async function updateDiagnosisTemplate(
   _supabase: unknown,
   id: string,
-  input: { label: string; body: string },
+  input: { label: string; body: string; icd10_code?: string | null },
 ): Promise<DiagnosisTemplateRow> {
   return api.put<DiagnosisTemplateRow>(`/api/doctor-diagnosis-templates/${id}`, input);
 }
@@ -588,6 +603,12 @@ export async function updateFavoriteMedicine(
 export async function deleteFavoriteMedicine(_supabase: unknown, id: string): Promise<void> {
   await api.delete(`/api/doctor-favorite-medicines/${id}`);
 }
+
+//JJQR - AI (Nov 19, 2026) - templates revamp: persist the doctor's favorites order (ids in the wanted order; own favorites only)
+export async function reorderFavoriteMedicines(_supabase: unknown, doctorId: string, ids: string[]): Promise<void> {
+  await api.put(`/api/doctor-favorite-medicines/order`, { ids }, { query: { doctorId } });
+}
+//JJQR - END
 
 //JJQR - AI (Oct 31, 2026)
 export interface PatientLabValueRow {
