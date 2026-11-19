@@ -272,9 +272,11 @@ test.describe("B7b · closed weekday", () => {
     const date = manilaDate(6);
     const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
     const sched: any[] = await (await doc.get(`/api/doctors/${d.doctor_id}/schedules`)).json();
-    const row = sched.find((x) => x.day_of_week === dow);
-    test.skip(!row, "doctor has no schedule row for that weekday");
+    // The dev doctor starts with no schedule rows: give that weekday hours first, then close it; the cleanup puts it back (inactive = how it started).
+    const row = sched.find((x) => x.day_of_week === dow) ?? { doctor_id: d.doctor_id, day_of_week: dow, is_active: false, start_time: "09:00:00", end_time: "17:00:00" };
     cleanup(async () => void (await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: row })));
+    const opened = await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: { ...row, is_active: true } });
+    expect(opened.ok(), await opened.text()).toBeTruthy();
     const closed = await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: { ...row, is_active: false } });
     expect(closed.ok(), await closed.text()).toBeTruthy();
     const me = await registerFreshPatient(tag("b7c"));
