@@ -196,3 +196,41 @@ test("fetch wrapper: GETs /api/doctor/performance with only a period (never a do
   assert.match(src, /api\.get<DoctorPerformance>\("\/api\/doctor\/performance", \{ query: \{ period \}/);
   assert.doesNotMatch(src, /doctorId|doctor_id=/);
 });
+
+// ── wiring: the page, the nav link, the Today page (source checks, like the other design tests) ──
+const read = (rel) => readFileSync(new URL(rel, import.meta.url), "utf8");
+import { readdirSync } from "node:fs";
+
+test("nav: the doctor's Your practice group links to /doctor/performance; Sidebar.tsx is not involved", () => {
+  const nav = read("./nav-config.ts");
+  assert.match(nav, /\{ label: "Performance", href: "\/doctor\/performance", icon: "monitoring" \}/);
+  const doctorBlock = nav.slice(nav.indexOf("doctor: {"));
+  assert.ok(doctorBlock.indexOf("Performance") > doctorBlock.indexOf("Your practice"), "Performance sits under Your practice");
+});
+
+test("Today page: the clinic-wide Revenue / No Shows cards are gone, replaced by a link to Performance", () => {
+  const src = read("../app/doctor/dashboard/page.tsx");
+  assert.doesNotMatch(src, /label="Revenue Today"/);
+  assert.doesNotMatch(src, /label="No Shows Today"/);
+  assert.doesNotMatch(src, /v_daily_booking_summary/);
+  assert.match(src, /href="\/doctor\/performance"/);
+  assert.match(src, /label="Pending Verifications \(month\)"/, "the rest of the overview stays");
+});
+
+test("Performance page files: never red, never a chart library, never a client-sent doctor id", () => {
+  const dir = new URL("../components/doctor/performance/", import.meta.url);
+  const files = readdirSync(dir).filter((f) => f.endsWith(".tsx"));
+  assert.ok(files.length >= 5);
+  for (const f of files) {
+    const src = readFileSync(new URL(f, dir), "utf8");
+    // the shared ErrorState (not used for numbers) is the only place a danger colour may appear
+    assert.doesNotMatch(src, /text-status-danger|bg-status-danger|text-red|bg-red|border-red/, `${f} must not use red`);
+    assert.doesNotMatch(src, /from "(recharts|chart\.js|d3|victory|@nivo)/, `${f} must not import a chart library`);
+  }
+  const page = read("../app/doctor/performance/page.tsx");
+  assert.match(page, /role="doctor"/);
+  const dash = readFileSync(new URL("PerformanceDashboard.tsx", dir), "utf8");
+  assert.match(dash, /fetchDoctorPerformance\(period/);
+  assert.doesNotMatch(dash, /doctorId|staffId\)\s*,/);
+  assert.match(dash, /Try again|onRetry/);
+});

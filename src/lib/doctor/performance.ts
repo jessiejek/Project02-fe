@@ -159,13 +159,13 @@ export interface AlsoItem {
 export function alsoItems(s: PerformanceStats): AlsoItem[] {
   const items: AlsoItem[] = [
     { key: "rx", icon: "medication", value: String(s.rx_groups), label: s.rx_groups === 1 ? "prescription written" : "prescriptions written" },
-    { key: "cert", icon: "assignment_turned_in", value: String(s.med_certs), label: s.med_certs === 1 ? "medical certificate" : "medical certificates" },
-    { key: "lab", icon: "biotech", value: String(s.lab_orders), label: s.lab_orders === 1 ? "lab order" : "lab orders" },
-    { key: "followups", icon: "event_repeat", value: String(s.follow_up_visits), label: s.follow_up_visits === 1 ? "follow-up visit" : "follow-up visits" },
-    { key: "first", icon: "waving_hand", value: String(s.first_time_patients), label: s.first_time_patients === 1 ? "first-time patient" : "first-time patients" },
+    { key: "cert", icon: "description", value: String(s.med_certs), label: s.med_certs === 1 ? "medical certificate" : "medical certificates" },
+    { key: "lab", icon: "science", value: String(s.lab_orders), label: s.lab_orders === 1 ? "lab order" : "lab orders" },
+    { key: "followups", icon: "event", value: String(s.follow_up_visits), label: s.follow_up_visits === 1 ? "follow-up visit" : "follow-up visits" },
+    { key: "first", icon: "person", value: String(s.first_time_patients), label: s.first_time_patients === 1 ? "first-time patient" : "first-time patients" },
   ];
   const avg = avgConsultLabel(s);
-  if (avg) items.push({ key: "avg", icon: "timer", value: avg, label: "average consult" });
+  if (avg) items.push({ key: "avg", icon: "schedule", value: avg, label: "average consult" });
   return items;
 }
 

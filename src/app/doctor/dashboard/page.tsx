@@ -78,15 +78,13 @@ export default function DoctorDashboardPage() {
   const [followUpsDueToday, setFollowUpsDueToday] = useState<ConsultationRow[]>([]);
 
   // Clinic Overview — the same admin-dashboard stats (Admin Dashboard's
-  // v_daily_booking_summary/v_unpaid_completed_visits/v_pending_follow_ups
+  // v_unpaid_completed_visits/v_pending_follow_ups
   // reads, ReportsController's StaffReports role already covers "Doctor"),
   // scoped to this doctor's own bookings so a single-doctor clinic doesn't
   // need to switch to an admin login just to see the practice's own numbers.
-  const [revenueToday, setRevenueToday] = useState(0);
   const [pendingVerifications, setPendingVerifications] = useState(0);
   const [onHoldThisMonth, setOnHoldThisMonth] = useState(0);
   const [unpaidCompletedMonth, setUnpaidCompletedMonth] = useState(0);
-  const [noShowsToday, setNoShowsToday] = useState(0);
   const [followUpsDue7Days, setFollowUpsDue7Days] = useState(0);
   const [recentBookings, setRecentBookings] = useState<ClinicBookingRow[]>([]);
 
@@ -101,8 +99,7 @@ export default function DoctorDashboardPage() {
     // ever recorded just to show 20 rows.
     const windowStart = [monthStart, addDaysToDate(today, -31)].sort()[0];
     try {
-      const [dailySummary, unpaidRes, followUpsRes, recent] = await Promise.all([
-        queryReport<Record<string, unknown>>(supabase, "v_daily_booking_summary"),
+      const [unpaidRes, followUpsRes, recent] = await Promise.all([
         queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits").then((rows) =>
           rows.filter((r) => (r.doctor_id as string) === meDoctorId && (r.appointment_date as string) >= monthStart),
         ),
@@ -118,13 +115,9 @@ export default function DoctorDashboardPage() {
       ]);
       const monthBookings = recent.filter((b) => b.appointment_date >= monthStart && b.appointment_date <= today);
 
-      // v_daily_booking_summary has no doctor_id (clinic-wide per day) — fine
-      // for a single-doctor clinic, where "the clinic's day" and "this
-      // doctor's day" are the same thing.
-      const todaySummary = dailySummary.find((r) => r.appointment_date === today) ?? null;
+      //JJQR - AI (Nov 19, 2026) - "Revenue Today" / "No Shows Today" were clinic-wide numbers (the daily summary view has no doctor id), which misled a doctor about their own day. Your own numbers now live on /doctor/performance.
+      //JJQR - END
       setOverviewError(false);
-      setRevenueToday(Number(todaySummary?.revenue ?? 0));
-      setNoShowsToday(Number(todaySummary?.no_show_count ?? 0));
       setPendingVerifications(monthBookings.filter((b) => b.status === "ProofSubmitted").length);
       setOnHoldThisMonth(monthBookings.filter((b) => b.status === "OnHold").length);
       setUnpaidCompletedMonth(unpaidRes.length);
@@ -365,7 +358,7 @@ export default function DoctorDashboardPage() {
   return (
     <AppShell role="doctor" roleBadge={dayStatus ? <StatusPill status={dayStatus} /> : undefined}>
       <div className="min-w-0 space-y-lg overflow-x-hidden">
-        <DoctorPageHeader title="Your clinic today" description={<>{name} · <span className="tabular-nums">{visitDate(todayManila())}</span></>} actions={<Link href="/doctor/appointments" className={buttonStyles("primary")}>Open appointments<Icon name="arrow_forward" className="h-4 w-4" /></Link>} />
+        <DoctorPageHeader title="Your clinic today" description={<>{name} · <span className="tabular-nums">{visitDate(todayManila())}</span></>} actions={<>{/*JJQR - AI (Nov 19, 2026) */}<Link href="/doctor/performance" data-testid="performance-link" className={buttonStyles("secondary")}><Icon name="monitoring" className="h-4 w-4" />Your performance</Link>{/*JJQR - END */}<Link href="/doctor/appointments" className={buttonStyles("primary")}>Open appointments<Icon name="arrow_forward" className="h-4 w-4" /></Link></>} />
         {statusError && <Toast variant="error" key={statusError} message={statusError} />}
 
         <Card className="!p-lg sm:!p-xl">
@@ -475,8 +468,15 @@ export default function DoctorDashboardPage() {
           <summary className="text-headline-sm font-semibold text-on-surface">Clinic reports & recent bookings</summary>
           {overviewError ? <p role="alert" className="mt-md text-body-md text-on-surface-variant">Reports are unavailable. <button type="button" onClick={loadClinicOverview} className="text-primary underline">Try again</button></p> : <div className="mt-lg space-y-lg">
           <div className="grid grid-cols-1 gap-lg sm:grid-cols-2 md:grid-cols-3">
-            <StatCard icon="payments" value={peso(revenueToday)} label="Revenue Today" />
-            <StatCard icon="event_busy" value={noShowsToday} label="No Shows Today" />
+            {/*JJQR - AI (Nov 19, 2026) - replaces the clinic-wide "Revenue Today" / "No Shows Today" cards with a link to the doctor's own numbers */}
+            <Link href="/doctor/performance" data-testid="performance-link-card" className="block">
+              <Card hoverable className="h-full">
+                <div className="mb-md flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon name="monitoring" /></div>
+                <p className="text-headline-sm text-on-surface">Your performance</p>
+                <p className="text-label-md text-on-surface-variant">Patients, collected and billed, trends</p>
+              </Card>
+            </Link>
+            {/*JJQR - END */}
             <StatCard icon="pending_actions" value={pendingVerifications} label="Pending Verifications (month)" />
             <StatCard icon="hourglass_top" value={onHoldThisMonth} label="On Hold (month)" />
             <StatCard icon="receipt_long" value={unpaidCompletedMonth} label="Unpaid Completed (month)" />
