@@ -79,4 +79,15 @@ test('wiring: the gate shows a message and the Templates tab renders the result 
   assert.match(src, /data-testid="rx-template-notice"/);
   assert.match(src, /planTemplateApply\(template\.items/);
 });
+test('wiring: every Rx row can be edited, System edits become your own copy, modal is wide', () => {
+  const src = read('components/doctor/PrescriptionForm.tsx');
+  assert.match(src, /isSystemCopy/);
+  assert.match(src, /Editing your own copy of a System template/);
+  assert.match(src, /size="xl"/);
+  assert.match(src, /min-\[900px\]:grid-cols-/);
+  assert.ok(!/\{!t\.isSystemTemplate && \(\s*<div className="flex items-center gap-sm">/.test(src), 'edit/delete must not be Mine-only any more');
+  assert.match(read('components/ui/Modal.tsx'), /xl: "max-w-\[60rem\]"/);
+  const rx = read('components/doctor/templates/RxTab.tsx');
+  assert.match(rx, /duplicate\(t, \{ editing: true \}\)/);
+});
 //JJQR - END

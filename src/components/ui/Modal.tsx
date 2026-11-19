@@ -13,12 +13,17 @@ export interface ModalProps {
   /** Dialog max-width — "md" (default, 32rem) for simple forms/confirmations,
    *  "lg" (48rem) for content with its own tab bar or wide tables (e.g.
    *  Patient History) that would otherwise wrap and scroll awkwardly. */
-  size?: "md" | "lg";
+  //JJQR - AI (Nov 19, 2026) - "xl" (60rem / 960px) for two-column editors
+  size?: "md" | "lg" | "xl";
+  //JJQR - END
 }
 
 const SIZE_CLASS: Record<NonNullable<ModalProps["size"]>, string> = {
   md: "max-w-[32rem]",
   lg: "max-w-[48rem]",
+  //JJQR - AI (Nov 19, 2026) - 960px wide on laptop, full width minus padding on small screens (w-full)
+  xl: "max-w-[60rem]",
+  //JJQR - END
 };
 
 /** Modal/dialog shell (header/body/footer) — per Stitch-00 Sheet 2. Closes on Escape or backdrop click. */

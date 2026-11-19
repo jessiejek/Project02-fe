@@ -114,7 +114,8 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
     [rows, source, ctx],
   );
 
-  async function duplicate(row: RxTemplateRow) {
+  //JJQR - AI (Nov 19, 2026) - "Edit" on a System set makes your own copy (never touches the System original) and opens it
+  async function duplicate(row: RxTemplateRow, opts?: { editing?: boolean }) {
     try {
       const created = await createRxTemplate(null, ctx.doctorId, {
         title: copyTitle(row.title, rows.map((r) => r.title)),
@@ -122,7 +123,7 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
         items: row.prescription_template_items.map((i) => ({ ...fromItemToPlain(i) })),
       });
       data.rx.setItems((prev) => [...prev, created].sort(byTitle));
-      toast.push("success", `Duplicated to “${created.title}”.`);
+      toast.push("success", opts?.editing ? "Editing your own copy of a System template." : `Duplicated to “${created.title}”.`);
       ctx.openPanel(created.template_id);
     } catch {
       toast.push("error", "Couldn’t duplicate the prescription set. Please try again.");
@@ -164,7 +165,7 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
                 preview={<RxSigPreview items={t.prescription_template_items} />}
                 actions={
                   <>
-                    <TextAction onClick={() => ctx.openPanel(t.template_id)}>{t.is_system_template ? "View" : "Edit"}</TextAction>
+                    <TextAction onClick={() => (t.is_system_template ? void duplicate(t, { editing: true }) : ctx.openPanel(t.template_id))}>Edit</TextAction>
                     <TextAction onClick={() => void duplicate(t)}>Duplicate</TextAction>
                     {!t.is_system_template && <TextAction tone="danger" onClick={() => confirm.ask(t.template_id, t.title)}>Delete</TextAction>}
                   </>
@@ -174,7 +175,7 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
           </ItemList>
         )}
       </LoadGate>
-      {panelId && (panelId === "new" || editing) && <RxEditor key={panelId} ctx={ctx} row={editing} onDuplicate={duplicate} />}
+      {panelId && (panelId === "new" || editing) && <RxEditor key={panelId} ctx={ctx} row={editing} onDuplicate={(r) => duplicate(r, { editing: true })} />}
       {confirm.modal}
     </div>
   );
@@ -227,14 +228,14 @@ function RxEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: RxTemplateRow |
     <SidePanel
       isOpen
       title={row ? (readOnly ? row.title : `Edit “${row.title}”`) : "New prescription set"}
-      subtitle={readOnly ? "System set — read only. Duplicate it to make your own copy." : undefined}
+      subtitle={readOnly ? "System set — read only. Tap “Edit my copy” to change it as your own copy." : undefined}
       dirty={dirty}
       saving={saving}
       readOnly={readOnly}
       onClose={ctx.closePanel}
       onSave={save}
       saveBlockedReason={reason}
-      footer={readOnly && row ? <Button onClick={() => void onDuplicate(row)}>Duplicate to mine</Button> : undefined}
+      footer={readOnly && row ? <Button onClick={() => void onDuplicate(row)}>Edit my copy</Button> : undefined}
     >
       {readOnly && row ? (
         <ul className="space-y-sm" aria-label="Medicines in this set">

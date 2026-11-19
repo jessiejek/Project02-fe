@@ -276,7 +276,7 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
 
         <div>
           <p className="mb-xs text-label-sm text-on-surface-variant">Timing</p>
-          <div className="grid grid-cols-4 gap-sm">
+          <div className="flex flex-wrap gap-sm">
             {TIMING_SLOTS.map((slot) => (
               <button
                 key={slot}
@@ -284,7 +284,7 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
                 onClick={() => toggleSlot(slot)}
                 aria-pressed={timingSlots.includes(slot)}
                 className={cn(
-                  "rounded-lg border px-xs py-sm text-label-sm",
+                  "whitespace-nowrap rounded-lg border px-md py-sm text-label-sm",
                   timingSlots.includes(slot) ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
                 )}
               >
@@ -489,7 +489,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
       {/* §16.8 Form 1 — Breakfast / Lunch / Dinner / Bedtime (multiple) */}
       <div>
         <p className="mb-xs text-label-sm text-on-surface-variant">Timing</p>
-        <div className="grid grid-cols-4 gap-sm">
+        <div className="flex flex-wrap gap-sm">
           {TIMING_SLOTS.map((slot) => (
             <button
               key={slot}
@@ -497,7 +497,7 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
               onClick={() => toggleSlot(slot)}
               aria-pressed={timingSlots.includes(slot)}
               className={cn(
-                "rounded-lg border px-xs py-sm text-label-sm",
+                "whitespace-nowrap rounded-lg border px-md py-sm text-label-sm",
                 timingSlots.includes(slot) ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
               )}
             >
@@ -637,20 +637,31 @@ function TemplatesTab({ templates, onAddAll, onAddNew, onEdit, onDelete, notice 
         <p className="text-body-md text-on-surface-variant">No templates yet.</p>
       ) : (
         filtered.map((t) => (
-          <div key={t.id} className="flex items-center justify-between rounded-lg border border-outline-variant p-md">
-            <button type="button" onClick={() => onAddAll(t)} className="text-left text-body-md text-on-surface hover:underline">
+          <div key={t.id} className="flex items-center justify-between gap-sm rounded-lg border border-outline-variant p-md">
+            <button type="button" onClick={() => onAddAll(t)} className="min-w-0 flex-1 text-left text-body-md text-on-surface hover:underline">
               {t.title}
             </button>
-            {!t.isSystemTemplate && (
-              <div className="flex items-center gap-sm">
-                <button type="button" onClick={() => onEdit(t)} aria-label="Edit template" className="text-on-surface-variant">
-                  <Icon name="edit" className="text-[16px]" />
-                </button>
-                <button type="button" onClick={() => onDelete(t)} aria-label="Delete template" className="text-error">
+            {/*JJQR - AI (Nov 19, 2026) - every row can be edited: Mine in place, System as your own copy (the System original is never changed); delete stays Mine-only; Mine/System pill on each row*/}
+            <div className="flex shrink-0 items-center gap-sm">
+              <span className={cn("rounded-full px-sm py-[2px] text-label-sm", t.isSystemTemplate ? "bg-surface-container-high text-on-surface-variant" : "bg-primary/10 text-primary")}>
+                {t.isSystemTemplate ? "System" : "Mine"}
+              </span>
+              <button
+                type="button"
+                onClick={() => onEdit(t)}
+                aria-label={t.isSystemTemplate ? `Edit ${t.title} (saves your own copy)` : `Edit ${t.title}`}
+                title={t.isSystemTemplate ? "Edit (saves your own copy)" : "Edit"}
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center text-on-surface-variant"
+              >
+                <Icon name="edit" className="text-[16px]" />
+              </button>
+              {!t.isSystemTemplate && (
+                <button type="button" onClick={() => onDelete(t)} aria-label={`Delete ${t.title}`} className="flex min-h-[44px] min-w-[44px] items-center justify-center text-error">
                   <Icon name="delete" className="text-[16px]" />
                 </button>
-              </div>
-            )}
+              )}
+            </div>
+            {/*JJQR - END*/}
           </div>
         ))
       )}
@@ -674,13 +685,18 @@ interface TemplateModalProps {
 }
 
 function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave }: TemplateModalProps) {
-  const [title, setTitle] = useState(template?.title ?? "");
+  //JJQR - AI (Nov 19, 2026) - a System template is never changed: editing it prepares your own copy ("Copy of …"), saved as a new template
+  const isSystemCopy = !!template?.isSystemTemplate;
+  const startTitle = isSystemCopy ? `Copy of ${template?.title ?? ""}` : template?.title ?? "";
+  //JJQR - END
+  const [title, setTitle] = useState(startTitle);
   const [items, setItems] = useState<PrescriptionLineItem[]>(template?.items ?? []);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingItem, setEditingItem] = useState<PrescriptionLineItem | null>(null);
   const [tab, setTab] = useState("new");
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const originalSnapshot = JSON.stringify({ title: template?.title ?? "", items: template?.items ?? [] });
+  const originalSnapshot = isSystemCopy ? "" : JSON.stringify({ title: template?.title ?? "", items: template?.items ?? [] });
   const currentSnapshot = JSON.stringify({ title, items });
   const canSave = title.trim() !== "" && items.length > 0 && currentSnapshot !== originalSnapshot;
 
@@ -691,10 +707,16 @@ function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave
   if (!isOpen) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={template ? "Edit Template" : "Add Template"}>
-      <div className="grid grid-cols-1 gap-xl lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-        <div className="space-y-md">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Template Title" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+    //JJQR - AI (Nov 19, 2026) - wide modal (960px on laptop), columns stack below 900px so nothing is squeezed or truncated
+    <Modal isOpen={isOpen} onClose={onClose} title={template ? "Edit Template" : "Add Template"} size="xl">
+      {isSystemCopy && (
+        <p role="note" className="mb-md rounded-lg border border-status-info-border bg-status-info-surface px-md py-sm text-label-md text-status-info">
+          Editing your own copy of a System template. The System original stays the same for every doctor.
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-xl min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-md">
+          <input aria-label="Template Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Template Title" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
           <LineItemList
             items={items}
             selectedIds={selectedIds}
@@ -707,15 +729,26 @@ function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave
             onEdit={setEditingItem}
           />
         </div>
-        <div>
-          <Tabs tabs={RX_TABS.slice(0, 2)} activeId={tab} onChange={setTab} className="mb-md" />
+        <div className="min-w-0">
+          <Tabs tabs={RX_TABS.slice(0, 2)} activeId={tab} onChange={setTab} className="mb-md overflow-x-hidden" />
           {tab === "new" && <NewRxTab medicines={medicines} onAdd={(item) => addItem(item)} />}
           {tab === "favorites" && <FavoritesTab favorites={favorites} onAdd={(item) => addItem(item)} />}
         </div>
       </div>
-      <div className="mt-lg flex justify-end">
-        <Button onClick={() => onSave(title, items)} disabled={!canSave}>
-          Save
+      <div className="mt-lg flex flex-col items-end gap-sm">
+        {saveError && <p role="alert" className="text-label-md text-error">{saveError}</p>}
+        <Button
+          onClick={async () => {
+            setSaveError(null);
+            try {
+              await onSave(title, items);
+            } catch {
+              setSaveError("The template was not saved. Your edits are still here, please try again.");
+            }
+          }}
+          disabled={!canSave}
+        >
+          {isSystemCopy ? "Save my copy" : "Save"}
         </Button>
       </div>
       <EditLineItemModal
@@ -1316,7 +1349,10 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
         }}
       />
 
+      {/*JJQR - AI (Nov 19, 2026) - mounted fresh per template: before, the modal kept its first (empty) state so Edit opened a blank form*/}
+      {templateModalOpen && (
       <TemplateModal
+        key={editingTemplate?.id ?? "new"}
         isOpen={templateModalOpen}
         template={editingTemplate}
         medicines={medicines}
@@ -1325,15 +1361,18 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
         onSave={async (title, tplItems) => {
           const supabase = null as never;
           const items = tplItems.map(lineItemToTemplatePayload);
-          if (editingTemplate) {
+          if (editingTemplate && !editingTemplate.isSystemTemplate) {
             await updateRxTemplate(supabase, editingTemplate.id, doctorId, { title, is_system_template: false, items });
           } else {
+            // new template, or "edit" of a System template: always a new personal copy, never an update of the System original
             await createRxTemplate(supabase, doctorId, { title, is_system_template: false, items });
           }
           await reloadFavoritesAndTemplates();
           setTemplateModalOpen(false);
         }}
       />
+      )}
+      {/*JJQR - END*/}
 
       <Modal
         isOpen={templateDeleteTarget !== null}
