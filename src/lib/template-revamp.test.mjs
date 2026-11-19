@@ -85,6 +85,15 @@ test('consultation2 template wiring (Phase 1): modal, undo, guards, manage links
   assert.match(page, /aria-label="Use SOAP template"/);
   assert.match(page, /<option value="">Use Template…<\/option>/);
   assert.match(page, /Apply SOAP template/);
+  //JJQR - AI (Nov 19, 2026) - empty notes: apply directly (no modal) but keep the Undo snapshot; text present: preview modal
+  const fn = page.slice(page.indexOf('function applyTemplate(template: SoapTemplate)'), page.indexOf('async function saveAsTemplate()'));
+  assert.match(fn, /if \(!hasSoapContent\(currentSoap\)\) \{/);
+  assert.match(fn, /doApplyTemplate\(template, "replace"\)/);
+  assert.match(fn, /setPendingTemplate\(template\)/);
+  assert.ok(fn.indexOf('doApplyTemplate(template, "replace")') < fn.indexOf('setPendingTemplate(template)'));
+  const apply = page.slice(page.indexOf('function doApplyTemplate('), page.indexOf('function undoTemplateApply()'));
+  assert.match(apply, /setTemplateUndo\(/);
+  //JJQR - END
   assert.match(page, /Append \(keep my text\)/);
   assert.match(page, /actionLabel="Undo"/);
   assert.match(page, /Nothing to save — all five SOAP fields are empty/);

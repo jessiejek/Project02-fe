@@ -450,7 +450,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
 
   function applyTemplate(template: SoapTemplate) {
-    //JJQR - AI (Nov 19, 2026) - always preview first (Replace/Append + 5-field preview); append is the safe default
+    //JJQR - AI (Nov 19, 2026) - all 5 boxes empty: apply directly (no preview) and still offer Undo; any text: preview first (Replace/Append), append is the safe default
+    if (!hasSoapContent(currentSoap)) {
+      if (!hasSoapContent(template)) {
+        notifyTpl("warning", `“${template.title}” is empty — there is nothing to apply.`);
+        return;
+      }
+      doApplyTemplate(template, "replace");
+      return;
+    }
     setSoapApplyMode("append");
     setPendingTemplate(template);
     //JJQR - END

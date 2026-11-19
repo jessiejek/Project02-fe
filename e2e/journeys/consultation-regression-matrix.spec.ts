@@ -245,13 +245,12 @@ test("template-apply-soap", async ({ as, api }) => {
     test.fixme(true, "No SOAP templates in catalog");
     return;
   }
-  //JJQR - AI (Nov 19, 2026) - Phase 1: applying a SOAP template now goes through the Replace/Append preview modal
-  const dialog = doctor.getByRole("dialog", { name: "Apply SOAP template" });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Chief complaint")).toBeVisible();
-  await dialog.getByRole("button", { name: "Apply template" }).click();
-  await expect(dialog).toBeHidden();
+  //JJQR - AI (Nov 19, 2026) - all 5 boxes are empty here, so the template applies directly (no preview modal) and the Undo toast shows
+  await expect(doctor.getByRole("dialog", { name: "Apply SOAP template" })).toHaveCount(0);
+  await expect(doctor.getByRole("button", { name: "Undo" })).toBeVisible();
   await expect(doctor.locator("#note-assessment")).not.toHaveValue("");
+  await doctor.getByRole("button", { name: "Undo" }).click();
+  await expect(doctor.locator("#note-assessment")).toHaveValue("");
   //JJQR - END
 });
 
@@ -270,7 +269,10 @@ test("template-apply-soap-append-keeps-text-and-undo", async ({ as, api }) => {
   const val = await templateSelect.locator("option:not([disabled])").evaluateAll((os) => (os as HTMLOptionElement[]).map((o) => o.value).find((v) => v));
   test.skip(!val, "No SOAP templates in catalog");
   await templateSelect.selectOption(val!);
+  //JJQR - AI (Nov 19, 2026) - the chief complaint has text, so the preview modal appears
   const dialog = doctor.getByRole("dialog", { name: "Apply SOAP template" });
+  await expect(dialog).toBeVisible();
+  //JJQR - END
   await dialog.getByLabel(/Append/).check();
   await dialog.getByRole("button", { name: "Apply template" }).click();
   // Append never wipes what the doctor typed.
