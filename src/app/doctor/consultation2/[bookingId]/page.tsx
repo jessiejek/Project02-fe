@@ -21,6 +21,11 @@ import { VitalsEditor } from "@/components/doctor/VitalsEditor";
 import { PatientHistoryModal } from "@/components/doctor/PatientHistoryModal";
 import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
+//JJQR - AI (Nov 19, 2026) - template-library hook, SOAP merge helpers, Manage deep links
+import { useTemplateLibrary } from "@/lib/clinical/useTemplateLibrary";
+import { SOAP_KEYS, SOAP_FIELD_LABELS, hasSoapContent, mergeSoapTemplate, soapEqual, type SoapApplyMode, type SoapFieldOutcome, type SoapValues } from "@/lib/clinical/soap-merge";
+import { manageTemplatesHref } from "@/lib/clinical/template-links";
+//JJQR - END
 //JJQR - AI (Oct 31, 2026)
 import {
   ConsultPatientBanner,
@@ -63,11 +68,8 @@ import {
   queryConsultations,
   queryDiagnoses,
   queryFollowUps,
-  querySoapTemplates,
   createSoapTemplate,
-  queryDiagnosisTemplates,
   createDiagnosisTemplate,
-  type DiagnosisTemplateRow,
   upsertConsultationByBooking,
   replaceDiagnoses,
   upsertFollowUpByConsultation,
@@ -77,7 +79,6 @@ import {
   queryRxGroups,
   queryVitalReadings,
   type RxGroupRow,
-  queryMedicalCertificateTemplates,
   createMedicalCertificateTemplate,
   type MedicalCertificateTemplateRow,
 } from "@/lib/data/clinical";
@@ -372,79 +373,181 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // SOAP templates — fills all 5 fields at once, the same speed tooling as
   // Prescriptions' Templates tab, added after a UX review flagged retyping
   // common encounter types by hand as real, recurring friction.
-  const [soapTemplates, setSoapTemplates] = useState<SoapTemplate[]>([]);
+  //JJQR - AI (Nov 19, 2026) - lists come from the shared hook; each loads on its own, so one failure never breaks the page
+  const templateLib = useTemplateLibrary(booking?.doctorId);
+  const soapTemplates = useMemo<SoapTemplate[]>(
+    () => templateLib.soap.items.map((t) => ({
+      id: t.id,
+      doctorId: t.doctor_id,
+      title: t.title,
+      isSystemTemplate: t.is_system_template,
+      chiefComplaint: t.chief_complaint ?? undefined,
+      subjective: t.subjective ?? undefined,
+      objective: t.objective ?? undefined,
+      assessment: t.assessment ?? undefined,
+      plan: t.plan ?? undefined,
+    })),
+    [templateLib.soap.items],
+  );
+  const mcTemplates = templateLib.certs.items;
+  const diagnosisTemplates = templateLib.diagnoses.items;
+  // Small page-level notice for template saves/applies (success + error).
+  const noticeSeq = useRef(0);
+  const [tplNotice, setTplNotice] = useState<{ id: number; variant: "success" | "error" | "warning"; message: string } | null>(null);
+  function notifyTpl(variant: "success" | "error" | "warning", message: string) {
+    setTplNotice({ id: ++noticeSeq.current, variant, message });
+  }
+  useEffect(() => {
+    if (!tplNotice) return;
+    const t = setTimeout(() => setTplNotice((cur) => (cur && cur.id === tplNotice.id ? null : cur)), 8000);
+    return () => clearTimeout(t);
+  }, [tplNotice]);
+  //JJQR - END
   const [pendingTemplate, setPendingTemplate] = useState<SoapTemplate | null>(null);
+  //JJQR - AI (Nov 19, 2026) - Replace/Append choice + Undo snapshot for SOAP template apply
+  const [soapApplyMode, setSoapApplyMode] = useState<SoapApplyMode>("append");
+  const [templateUndo, setTemplateUndo] = useState<{ id: number; title: string; before: SoapValues; applied: SoapValues } | null>(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [newTemplateTitle, setNewTemplateTitle] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [saveTemplateError, setSaveTemplateError] = useState("");
+  const currentSoap: SoapValues = { chiefComplaint, subjective, objective, assessment, plan };
+  const soapSetters: Record<(typeof SOAP_KEYS)[number], (v: string) => void> = {
+    chiefComplaint: setChiefComplaint,
+    subjective: setSubjective,
+    objective: setObjective,
+    assessment: setAssessment,
+    plan: setPlan,
+  };
+  function writeSoap(values: SoapValues) {
+    SOAP_KEYS.forEach((k) => soapSetters[k](values[k]));
+    formDirtyRef.current = true;
+  }
+  // Undo is only offered while the notes are exactly what the template apply produced — never overwrites later typing.
+  const undoAvailable = templateUndo !== null && soapEqual(currentSoap, templateUndo.applied);
+  useEffect(() => {
+    if (!templateUndo) return;
+    const t = setTimeout(() => setTemplateUndo((cur) => (cur && cur.id === templateUndo.id ? null : cur)), 15000);
+    return () => clearTimeout(t);
+  }, [templateUndo]);
+  //JJQR - END
 
-  function doApplyTemplate(template: SoapTemplate) {
-    setChiefComplaint(template.chiefComplaint ?? "");
-    setSubjective(template.subjective ?? "");
-    setObjective(template.objective ?? "");
-    setAssessment(template.assessment ?? "");
-    setPlan(template.plan ?? "");
+  function doApplyTemplate(template: SoapTemplate, mode: SoapApplyMode = soapApplyMode) {
+    //JJQR - AI (Nov 19, 2026) - Replace/Append; blank template fields never wipe existing text
+    const { values } = mergeSoapTemplate(currentSoap, template, mode);
+    if (!soapEqual(values, currentSoap)) {
+      setTemplateUndo({ id: ++noticeSeq.current, title: template.title, before: currentSoap, applied: values });
+      writeSoap(values);
+    }
     setPendingTemplate(null);
+    //JJQR - END
+  }
+  function undoTemplateApply() {
+    if (!templateUndo || !undoAvailable) return;
+    writeSoap(templateUndo.before);
+    setTemplateUndo(null);
+    notifyTpl("success", "Template undone — your previous notes are back.");
   }
 
   function applyTemplate(template: SoapTemplate) {
-    const hasContent = [chiefComplaint, subjective, objective, assessment, plan].some((f) => f.trim() !== "");
-    if (hasContent) {
-      setPendingTemplate(template);
-    } else {
-      doApplyTemplate(template);
-    }
+    //JJQR - AI (Nov 19, 2026) - always preview first (Replace/Append + 5-field preview); append is the safe default
+    setSoapApplyMode("append");
+    setPendingTemplate(template);
+    //JJQR - END
   }
 
   async function saveAsTemplate() {
-    if (!newTemplateTitle.trim() || !booking) return;
-    const supabase = null as never;
-    const data = await createSoapTemplate(supabase, booking.doctorId, {
-      title: newTemplateTitle.trim(),
-      is_system_template: false,
-      chief_complaint: chiefComplaint || null,
-      subjective: subjective || null,
-      objective: objective || null,
-      assessment: assessment || null,
-      plan: plan || null,
-    });
-    setSoapTemplates((prev) => [
-      ...prev,
-      {
-        id: data.id,
-        doctorId: data.doctor_id,
-        title: data.title,
-        isSystemTemplate: data.is_system_template,
-        chiefComplaint: data.chief_complaint ?? undefined,
-        subjective: data.subjective ?? undefined,
-        objective: data.objective ?? undefined,
-        assessment: data.assessment ?? undefined,
-        plan: data.plan ?? undefined,
-      },
-    ]);
-    setNewTemplateTitle("");
-    setSaveTemplateOpen(false);
+    //JJQR - AI (Nov 19, 2026) - blocked when all 5 fields are empty; failures are shown, never swallowed
+    if (!newTemplateTitle.trim() || !booking || savingTemplate) return;
+    if (!hasSoapContent(currentSoap)) {
+      setSaveTemplateError("Nothing to save — all five SOAP fields are empty. Type something first.");
+      return;
+    }
+    setSavingTemplate(true);
+    setSaveTemplateError("");
+    try {
+      const supabase = null as never;
+      const data = await createSoapTemplate(supabase, booking.doctorId, {
+        title: newTemplateTitle.trim(),
+        is_system_template: false,
+        chief_complaint: chiefComplaint || null,
+        subjective: subjective || null,
+        objective: objective || null,
+        assessment: assessment || null,
+        plan: plan || null,
+      });
+      templateLib.soap.add(data);
+      notifyTpl("success", `SOAP template “${data.title}” saved.`);
+      setNewTemplateTitle("");
+      setSaveTemplateOpen(false);
+    } catch {
+      setSaveTemplateError("The template was not saved. Your notes are unchanged — please try again.");
+      notifyTpl("error", "SOAP template was not saved. Your notes are unchanged.");
+    } finally {
+      setSavingTemplate(false);
+    }
+    //JJQR - END
   }
 
+  //JJQR - AI (Nov 19, 2026) - "Save as Template" click: refuse with a visible reason when all 5 fields are empty
+  function openSaveTemplate() {
+    if (!hasSoapContent(currentSoap)) {
+      notifyTpl("warning", "Can’t save an empty template — fill in at least one SOAP field first.");
+      return;
+    }
+    setSaveTemplateError("");
+    setSaveTemplateOpen(true);
+  }
+  //JJQR - END
+
+  //JJQR - AI (Nov 19, 2026) - certificate templates: confirm before replacing filled fields; blank template fields keep your text
+  const [pendingMcTemplate, setPendingMcTemplate] = useState<MedicalCertificateTemplateRow | null>(null);
+  const [savingMcTemplate, setSavingMcTemplate] = useState(false);
+  function mcTemplateFieldPlan(template: MedicalCertificateTemplateRow) {
+    const rows = [
+      { label: "Diagnosis / Impressions", current: mcDiagnosis, next: template.diagnosis_text ?? "", set: setMcDiagnosis },
+      { label: "Recommendations", current: mcRecommendations, next: template.recommendations ?? "", set: setMcRecommendations },
+      { label: "Purpose exception", current: mcPurposeException, next: template.purpose_exception ?? "", set: setMcPurposeException },
+    ];
+    return rows.filter((r) => r.next.trim() !== "");
+  }
+  function doApplyMcTemplate(template: MedicalCertificateTemplateRow) {
+    mcTemplateFieldPlan(template).forEach((r) => r.set(r.next));
+    setPendingMcTemplate(null);
+  }
   function applyMcTemplate(template: MedicalCertificateTemplateRow) {
-    setMcDiagnosis(template.diagnosis_text ?? "");
-    setMcRecommendations(template.recommendations ?? "");
-    setMcPurposeException(template.purpose_exception ?? "");
+    const overwriting = mcTemplateFieldPlan(template).filter((r) => r.current.trim() !== "" && r.current.trim() !== r.next.trim());
+    if (overwriting.length > 0) setPendingMcTemplate(template);
+    else doApplyMcTemplate(template);
   }
 
   async function saveMcAsTemplate() {
-    if (!saveMcTplTitle.trim() || !booking) return;
-    const supabase = null as never;
-    const data = await createMedicalCertificateTemplate(supabase, booking.doctorId, {
-      title: saveMcTplTitle.trim(),
-      is_system_template: false,
-      diagnosis_text: mcDiagnosis || null,
-      recommendations: mcRecommendations || null,
-      purpose_exception: mcPurposeException || null,
-    });
-    setMcTemplates((prev) => [...prev, data].sort((a, b) => a.title.localeCompare(b.title)));
-    setSaveMcTplTitle("");
-    setSaveMcTplOpen(false);
+    if (!saveMcTplTitle.trim() || !booking || savingMcTemplate) return;
+    if (!mcDiagnosis.trim() && !mcRecommendations.trim() && !mcPurposeException.trim()) {
+      notifyTpl("warning", "Can’t save an empty certificate template — fill in at least one field first.");
+      return;
+    }
+    setSavingMcTemplate(true);
+    try {
+      const supabase = null as never;
+      const data = await createMedicalCertificateTemplate(supabase, booking.doctorId, {
+        title: saveMcTplTitle.trim(),
+        is_system_template: false,
+        diagnosis_text: mcDiagnosis || null,
+        recommendations: mcRecommendations || null,
+        purpose_exception: mcPurposeException || null,
+      });
+      templateLib.certs.add(data);
+      notifyTpl("success", `Certificate template “${data.title}” saved.`);
+      setSaveMcTplTitle("");
+      setSaveMcTplOpen(false);
+    } catch {
+      notifyTpl("error", "Certificate template was not saved. Your certificate text is unchanged.");
+    } finally {
+      setSavingMcTemplate(false);
+    }
   }
+  //JJQR - END
 
   // Section 2: Vital Signs — rebuilt per clinic-vitals-fe.md. Vitals are no
   // longer local form state; they live in PatientVitalReading rows (keyed by
@@ -469,7 +572,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [newDiagnosisIcd, setNewDiagnosisIcd] = useState<string | null>(null);
   //JJQR - END
   // Doctor's reusable diagnoses (managed in Settings).
-  const [diagnosisTemplates, setDiagnosisTemplates] = useState<DiagnosisTemplateRow[]>([]);
   const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [saveTplLabel, setSaveTplLabel] = useState("");
 
@@ -519,10 +621,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const label = saveTplLabel.trim();
     const body = newDiagnosisText.trim();
     if (!label || !body) return;
-    const created = await createDiagnosisTemplate(null as never, { label, body });
-    setDiagnosisTemplates((prev) => [...prev, created].sort((a, b) => a.label.localeCompare(b.label)));
-    setSaveTplOpen(false);
-    setSaveTplLabel("");
+    //JJQR - AI (Nov 19, 2026) - success/error toast instead of a silent failure
+    try {
+      const created = await createDiagnosisTemplate(null as never, { label, body });
+      templateLib.diagnoses.add(created);
+      notifyTpl("success", `Diagnosis “${created.label}” saved.`);
+      setSaveTplOpen(false);
+      setSaveTplLabel("");
+    } catch {
+      notifyTpl("error", "Diagnosis was not saved. The diagnosis text is unchanged — please try again.");
+    }
+    //JJQR - END
   }
   function removeDiagnosis(index: number) {
     setDiagnoses((prev) => prev.filter((_, i) => i !== index));
@@ -918,7 +1027,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [issuingCert, setIssuingCert] = useState(false);
   const [certSavedAt, setCertSavedAt] = useState<string | null>(null);
   // Doctor's reusable "reason for the cert" text (managed in Settings).
-  const [mcTemplates, setMcTemplates] = useState<MedicalCertificateTemplateRow[]>([]);
   const [saveMcTplOpen, setSaveMcTplOpen] = useState(false);
   const [saveMcTplTitle, setSaveMcTplTitle] = useState("");
 
@@ -987,11 +1095,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         medCertRequested: bookingRow.med_cert_requested ?? false,
       };
 
-      const [consultRes, templates, vitalsRes, soapTemplatesRes, patientConsultsRes, rxRes, dxTemplates, mcTemplatesRes] = await Promise.all([
+      const [consultRes, templates, vitalsRes, patientConsultsRes, rxRes] = await Promise.all([
         queryConsultationByBooking(supabase, bookingId).then((data) => ({ data })),
         queryVitalFieldTemplates(supabase),
         queryVitalReadings(supabase, { bookingId }).then((data) => ({ data })),
-        querySoapTemplates(supabase, realBooking.doctorId).then((data) => ({ data })),
         queryConsultations(supabase, { patientId: realBooking.patientId }).then((rows) => ({
           data: rows
             .filter((c) => c.booking_id !== bookingId)
@@ -1004,14 +1111,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             })),
         })),
         queryRxGroups(supabase, { bookingId }).then((rows) => ({ data: rows[0] ?? null })),
-        queryDiagnosisTemplates().catch(() => [] as DiagnosisTemplateRow[]),
-        queryMedicalCertificateTemplates(supabase, realBooking.doctorId).catch(() => [] as MedicalCertificateTemplateRow[]),
       ]);
       if (cancelled) return;
 
-      setDiagnosisTemplates(dxTemplates);
-      setMcTemplates(mcTemplatesRes);
-
+      //JJQR - AI (Nov 19, 2026) - SOAP / diagnosis / certificate template lists now load via useTemplateLibrary (independent of this load)
       if (rxRes.data) {
         setPrescriptionGroup(mapRxGroup(rxRes.data));
       } else if (
@@ -1027,19 +1130,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         templates.map((t) => ({ id: t.template_id, description: t.description, formKey: t.form_key, unit: t.unit, icon: t.icon, isDefault: t.is_default })),
       );
       setVitalReadings((vitalsRes.data ?? []).map((r) => ({ templateId: r.template_id, value: r.value })));
-      setSoapTemplates(
-        (soapTemplatesRes.data ?? []).map((t) => ({
-          id: t.id,
-          doctorId: t.doctor_id,
-          title: t.title,
-          isSystemTemplate: t.is_system_template,
-          chiefComplaint: t.chief_complaint ?? undefined,
-          subjective: t.subjective ?? undefined,
-          objective: t.objective ?? undefined,
-          assessment: t.assessment ?? undefined,
-          plan: t.plan ?? undefined,
-        })),
-      );
+      //JJQR - END
 
       const patientConsults = (patientConsultsRes.data ?? [])
         .map((c) => {
@@ -2191,6 +2282,12 @@ Return to patient queue
           <Toast variant="info" message="Manual save only — autosave is off in amend mode." dismissible={false} />
         )}
         {saveError && <Toast key={saveError} variant="error" message={saveError} />}
+        {/*JJQR - AI (Nov 19, 2026) - template save/apply notices + SOAP template Undo */}
+        {tplNotice && <Toast key={tplNotice.id} variant={tplNotice.variant} message={tplNotice.message} />}
+        {templateUndo && undoAvailable && (
+          <Toast key={templateUndo.id} variant="info" message={`Applied “${templateUndo.title}”.`} actionLabel="Undo" onAction={undoTemplateApply} />
+        )}
+        {/*JJQR - END */}
 
         {amendSavedAt && mode === "amend" && (
           <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
@@ -2348,7 +2445,9 @@ Return to patient queue
                             )}
                             {soapTemplates.length === 0 && (
                               <option value="__empty" disabled>
-                                No templates yet
+                                {/*JJQR - AI (Nov 19, 2026) - don't claim "none yet" when the list failed to load */}
+                                {templateLib.soap.status === "error" ? "Templates unavailable" : "No templates yet"}
+                                {/*JJQR - END */}
                               </option>
                             )}
                             {filteredSoapTemplates.map((t) => (
@@ -2358,18 +2457,32 @@ Return to patient queue
                               </option>
                             ))}
                           </select>
-                          {soapTemplates.length === 0 && (
+                          {/*JJQR - AI (Nov 19, 2026) - Manage link (new tab, deep link) + small warning/Retry if the SOAP template list failed to load */}
+                          <div className="flex flex-wrap items-center gap-sm lg:justify-end">
+                            {templateLib.soap.status === "error" && (
+                              <span role="status" className="text-label-sm text-status-warning">
+                                SOAP templates couldn&apos;t load.{" "}
+                                <button type="button" onClick={templateLib.soap.reload} className="font-medium underline">Retry</button>
+                              </span>
+                            )}
+                            {templateLib.soap.status === "loading" && (
+                              <span role="status" className="text-label-sm text-on-surface-variant">Loading templates…</span>
+                            )}
                             <Link
-                              href="/doctor/templates"
-                              className="text-label-sm text-on-surface-variant hover:underline"
+                              href={manageTemplatesHref("soap")}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label="Manage SOAP templates (opens in a new tab)"
+                              className="inline-flex min-h-[44px] items-center text-label-sm text-on-surface-variant hover:underline"
                             >
-                              Manage templates
+                              Manage
                             </Link>
-                          )}
+                          </div>
+                          {/*JJQR - END */}
                           <div className="flex w-full flex-wrap items-center gap-sm sm:justify-end">
                             <button
                               type="button"
-                              onClick={() => setSaveTemplateOpen(true)}
+                              onClick={openSaveTemplate}
                               className="min-h-[44px] text-label-sm text-primary hover:underline"
                             >
                               Save as Template
@@ -2450,6 +2563,8 @@ Return to patient queue
                         {diagnoses.length === 0 && <p className="text-label-md text-on-surface-variant">No diagnoses added yet — at least 1 required.</p>}
                       </div>
 
+                      {/*JJQR - AI (Nov 19, 2026) - Manage saved diagnoses (new tab, deep link) */}
+                      <div className="flex items-center gap-sm">
                       {diagnosisTemplates.length > 0 && (
                         <select
                           value=""
@@ -2466,6 +2581,17 @@ Return to patient queue
                           ))}
                         </select>
                       )}
+                      <Link
+                        href={manageTemplatesHref("diagnoses")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Manage saved diagnoses (opens in a new tab)"
+                        className="inline-flex min-h-[44px] shrink-0 items-center text-label-sm text-on-surface-variant hover:underline"
+                      >
+                        Manage
+                      </Link>
+                      </div>
+                      {/*JJQR - END */}
 
                       <div className="flex flex-col gap-sm sm:flex-row sm:items-end">
                         <Icd10DiagnosisField
@@ -2837,9 +2963,17 @@ Return to patient queue
                         >
                           Save as Template
                         </button>
-                        <Link href="/doctor/templates" className="text-label-sm text-on-surface-variant hover:underline">
-                          Manage templates
+                        {/*JJQR - AI (Nov 19, 2026) - Manage certificate templates in a new tab, deep link */}
+                        <Link
+                          href={manageTemplatesHref("certificates")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Manage certificate templates (opens in a new tab)"
+                          className="text-label-sm text-on-surface-variant hover:underline"
+                        >
+                          Manage
                         </Link>
+                        {/*JJQR - END */}
                         <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(true)}>
                           {certExists ? "Update & Print Certificate" : "Issue & Print Certificate"}
                         </Button>
@@ -3028,16 +3162,17 @@ Return to patient queue
         {/* JJQR - END */}
       </div>
 
+      {/*JJQR - AI (Nov 19, 2026) - Save as Template: reason shown, error kept in the modal, double-save guarded */}
       <Modal
         isOpen={saveTemplateOpen}
-        onClose={() => setSaveTemplateOpen(false)}
+        onClose={() => { if (!savingTemplate) setSaveTemplateOpen(false); }}
         title="Save as Template"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setSaveTemplateOpen(false)}>
+            <Button variant="secondary" disabled={savingTemplate} onClick={() => setSaveTemplateOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={saveAsTemplate} disabled={!newTemplateTitle.trim()}>
+            <Button onClick={saveAsTemplate} loading={savingTemplate} disabled={!newTemplateTitle.trim() || !hasSoapContent(currentSoap)}>
               Save
             </Button>
           </>
@@ -3049,7 +3184,12 @@ Return to patient queue
           placeholder='Title (e.g. &quot;Annual Physical — Normal&quot;)'
           className="w-full rounded-lg border border-outline-variant px-md py-sm"
         /></label>
+        {!hasSoapContent(currentSoap) && (
+          <p role="status" className="mt-md text-label-md text-status-warning">All five SOAP fields are empty — there is nothing to save.</p>
+        )}
+        {saveTemplateError && <p role="alert" className="mt-md text-body-md text-status-danger">{saveTemplateError}</p>}
       </Modal>
+      {/*JJQR - END */}
 
       <Modal
         isOpen={saveMcTplOpen}
@@ -3060,7 +3200,7 @@ Return to patient queue
             <Button variant="secondary" onClick={() => setSaveMcTplOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={saveMcAsTemplate} disabled={!saveMcTplTitle.trim()}>
+            <Button onClick={saveMcAsTemplate} loading={savingMcTemplate} disabled={!saveMcTplTitle.trim()}>
               Save
             </Button>
           </>
@@ -3104,26 +3244,101 @@ Return to patient queue
         </div>
       </Modal>
 
+      {/*JJQR - AI (Nov 19, 2026) - SOAP template apply: Replace / Append + 5-field preview. Blank template fields never wipe your text. */}
       <Modal
         isOpen={pendingTemplate !== null}
         onClose={() => setPendingTemplate(null)}
-        title="Replace current SOAP notes?"
+        size="lg"
+        title="Apply SOAP template"
         footer={
           <>
             <Button variant="secondary" onClick={() => setPendingTemplate(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={() => pendingTemplate && doApplyTemplate(pendingTemplate)}>
-              Replace
+            <Button
+              variant={soapApplyMode === "replace" && hasSoapContent(currentSoap) ? "danger" : "primary"}
+              disabled={!pendingTemplate || !hasSoapContent(pendingTemplate)}
+              onClick={() => pendingTemplate && doApplyTemplate(pendingTemplate, soapApplyMode)}
+            >
+              Apply template
             </Button>
           </>
         }
       >
-        <p className="text-body-md text-on-surface-variant">
-          This will overwrite your current Chief Complaint / Subjective / Objective / Assessment / Plan text with the
-          &ldquo;{pendingTemplate?.title}&rdquo; template.
-        </p>
+        {pendingTemplate && (() => {
+          const { values, outcomes } = mergeSoapTemplate(currentSoap, pendingTemplate, soapApplyMode);
+          const outcomeText: Record<SoapFieldOutcome, string> = {
+            filled: "Will be filled",
+            replaced: "Will be replaced",
+            appended: "Will be added on a new line",
+            "kept-template-blank": "Template is blank here — your text is kept",
+            unchanged: "No change",
+          };
+          const notesFilled = hasSoapContent(currentSoap);
+          return (
+            <div className="space-y-md">
+              <p className="text-body-md text-on-surface-variant">
+                Template: <strong className="text-on-surface">&ldquo;{pendingTemplate.title}&rdquo;</strong>
+                {pendingTemplate.isSystemTemplate ? " (system)" : ""}
+              </p>
+              {!hasSoapContent(pendingTemplate) && (
+                <p role="status" className="text-label-md text-status-warning">This template has no text in any field, so there is nothing to apply.</p>
+              )}
+              <fieldset className="flex flex-wrap gap-md">
+                <legend className="sr-only">How to apply the template</legend>
+                {(["append", "replace"] as const).map((m) => (
+                  <label key={m} className={cn("flex min-h-[44px] cursor-pointer items-center gap-sm rounded-lg border px-md py-sm text-body-md", soapApplyMode === m ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface")}>
+                    <input type="radio" name="soap-apply-mode" value={m} checked={soapApplyMode === m} onChange={() => setSoapApplyMode(m)} />
+                    {m === "append" ? "Append (keep my text)" : "Replace (use template text)"}
+                  </label>
+                ))}
+              </fieldset>
+              {!notesFilled && <p className="text-label-md text-on-surface-variant">Your notes are empty, so both options fill the fields the same way.</p>}
+              <ul className="space-y-sm" aria-label="Preview of the five SOAP fields">
+                {SOAP_KEYS.map((k) => (
+                  <li key={k} className="rounded-lg border border-outline-variant p-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-sm">
+                      <span className="text-label-md font-semibold text-on-surface">{SOAP_FIELD_LABELS[k]}</span>
+                      <span className="text-label-sm text-on-surface-variant">{outcomeText[outcomes[k]]}</span>
+                    </div>
+                    <pre className="mt-xs max-h-28 overflow-y-auto whitespace-pre-wrap break-words font-sans text-body-sm text-on-surface">{values[k].trim() === "" ? "—" : values[k]}</pre>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-label-sm text-on-surface-variant">You can undo right after applying.</p>
+            </div>
+          );
+        })()}
       </Modal>
+      {/*JJQR - END */}
+
+      {/*JJQR - AI (Nov 19, 2026) - confirm before a certificate template replaces filled fields */}
+      <Modal
+        isOpen={pendingMcTemplate !== null}
+        onClose={() => setPendingMcTemplate(null)}
+        title="Replace certificate text?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPendingMcTemplate(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => pendingMcTemplate && doApplyMcTemplate(pendingMcTemplate)}>Replace</Button>
+          </>
+        }
+      >
+        {pendingMcTemplate && (
+          <div className="space-y-sm">
+            <p className="text-body-md text-on-surface-variant">
+              &ldquo;{pendingMcTemplate.title}&rdquo; will replace what you already typed in:
+            </p>
+            <ul className="list-disc pl-lg text-body-md text-on-surface">
+              {mcTemplateFieldPlan(pendingMcTemplate)
+                .filter((r) => r.current.trim() !== "" && r.current.trim() !== r.next.trim())
+                .map((r) => <li key={r.label}>{r.label}</li>)}
+            </ul>
+            <p className="text-label-sm text-on-surface-variant">Fields the template leaves blank keep your text.</p>
+          </div>
+        )}
+      </Modal>
+      {/*JJQR - END */}
 
       <Modal
         isOpen={checklistOpen}

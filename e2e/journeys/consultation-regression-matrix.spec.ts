@@ -222,6 +222,9 @@ test("template-apply-soap", async ({ as, api }) => {
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
   await openSectionByTitle(doctor, /1\. SOAP/i);
+  //JJQR - AI (Nov 19, 2026) - the template picker lives inside the collapsed "Templates and previous notes" details
+  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
+  //JJQR - END
   const templateSelect = doctor.locator("select").filter({ has: doctor.locator('option', { hasText: /Use Template/ }) }).first();
   if (!(await templateSelect.count())) {
     test.fixme(true, "No SOAP template select on page");
@@ -242,8 +245,71 @@ test("template-apply-soap", async ({ as, api }) => {
     test.fixme(true, "No SOAP templates in catalog");
     return;
   }
-  await expect(doctor.getByPlaceholder("Assessment")).not.toHaveValue("");
+  //JJQR - AI (Nov 19, 2026) - Phase 1: applying a SOAP template now goes through the Replace/Append preview modal
+  const dialog = doctor.getByRole("dialog", { name: "Apply SOAP template" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Chief complaint")).toBeVisible();
+  await dialog.getByRole("button", { name: "Apply template" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(doctor.locator("#note-assessment")).not.toHaveValue("");
+  //JJQR - END
 });
+
+//JJQR - AI (Nov 19, 2026) - Phase 1 template flows on consultation2
+test("template-apply-soap-append-keeps-text-and-undo", async ({ as, api }) => {
+  const staffApi = await api("staff");
+  const tag = Date.now().toString(36);
+  const patient = await createPatient(staffApi, tag);
+  const ticket = await checkInWalkIn(staffApi, patient.patient_id);
+  const doctor = await as("doctor");
+  await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
+  await openSectionByTitle(doctor, /1\. SOAP/i);
+  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
+  await doctor.locator("#note-chiefComplaint").fill("E2E keep this chief complaint");
+  const templateSelect = doctor.locator("select").filter({ has: doctor.locator("option", { hasText: /Use Template/ }) }).first();
+  const val = await templateSelect.locator("option:not([disabled])").evaluateAll((os) => (os as HTMLOptionElement[]).map((o) => o.value).find((v) => v));
+  test.skip(!val, "No SOAP templates in catalog");
+  await templateSelect.selectOption(val!);
+  const dialog = doctor.getByRole("dialog", { name: "Apply SOAP template" });
+  await dialog.getByLabel(/Append/).check();
+  await dialog.getByRole("button", { name: "Apply template" }).click();
+  // Append never wipes what the doctor typed.
+  await expect(doctor.locator("#note-chiefComplaint")).toHaveValue(/E2E keep this chief complaint/);
+  await doctor.getByRole("button", { name: "Undo" }).click();
+  await expect(doctor.locator("#note-chiefComplaint")).toHaveValue("E2E keep this chief complaint");
+  await expect(doctor.locator("#note-assessment")).toHaveValue("");
+});
+
+test("template-save-as-template-blocked-when-empty", async ({ as, api }) => {
+  const staffApi = await api("staff");
+  const tag = Date.now().toString(36);
+  const patient = await createPatient(staffApi, tag);
+  const ticket = await checkInWalkIn(staffApi, patient.patient_id);
+  const doctor = await as("doctor");
+  await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
+  await openSectionByTitle(doctor, /1\. SOAP/i);
+  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
+  await doctor.getByRole("button", { name: "Save as Template" }).click();
+  await expect(doctor.getByText(/Can.t save an empty template/)).toBeVisible();
+  await expect(doctor.getByRole("dialog", { name: "Save as Template" })).toHaveCount(0);
+});
+
+test("template-manage-links-open-new-tab", async ({ as, api }) => {
+  const staffApi = await api("staff");
+  const tag = Date.now().toString(36);
+  const patient = await createPatient(staffApi, tag);
+  const ticket = await checkInWalkIn(staffApi, patient.patient_id);
+  const doctor = await as("doctor");
+  await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
+  await openSectionByTitle(doctor, /1\. SOAP/i);
+  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
+  const soapManage = doctor.getByRole("link", { name: /Manage SOAP templates/ });
+  await expect(soapManage).toHaveAttribute("href", "/doctor/templates?tab=soap");
+  await expect(soapManage).toHaveAttribute("target", "_blank");
+  const phraseManage = doctor.getByRole("link", { name: /Manage Chief complaint phrases/ });
+  await expect(phraseManage).toHaveAttribute("href", "/doctor/templates?tab=phrases&field=chiefComplaint");
+});
+//JJQR - END
 
 test("completed-view-banner-diagnoses", async ({ as, api }) => {
   test.setTimeout(90_000);
