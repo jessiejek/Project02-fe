@@ -133,4 +133,111 @@ export async function deletePatient(api: APIRequestContext, patientId: string): 
   void patientId;
 }
 
+
+
+//JJQR - AI (Nov 19, 2026) - e2e-full-coverage helpers: tagged data, fresh patient accounts, Manila dates, payment/queue shortcuts
 export { ZERO_GUID };
+
+/** YYYY-MM-DD in Asia/Manila, `offsetDays` from today. */
+export function manilaDate(offsetDays = 0): string {
+  const d = new Date(Date.now() + offsetDays * 86_400_000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+export const PASSWORD = "E2e-Passw0rd!";
+
+/** Create a patient with a tagged name (visible in search as `<tag> Tester`). */
+export async function createTaggedPatient(api: APIRequestContext, tag: string, extra: Record<string, unknown> = {}): Promise<SeededPatient> {
+  const res = await api.post("/api/patients", {
+    data: {
+      first_name: tag,
+      last_name: "Tester",
+      date_of_birth: "1990-01-01",
+      sex: "Male",
+      contact_number: "09170000000",
+      email: `${tag.toLowerCase()}@example.test`,
+      is_guest: true,
+      user_id: null,
+      ...extra,
+    },
+  });
+  if (!res.ok()) throw new Error(`createTaggedPatient → ${res.status()} ${await res.text()}`);
+  return res.json();
+}
+
+export interface FreshPatient {
+  email: string;
+  password: string;
+  userId: string;
+  patientId: string;
+  firstName: string;
+  api: APIRequestContext;
+  /** Delete the login (the patient row lingers — there is no patient-delete endpoint). */
+  dispose(): Promise<void>;
+}
+
+/** Register a brand-new self-service patient account via the public API (the same call /register makes). */
+export async function registerFreshPatient(tag: string, over: Record<string, unknown> = {}): Promise<FreshPatient> {
+  const email = `${tag.toLowerCase()}@example.test`;
+  const anon = await pwRequest.newContext({ baseURL: BE_URL });
+  const res = await anon.post("/api/auth/register", {
+    data: { firstName: tag, lastName: "Tester", dateOfBirth: "1990-01-01", sex: "Female", contactNumber: "09171112222", email, password: PASSWORD, ...over },
+  });
+  if (!res.ok()) throw new Error(`register ${tag} → ${res.status()} ${await res.text()}`);
+  const session = await res.json();
+  await anon.dispose();
+  const api = await pwRequest.newContext({ baseURL: BE_URL, extraHTTPHeaders: { Authorization: `Bearer ${session.accessToken}` } });
+  const me = await api.get("/api/patients/me");
+  const patientId = (await me.json()).patient_id as string;
+  return {
+    email, password: PASSWORD, userId: session.user.id, patientId, firstName: tag, api,
+    async dispose() {
+      await api.dispose();
+      const admin = await apiAs("admin");
+      await admin.delete(`/api/auth/users/${session.user.id}`).catch(() => undefined);
+      await admin.dispose();
+    },
+  };
+}
+
+/** Log a fresh browser context in through the real /login form. */
+export async function loginViaUi(page: import("@playwright/test").Page, email: string, password: string) {
+  await page.goto("/login");
+  await page.locator("#email").fill(email);
+  await page.locator("#password").fill(password);
+  await page.getByRole("button", { name: "Log in" }).click();
+}
+
+export async function getPaymentForBooking(api: APIRequestContext, bookingId: string): Promise<Record<string, any>> {
+  const res = await api.get(`/api/payments/booking/${bookingId}`);
+  if (!res.ok()) throw new Error(`getPaymentForBooking → ${res.status()}`);
+  return res.json();
+}
+
+/** Best-effort: cancel a queue entry (before paid). Used in cleanup so tagged rows don't stay in today's queue. */
+export async function cancelQueueEntry(api: APIRequestContext, bookingId: string, reason = "E2E cleanup") {
+  await api.put(`/api/queue/${bookingId}/cancel`, { data: { reason } }).catch(() => undefined);
+}
+
+/** A patient books via the real online endpoint. */
+export async function bookOnline(api: APIRequestContext, date?: string, notes?: string) {
+  const res = await api.post("/api/bookings/book", { data: { appointment_date: date, visit_type: "New", notes } });
+  return { res, status: res.status(), body: await res.json().catch(() => ({})) };
+}
+
+/** Patient cancels their own (not-yet-checked-in) booking. Best effort. */
+export async function cancelOwnBooking(api: APIRequestContext, bookingId: string) {
+  await api.put(`/api/bookings/${bookingId}/cancel`, { data: { reason: "E2E cleanup" } }).catch(() => undefined);
+}
+
+export async function getSettings(api: APIRequestContext): Promise<Record<string, any>> {
+  return (await api.get("/api/settings")).json();
+}
+export async function putSettings(api: APIRequestContext, body: Record<string, unknown>) {
+  return api.put("/api/settings", { data: body });
+}
+export async function getDoctor(api: APIRequestContext): Promise<Record<string, any>> {
+  const list = await (await api.get("/api/doctors")).json();
+  return list[0];
+}
+//JJQR - END

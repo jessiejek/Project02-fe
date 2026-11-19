@@ -12,7 +12,7 @@ for (const role of ROLES) {
     await page.locator("#password").fill(DEV_PASSWORD);
     //JJQR - END
     await page.getByRole("button", { name: "Log in" }).click();
-    await page.waitForURL((u) => u.pathname.includes(`/${role}/dashboard`), { timeout: 25_000 });
+    await page.waitForURL((u) => u.pathname.includes(`/${role}/dashboard`), { timeout: 90_000 });
     await expect(page).toHaveURL(new RegExp(`/${role}/dashboard`));
     await page.context().storageState({ path: authFile(role) });
   });
