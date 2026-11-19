@@ -1,7 +1,7 @@
 import { test, expect } from "../support/fixtures";
 import type { Page } from "@playwright/test";
 import { DEV_PASSWORD } from "../playwright.config";
-import { PASSWORD, deleteAccountByEmail, manilaDate } from "../support/api";
+import { PASSWORD, deleteAccountByEmail, manilaDate, waitForAuthBudget } from "../support/api";
 import { EMAIL } from "../support/auth";
 
 /** COVERAGE-PLAN §3 · Public: /login, /register, /forgot-password */
@@ -13,6 +13,8 @@ async function submitLogin(page: Page, email: string, password: string) {
 }
 
 test.describe("/login", () => {
+  // a full run can exhaust the API's per-minute auth limit; these tests must see the real login error, not a 429
+  test.beforeEach(async () => { await waitForAuthBudget(); });
   test("wrong password → inline error, stays on /login, no session", async ({ anon, guard }) => {
     guard.allow(/401 POST \/api\/session\/login/);
     const page = await anon();

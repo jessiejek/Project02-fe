@@ -122,11 +122,21 @@ export const test = base.extend<Fixtures>({
       ctx.on("page", (pg) => (guard as unknown as { _attach(p: Page): void })._attach(pg));
       contexts.push(ctx);
       const page = await ctx.newPage();
-      await page.goto("/login");
-      await page.locator("#email").fill(email);
-      await page.locator("#password").fill(password);
-      await page.getByRole("button", { name: "Log in" }).click();
-      await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 30_000 });
+      // retry when the API's per-minute auth rate limit (429) is hit during a long run
+      for (let attempt = 0; attempt < 4; attempt++) {
+        let limited = false;
+        const onRes = (res: import("@playwright/test").Response) => { if (res.status() === 429 && /\/api\/auth\//.test(res.url())) limited = true; };
+        page.on("response", onRes);
+        await page.goto("/login");
+        await page.locator("#email").fill(email);
+        await page.locator("#password").fill(password);
+        await page.getByRole("button", { name: "Log in" }).click();
+        const left = await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: attempt === 3 ? 30_000 : 12_000 }).then(() => true, () => false);
+        page.off("response", onRes);
+        if (left) break;
+        if (!limited) throw new Error("login did not leave /login (and was not rate-limited)");
+        await page.waitForTimeout(15_000);
+      }
       return page;
     });
     for (const c of contexts) await c.close();

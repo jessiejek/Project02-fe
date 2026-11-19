@@ -180,9 +180,16 @@ export interface FreshPatient {
 export async function registerFreshPatient(tag: string, over: Record<string, unknown> = {}): Promise<FreshPatient> {
   const email = `${tag.toLowerCase()}@example.test`;
   const anon = await pwRequest.newContext({ baseURL: BE_URL });
-  const res = await anon.post("/api/auth/register", {
+  let res = await anon.post("/api/auth/register", {
     data: { firstName: tag, lastName: "Tester", dateOfBirth: "1990-01-01", sex: "Female", contactNumber: "09171112222", email, password: PASSWORD, ...over },
   });
+  // The API's /api/auth/* limit is per minute per IP (120 in Development). A long run can touch it: wait out the window, then retry.
+  for (let i = 0; i < 5 && res.status() === 429; i++) {
+    await new Promise((r) => setTimeout(r, 15_000));
+    res = await anon.post("/api/auth/register", {
+      data: { firstName: tag, lastName: "Tester", dateOfBirth: "1990-01-01", sex: "Female", contactNumber: "09171112222", email, password: PASSWORD, ...over },
+    });
+  }
   if (!res.ok()) throw new Error(`register ${tag} → ${res.status()} ${await res.text()}`);
   const session = await res.json();
   await anon.dispose();
@@ -330,5 +337,20 @@ export async function patientsMatching(api: APIRequestContext, needle: string): 
   const res = await api.get(`/api/patients?search=${encodeURIComponent(needle)}`);
   const body = await res.json();
   return Array.isArray(body) ? body : body.items ?? body.data ?? [];
+}
+//JJQR - END
+
+//JJQR - AI (Nov 19, 2026) - e2e-full-coverage: wait for the per-minute /api/auth/* rate-limit window to have room (login-form tests must see the real error, not a 429)
+export async function waitForAuthBudget(): Promise<void> {
+  const ctx = await pwRequest.newContext({ baseURL: BE_URL });
+  try {
+    for (let i = 0; i < 8; i++) {
+      const r = await ctx.post("/api/auth/login", { data: { email: "nobody-e2e-probe@example.test", password: "x" } });
+      if (r.status() !== 429) return;
+      await new Promise((res) => setTimeout(res, 10_000));
+    }
+  } finally {
+    await ctx.dispose();
+  }
 }
 //JJQR - END
