@@ -1,0 +1,81 @@
+import type { APIRequestContext } from "@playwright/test";
+import { checkInWalkIn, getDoctor, manilaDate } from "./api";
+
+//JJQR - AI (Nov 19, 2026) - e2e-full-coverage: build a finished visit through the API so portal pages have real data to show
+export interface CompletedVisit {
+  booking_id: string;
+  consultation_id: string;
+  queue_number: string;
+  rx_group_id?: string;
+  medicine?: string;
+}
+
+/**
+ * check-in → consultation (Draft→Completed) with diagnosis + optional Rx / vaccination / vitals → queue "complete".
+ * Same endpoints the UI calls; use for seeding portal pages, not for testing the consultation UI itself.
+ */
+export async function completeVisitViaApi(
+  apis: { staff: APIRequestContext; doctor: APIRequestContext },
+  patientId: string,
+  opts: { complaint?: string; rx?: boolean; vaccine?: string; diagnosis?: string; leaveOpen?: boolean } = {},
+): Promise<CompletedVisit> {
+  const { staff, doctor } = apis;
+  const d = await getDoctor(staff);
+  const q = await checkInWalkIn(staff, patientId);
+  const complaint = opts.complaint ?? "E2E seeded complaint";
+  const dr = (url: string, data: unknown, method: "put" | "post" = "put") => doctor[method](url, { data });
+
+  const called = await staff.put(`/api/queue/${q.booking_id}/call`);
+  if (!called.ok()) throw new Error(`call → ${called.status()} ${await called.text()}`);
+  const c = await dr(`/api/consultations/by-booking/${q.booking_id}`, {
+    patient_id: patientId, doctor_id: d.doctor_id, status: "Draft", chief_complaint: complaint,
+    subjective: "E2E subjective", objective: "E2E objective", assessment: "E2E assessment", plan: "E2E plan",
+  });
+  if (!c.ok()) throw new Error(`consult draft → ${c.status()} ${await c.text()}`);
+  const cid = (await c.json()).consultation_id as string;
+
+  const dx = await dr(`/api/consultations/${cid}/diagnoses`, [{ custom_description: opts.diagnosis ?? "E2E acute pharyngitis", type: "Primary" }]);
+  if (!dx.ok()) throw new Error(`dx → ${dx.status()} ${await dx.text()}`);
+
+  // vitals: BP + pulse (the two the consultation gate wants)
+  const tpls: any[] = await (await staff.get("/api/vital-field-templates")).json();
+  const id = (key: string) => tpls.find((t) => t.form_key === key)?.template_id;
+  const vit = await staff.put(`/api/vitals/by-booking/${q.booking_id}`, {
+    data: [{ template_id: id("blood_pressure"), value: "118/76" }, { template_id: id("pulse_rate") ?? id("pulse"), value: "72" }].filter((x) => x.template_id),
+  });
+  if (!vit.ok()) throw new Error(`vitals → ${vit.status()} ${await vit.text()}`);
+
+  let out: CompletedVisit = { booking_id: q.booking_id, consultation_id: cid, queue_number: q.queue_number };
+
+  if (opts.rx) {
+    const meds: any[] = await (await doctor.get("/api/medicines")).json();
+    const m = (Array.isArray(meds) ? meds : (meds as any).items)[0];
+    const rx = await doctor.put(`/api/prescription-groups/by-booking/${q.booking_id}`, {
+      data: {
+        patient_id: patientId, doctor_id: d.doctor_id, booking_id: q.booking_id,
+        items: [{ medicine_id: m.medicine_id, generic_name: m.generic_name ?? m.name, dosage: "500 mg", quantity: "10", instruction: "E2E take with water", is_controlled_substance: false }],
+      },
+    });
+    if (!rx.ok()) throw new Error(`rx → ${rx.status()} ${await rx.text()}`);
+    const g = await rx.json();
+    out = { ...out, rx_group_id: g.group_id ?? g[0]?.group_id, medicine: m.generic_name ?? m.name };
+  }
+  if (opts.vaccine) {
+    const v = await dr(`/api/patient-vaccinations/by-consultation/${cid}`, [{ vaccine_name: opts.vaccine, dose_number: 1, route: "IM", site: "Left deltoid", lot_number: "LOT-E2E" }]);
+    if (!v.ok()) throw new Error(`vaccine → ${v.status()} ${await v.text()}`);
+  }
+  const fu = await dr(`/api/follow-ups/by-consultation/${cid}`, { follow_up_date: manilaDate(7), notes: "E2E follow-up" });
+  void fu; // best effort — not every deployment needs it
+
+  if (!opts.leaveOpen) {
+    const done = await dr(`/api/consultations/by-booking/${q.booking_id}`, {
+      patient_id: patientId, doctor_id: d.doctor_id, status: "Completed", chief_complaint: complaint,
+      subjective: "E2E subjective", objective: "E2E objective", assessment: "E2E assessment", plan: "E2E plan",
+    });
+    if (!done.ok()) throw new Error(`consult complete → ${done.status()} ${await done.text()}`);
+    const qc = await staff.put(`/api/queue/${q.booking_id}/complete`);
+    if (!qc.ok()) throw new Error(`queue complete → ${qc.status()} ${await qc.text()}`);
+  }
+  return out;
+}
+//JJQR - END
