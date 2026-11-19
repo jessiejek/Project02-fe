@@ -222,10 +222,8 @@ test("template-apply-soap", async ({ as, api }) => {
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
   await openSectionByTitle(doctor, /1\. Clinical notes/i);
-  //JJQR - AI (Nov 19, 2026) - the template picker lives inside the collapsed "Templates and previous notes" details
-  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
   //JJQR - END
-  const templateSelect = doctor.locator("select").filter({ has: doctor.locator('option', { hasText: /Use Template/ }) }).first();
+  const templateSelect = doctor.locator("select").filter({ has: doctor.locator('option', { hasText: /Use template/ }) }).first();
   if (!(await templateSelect.count())) {
     test.fixme(true, "No SOAP template select on page");
     return;
@@ -263,9 +261,8 @@ test("template-apply-soap-append-keeps-text-and-undo", async ({ as, api }) => {
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
   await openSectionByTitle(doctor, /1\. Clinical notes/i);
-  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
   await doctor.locator("#note-chiefComplaint").fill("E2E keep this chief complaint");
-  const templateSelect = doctor.locator("select").filter({ has: doctor.locator("option", { hasText: /Use Template/ }) }).first();
+  const templateSelect = doctor.locator("select").filter({ has: doctor.locator("option", { hasText: /Use template/ }) }).first();
   const val = await templateSelect.locator("option:not([disabled])").evaluateAll((os) => (os as HTMLOptionElement[]).map((o) => o.value).find((v) => v));
   test.skip(!val, "No SOAP templates in catalog");
   await templateSelect.selectOption(val!);
@@ -290,7 +287,6 @@ test("template-save-as-template-blocked-when-empty", async ({ as, api }) => {
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
   await openSectionByTitle(doctor, /1\. Clinical notes/i);
-  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
   await doctor.getByRole("button", { name: "Save as Template" }).click();
   await expect(doctor.getByText(/Can.t save an empty template/)).toBeVisible();
   await expect(doctor.getByRole("dialog", { name: "Save as Template" })).toHaveCount(0);
@@ -304,12 +300,13 @@ test("template-manage-links-open-new-tab", async ({ as, api }) => {
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
   await openSectionByTitle(doctor, /1\. Clinical notes/i);
-  await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
-  const soapManage = doctor.getByRole("link", { name: /Manage SOAP templates/ });
-  await expect(soapManage).toHaveAttribute("href", "/doctor/templates?tab=soap");
-  await expect(soapManage).toHaveAttribute("target", "_blank");
-  const phraseManage = doctor.getByRole("link", { name: /Manage Chief complaint phrases/ });
-  await expect(phraseManage).toHaveAttribute("href", "/doctor/templates?tab=phrases&field=chiefComplaint");
+  //JJQR - AI (Nov 19, 2026) - ONE "Manage templates" link per section (no per-box Manage links any more)
+  const manage = doctor.getByRole("link", { name: /Manage templates/ });
+  await expect(manage).toHaveCount(1);
+  await expect(manage).toHaveAttribute("href", "/doctor/templates?tab=soap");
+  await expect(manage).toHaveAttribute("target", "_blank");
+  await expect(doctor.getByRole("link", { name: /Manage .* phrases/ })).toHaveCount(0);
+  //JJQR - END
 });
 //JJQR - END
 

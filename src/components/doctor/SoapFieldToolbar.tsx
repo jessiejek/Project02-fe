@@ -1,21 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { createSoapPhrase } from "@/lib/data/clinical";
 //JJQR - AI (Nov 19, 2026) - shared phrase loader (1 request for 5 fields), insert-at-caret, Manage deep link
 import { useSoapPhrases } from "@/lib/clinical/useTemplateLibrary";
 import { insertAtCaret } from "@/lib/clinical/insert-text";
-import { manageTemplatesHref } from "@/lib/clinical/template-links";
 //JJQR - END
 import type { SoapField, SoapPhrase } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
 function toDbField(field: SoapField): Database["public"]["Enums"]["soap_field"] {
   return (field.charAt(0).toUpperCase() + field.slice(1)) as Database["public"]["Enums"]["soap_field"];
 }
+//JJQR - AI (Nov 19, 2026)
+const SAVE_OPTION = "__save_phrase";
+//JJQR - END
 export interface SoapFieldToolbarProps {
   doctorId: string; field: SoapField; fieldLabel: string; value: string; onInsert: (text: string) => void;
   //JJQR - AI (Nov 19, 2026) - id of the field's textarea (defaults to note-<field>) so phrases can go in at the caret
@@ -70,13 +70,12 @@ export function SoapFieldToolbar({ doctorId, field, fieldLabel, value, onInsert,
   return <div className="flex min-w-0 flex-wrap items-center gap-sm">
     {loading && <span role="status" className="text-label-sm text-on-surface-variant">Loading phrases…</span>}
     {loadError && <span role="status" className="text-label-sm text-on-surface-variant">Quick phrases unavailable <button type="button" onClick={reloadPhrases} className="font-medium text-primary hover:underline">Retry</button></span>}
-    {phrases.length > 0 && <select value="" onChange={e => insertPhrase(e.target.value)} aria-label={`Insert saved ${fieldLabel} phrase`} className="min-h-11 max-w-full rounded-nav border border-outline-variant bg-surface-container-lowest px-sm text-label-md text-on-surface">
+    {/*JJQR - AI (Nov 19, 2026) - one "Insert phrase…" dropdown per box; "Save current text as phrase…" lives inside it (no star button, no per-box Manage link) */}
+    {(phrases.length > 0 || value.trim()) && <select value="" onChange={e => { if (e.target.value === SAVE_OPTION) { setSaveError(""); setSaveOpen(true); } else insertPhrase(e.target.value); }} aria-label={`Insert saved ${fieldLabel} phrase`} className="min-h-11 max-w-full rounded-nav border border-outline-variant bg-surface-container-lowest px-sm text-label-md text-on-surface">
       <option value="">Insert phrase…</option>{phrases.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+      {value.trim() && <option value={SAVE_OPTION}>＋ Save current text as phrase…</option>}
     </select>}
-    {/*JJQR - AI (Nov 19, 2026) - Manage phrases (new tab, deep link) */}
-    <Link href={manageTemplatesHref("phrases", field)} target="_blank" rel="noopener noreferrer" aria-label={`Manage ${fieldLabel} phrases (opens in a new tab)`} className="inline-flex min-h-11 items-center px-xs text-label-sm text-on-surface-variant hover:text-primary hover:underline">Manage</Link>
     {/*JJQR - END */}
-    {value.trim() && <button type="button" onClick={() => { setSaveError(""); setSaveOpen(true); }} aria-label={`Save current ${fieldLabel} text as a reusable phrase`} title="Save as phrase" className="flex h-11 w-11 items-center justify-center rounded-nav text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-primary motion-reduce:transition-none"><Icon name="star" className="h-4 w-4" /></button>}
     <Modal isOpen={saveOpen} onClose={() => { if (!saving) setSaveOpen(false); }} title={`Save ${fieldLabel} as phrase`} footer={<><Button variant="secondary" disabled={saving} onClick={() => setSaveOpen(false)}>Cancel</Button><Button loading={saving} onClick={savePhrase} disabled={!label.trim()}>Save phrase</Button></>}>
       <label className="block space-y-sm"><span className="text-label-md font-medium text-on-surface">Phrase name</span><input value={label} onChange={e => setLabel(e.target.value)} placeholder="For example, Normal cardiac exam" className="w-full rounded-nav border border-outline-variant px-md py-sm text-on-surface" /></label>
       {saveError && <p role="alert" className="mt-md text-body-md text-status-danger">{saveError}</p>}

@@ -51,3 +51,13 @@ export function mergeSoapTemplate(current: SoapValues, template: SoapTemplateVal
   return { values, outcomes };
 }
 //JJQR - END
+
+//JJQR - AI (Nov 19, 2026) - apply preview: which part of the merged text is NEW (shown green) and which is the doctor's existing text
+export function splitAddedText(current: string, merged: string, outcome: SoapFieldOutcome): { kept: string; added: string } {
+  if (outcome === "unchanged" || outcome === "kept-template-blank") return { kept: merged, added: "" };
+  if (outcome === "appended" && current.trim() !== "" && merged.startsWith(current)) {
+    return { kept: current, added: merged.slice(current.length) };
+  }
+  return { kept: "", added: merged };
+}
+//JJQR - END

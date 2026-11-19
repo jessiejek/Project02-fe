@@ -147,7 +147,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   // ── 5. Lab Orders — one handwritten test (persists on Complete) ─────────
   const labOrdersHeading = doctor.getByRole("heading", { name: /Lab Orders/i });
   if (!(await labOrdersHeading.isVisible())) {
-    await doctor.getByRole("button", { name: /Show occasional sections/i }).click();
+    await doctor.getByRole("button", { name: "More", exact: true }).click();
   }
   await labOrdersHeading.click();
   await doctor.getByPlaceholder("Add another test").fill(LAB_TEST);

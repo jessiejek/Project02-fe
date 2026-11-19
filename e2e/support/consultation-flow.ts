@@ -89,6 +89,6 @@ export async function openSectionByTitle(page: Page, titleRe: RegExp) {
 }
 
 export async function showOccasionalSections(page: Page) {
-  const toggle = page.getByRole("button", { name: /Show occasional sections/i });
+  const toggle = page.getByRole("button", { name: "More", exact: true });
   if (await toggle.isVisible().catch(() => false)) await toggle.click();
 }

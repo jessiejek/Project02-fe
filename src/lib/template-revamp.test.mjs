@@ -83,7 +83,7 @@ test('consultation2 template wiring (Phase 1): modal, undo, guards, manage links
   const page = read('app/doctor/consultation2/[bookingId]/page.tsx');
   const tb = read('components/doctor/SoapFieldToolbar.tsx');
   assert.match(page, /aria-label="Use SOAP template"/);
-  assert.match(page, /<option value="">Use Template…<\/option>/);
+  assert.match(page, /<option value="">Use template…<\/option>/);
   assert.match(page, /Apply SOAP template/);
   //JJQR - AI (Nov 19, 2026) - empty notes: apply directly (no modal) but keep the Undo snapshot; text present: preview modal
   const fn = page.slice(page.indexOf('function applyTemplate(template: SoapTemplate)'), page.indexOf('async function saveAsTemplate()'));
@@ -103,7 +103,10 @@ test('consultation2 template wiring (Phase 1): modal, undo, guards, manage links
   assert.match(page, /manageTemplatesHref\("diagnoses"\)/);
   assert.match(page, /manageTemplatesHref\("certificates"\)/);
   assert.doesNotMatch(page, /querySoapTemplates\(/);
-  assert.match(tb, /manageTemplatesHref\("phrases", field\)/);
+  //JJQR - AI (Nov 19, 2026) - UI/UX: no per-box Manage link; one dropdown that also saves a phrase
+  assert.doesNotMatch(tb, /manageTemplatesHref/);
+  assert.match(tb, /Save current text as phrase/);
+  //JJQR - END
   assert.match(tb, /insertAtCaret/);
   assert.match(tb, /useSoapPhrases/);
   assert.doesNotMatch(tb, /querySoapPhrases/);

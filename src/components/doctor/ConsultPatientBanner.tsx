@@ -205,6 +205,17 @@ export function ConsultPatientBanner({
                 <span className="min-w-0 break-words">Allergies: {allergyInfo.text}</span>
               </span>
             )}
+            {/*JJQR - AI (Nov 19, 2026) - one-tap action while allergies are still unrecorded: opens the allergy editor (NKDA toggle + add allergen) */}
+            {canEditAllergies && allergiesNeedPrescriptionReview(nkda, allergies) && (
+              <button
+                type="button"
+                onClick={() => setAllergyEditorOpen(true)}
+                className="inline-flex min-h-11 items-center rounded-lg bg-primary px-md py-xs text-label-md font-medium text-on-primary hover:opacity-90"
+              >
+                Record allergies / NKDA
+              </button>
+            )}
+            {/*JJQR - END */}
             <span className="text-label-sm text-on-surface-variant">Payment: {paymentStatus || "Not recorded"}</span>
           </div>
         </div>

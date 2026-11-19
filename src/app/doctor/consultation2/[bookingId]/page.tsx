@@ -21,9 +21,12 @@ import { VitalsEditor } from "@/components/doctor/VitalsEditor";
 import { PatientHistoryModal } from "@/components/doctor/PatientHistoryModal";
 import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
+//JJQR - AI (Nov 19, 2026)
+import { stepIndicator, nextMissingSection } from "@/lib/clinical/consult-steps";
+//JJQR - END
 //JJQR - AI (Nov 19, 2026) - template-library hook, SOAP merge helpers, Manage deep links
 import { useTemplateLibrary } from "@/lib/clinical/useTemplateLibrary";
-import { SOAP_KEYS, SOAP_FIELD_LABELS, hasSoapContent, mergeSoapTemplate, soapEqual, type SoapApplyMode, type SoapFieldOutcome, type SoapValues } from "@/lib/clinical/soap-merge";
+import { SOAP_KEYS, SOAP_FIELD_LABELS, hasSoapContent, mergeSoapTemplate, splitAddedText, soapEqual, type SoapApplyMode, type SoapFieldOutcome, type SoapValues } from "@/lib/clinical/soap-merge";
 import { manageTemplatesHref } from "@/lib/clinical/template-links";
 //JJQR - END
 //JJQR - AI (Oct 31, 2026)
@@ -296,7 +299,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [mode, setMode] = useState(initialMode);
   const [checklistOpen, setChecklistOpen] = useState(false);
   //JJQR - AI (Oct 31, 2026)
-  const [needHintExpanded, setNeedHintExpanded] = useState(false);
+  //JJQR - AI (Nov 19, 2026) - warnings on required steps only after the doctor tries to complete
+  const [completeAttempted, setCompleteAttempted] = useState(false);
+  //JJQR - END
   //JJQR - END
   const [historyOpen, setHistoryOpen] = useState(false);
   const [amendHistoryOpen, setAmendHistoryOpen] = useState(false);
@@ -319,7 +324,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Oct 31, 2026) — complete mode shows all sections; no occasional toggle
   /** Consult2: occasional sections hidden until the doctor asks for them (not in complete mode). */
   const [showOccasional, setShowOccasional] = useState(false);
-  const revealOccasionalSections = mode === "complete" || showOccasional;
+  //JJQR - AI (Nov 19, 2026) - Vaccinations + Fee sit behind "More" in every mode (the open one always stays visible)
+  const revealOccasionalSections = showOccasional || OCCASIONAL_SECTIONS.includes(openSection as (typeof OCCASIONAL_SECTIONS)[number]);
+  //JJQR - END
   const visibleSectionOrder = SECTION_ORDER.filter(
     (i) => revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]),
   );
@@ -1422,9 +1429,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const allergyAckRequired = allergiesNeedPrescriptionReview(nkda, patientAllergies);
   function sectionStatus(i: number): SectionStatus {
     const satisfied = i === 3 ? rxSatisfied : i === 6 ? followUpSatisfied : sectionSatisfied[i];
-    if (satisfied) return "complete";
-    if (REQUIRED_SECTIONS.includes(i)) return "warning";
-    return sectionHasDraft[i] ? "partial" : "empty";
+    //JJQR - AI (Nov 19, 2026) - empty circle until the doctor tries to complete; only then the warning
+    return stepIndicator({ satisfied, required: REQUIRED_SECTIONS.includes(i), hasDraft: sectionHasDraft[i], attemptedComplete: completeAttempted });
+    //JJQR - END
   }
 
   // Sections with a fixed set of fields (SOAP, Vital Signs, Follow-up) show a
@@ -1449,6 +1456,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (fields) {
       const filled = fields.filter((f) => (f ?? "").trim() !== "").length;
       if (filled === 0) {
+        //JJQR - AI (Nov 19, 2026)
+        if (completeAttempted && REQUIRED_SECTIONS.includes(i) && !isRequiredSectionDone(i)) {
+          return <Icon name="warning" className={cn(className, "text-status-warning")} />;
+        }
+        //JJQR - END
         return <Icon name="radio_button_unchecked" className={cn(className, "text-on-surface-variant")} />;
       }
       if (filled === fields.length) {
@@ -2351,7 +2363,7 @@ Return to patient queue
         <div className="space-y-lg">
           <nav
             aria-label="Consultation sections"
-            className="flex gap-xs overflow-x-auto border-b border-outline-variant pb-md sm:flex-wrap sm:overflow-visible"
+            className="flex gap-xs overflow-x-auto border-b border-outline-variant pb-md"
           >
             {visibleSectionOrder.map((i, displayIdx) => (
               <button
@@ -2371,17 +2383,20 @@ Return to patient queue
                 </span>
               </button>
             ))}
+            {/*JJQR - AI (Nov 19, 2026) - Vaccinations + Professional Fee live behind "More" so the steps fit one row */}
+            <button
+              type="button"
+              onClick={() => setShowOccasional((v) => !v)}
+              aria-expanded={showOccasional}
+              className="flex min-h-11 shrink-0 items-center gap-xs rounded-nav border border-dashed border-outline-variant px-md py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
+            >
+              {showOccasional ? "Less" : "More"}
+              <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
+            </button>
+            {/*JJQR - END */}
           </nav>
 
         <div className="min-w-0 space-y-md pb-[max(16rem,env(safe-area-inset-bottom))] lg:pb-28 lg:pb-[max(7rem,env(safe-area-inset-bottom))]">
-            {/* JJQR - AI (Oct 31, 2026) — F-026 */}
-            {mode !== "complete" && (
-            <p className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-md text-on-surface-variant">
-              Optional sections — vaccinations and professional fee — appear when you choose
-              &ldquo;Show occasional sections&rdquo;. Labs and medical certificate stay in the main flow.
-            </p>
-            )}
-            {/* JJQR - END */}
             {/* JJQR - AI (Oct 31, 2026) — F-011 mobile section progress */}
 
             {/* JJQR - END */}
@@ -2407,45 +2422,18 @@ Return to patient queue
                   {isOpen && i === 0 && (
                     <div className="mt-md space-y-md">
 
-                      <details className="border-b border-outline-variant pb-sm"><summary className="text-label-md font-medium text-on-surface">Templates and previous notes</summary><div className="mt-md flex w-full flex-col gap-md">
-                        {lastVisitSoap && (
-                          <button
-                            type="button"
-                            onClick={() => setLastVisitOpen(true)}
-                            className="text-left text-label-md text-primary hover:underline"
-                          >
-                            View Last Appointment SOAP
-                          </button>
-                        )}
-                        {/* JJQR - AI (Oct 31, 2026) — SOAP toolbar stacks on phone */}
-                        <div className="flex w-full flex-col gap-sm lg:ml-auto lg:max-w-none lg:items-end">
-                          <div className="flex w-full gap-xs overflow-x-auto pb-xs [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:justify-end">
-                            {SPECIALTY_CHIP_LABELS.map(({ id, label }) => (
-                              <button
-                                key={id}
-                                type="button"
-                                onClick={() => setSoapSpecialtyFilter(id)}
-                                className={cn(
-                                  "shrink-0 rounded-full border px-sm py-xs text-label-sm",
-                                  soapSpecialtyFilter === id
-                                    ? "border-primary bg-primary/10 text-primary"
-                                    : "border-outline-variant text-on-surface-variant hover:bg-surface-container-high",
-                                )}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                          <select
+                      {/*JJQR - AI (Nov 19, 2026) - the template picker, Save as Template, Manage and Review notes are always visible at the top of Clinical notes (not inside a collapsed section) */}
+                      <div className="flex flex-wrap items-center gap-sm border-b border-outline-variant pb-md">
+                        <select
                             value=""
                             onChange={(e) => {
                               const t = filteredSoapTemplates.find((x) => x.id === e.target.value);
                               if (t) applyTemplate(t);
                             }}
                             aria-label="Use SOAP template"
-                            className="min-h-[44px] w-full rounded-lg border border-outline-variant px-sm py-xs text-label-sm lg:w-auto"
+                            className="min-h-[44px] w-full rounded-lg border border-primary bg-primary/10 px-md py-xs text-label-md font-semibold text-primary sm:w-auto"
                           >
-                            <option value="">Use Template…</option>
+                            <option value="">Use template…</option>
                             {filteredSoapTemplates.length === 0 && soapTemplates.length > 0 && (
                               <option value="__empty" disabled>
                                 No templates for this specialty
@@ -2465,48 +2453,65 @@ Return to patient queue
                               </option>
                             ))}
                           </select>
-                          {/*JJQR - AI (Nov 19, 2026) - Manage link (new tab, deep link) + small warning/Retry if the SOAP template list failed to load */}
-                          <div className="flex flex-wrap items-center gap-sm lg:justify-end">
-                            {templateLib.soap.status === "error" && (
-                              <span role="status" className="text-label-sm text-status-warning">
-                                SOAP templates couldn&apos;t load.{" "}
-                                <button type="button" onClick={templateLib.soap.reload} className="font-medium underline">Retry</button>
-                              </span>
-                            )}
-                            {templateLib.soap.status === "loading" && (
-                              <span role="status" className="text-label-sm text-on-surface-variant">Loading templates…</span>
-                            )}
-                            <Link
-                              href={manageTemplatesHref("soap")}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label="Manage SOAP templates (opens in a new tab)"
-                              className="inline-flex min-h-[44px] items-center text-label-sm text-on-surface-variant hover:underline"
-                            >
-                              Manage
-                            </Link>
-                          </div>
-                          {/*JJQR - END */}
-                          <div className="flex w-full flex-wrap items-center gap-sm sm:justify-end">
+                        {templateLib.soap.status === "error" && (
+                          <span role="status" className="text-label-sm text-status-warning">
+                            SOAP templates couldn&apos;t load.{" "}
+                            <button type="button" onClick={templateLib.soap.reload} className="font-medium underline">Retry</button>
+                          </span>
+                        )}
+                        {templateLib.soap.status === "loading" && (
+                          <span role="status" className="text-label-sm text-on-surface-variant">Loading templates…</span>
+                        )}
+                        <button type="button" onClick={openSaveTemplate} className="min-h-[44px] px-sm text-label-md text-primary hover:underline">
+                          Save as Template
+                        </button>
+                        <Link
+                          href={manageTemplatesHref("soap")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Manage templates and phrases (opens in a new tab)"
+                          className="inline-flex min-h-[44px] items-center px-sm text-label-md text-on-surface-variant hover:text-primary hover:underline"
+                        >
+                          Manage templates
+                        </Link>
+                        <Button
+                          variant="secondary"
+                          className="min-h-[44px] sm:ml-auto"
+                          disabled={mode === "amend" && !canComplete}
+                          loading={mode === "complete" ? savingDraft : savingChanges}
+                          onClick={() => setReviewSection(0)}
+                        >
+                          Review notes
+                        </Button>
+                      </div>
+                      {/*JJQR - END */}
+                      <details className="border-b border-outline-variant pb-sm"><summary className="text-label-md font-medium text-on-surface">Previous note and specialty filter</summary><div className="mt-md flex w-full flex-col gap-md">
+                        {lastVisitSoap && (
+                          <button
+                            type="button"
+                            onClick={() => setLastVisitOpen(true)}
+                            className="text-left text-label-md text-primary hover:underline"
+                          >
+                            View Last Appointment SOAP
+                          </button>
+                        )}
+                        <div className="flex w-full gap-xs overflow-x-auto pb-xs [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                          {SPECIALTY_CHIP_LABELS.map(({ id, label }) => (
                             <button
+                              key={id}
                               type="button"
-                              onClick={openSaveTemplate}
-                              className="min-h-[44px] text-label-sm text-primary hover:underline"
+                              onClick={() => setSoapSpecialtyFilter(id)}
+                              className={cn(
+                                "shrink-0 rounded-full border px-sm py-xs text-label-sm",
+                                soapSpecialtyFilter === id
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-outline-variant text-on-surface-variant hover:bg-surface-container-high",
+                              )}
                             >
-                              Save as Template
+                              {label}
                             </button>
-                            <Button
-                              variant="secondary"
-                              className="min-h-[44px] flex-1 sm:flex-none"
-                              disabled={mode === "amend" && !canComplete}
-                              loading={mode === "complete" ? savingDraft : savingChanges}
-                              onClick={() => setReviewSection(0)}
-                            >
-                              Review notes
-                            </Button>
-                          </div>
+                          ))}
                         </div>
-                        {/* JJQR - END */}
                       </div></details>
                       <div className="grid grid-cols-1 gap-lg sm:grid-cols-2">
                         <ClinicalNoteField id="note-chiefComplaint" label="Chief complaint" hint="Reason for this visit, in the patient’s own words." value={chiefComplaint} onChange={setChiefComplaint} required tools={<SoapFieldToolbar doctorId={booking.doctorId} field="chiefComplaint" fieldLabel="Chief complaint" value={chiefComplaint} onInsert={setChiefComplaint} />} />
@@ -3144,27 +3149,6 @@ Return to patient queue
               );
             })}
 
-            {mode !== "complete" && !showOccasional && (
-              <Button
-                type="button"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setShowOccasional(true)}
-              >
-                Show occasional sections (Vaccinations · Fee)
-              </Button>
-            )}
-            {mode !== "complete" && showOccasional && (
-              <Button
-                type="button"
-                variant="ghost"
-                className="w-full"
-                onClick={() => setShowOccasional(false)}
-              >
-                Hide occasional sections
-              </Button>
-            )}
-
         </div>
         </div>
         {/* JJQR - END */}
@@ -3309,7 +3293,21 @@ Return to patient queue
                       <span className="text-label-md font-semibold text-on-surface">{SOAP_FIELD_LABELS[k]}</span>
                       <span className="text-label-sm text-on-surface-variant">{outcomeText[outcomes[k]]}</span>
                     </div>
-                    <pre className="mt-xs max-h-28 overflow-y-auto whitespace-pre-wrap break-words font-sans text-body-sm text-on-surface">{values[k].trim() === "" ? "—" : values[k]}</pre>
+                    {/*JJQR - AI (Nov 19, 2026) - text that will be ADDED is highlighted green; the doctor's existing text stays plain */}
+                    {(() => {
+                      const { kept, added } = splitAddedText(currentSoap[k] ?? "", values[k], outcomes[k]);
+                      return (
+                        <pre data-testid={`soap-preview-${k}`} className="mt-xs max-h-28 overflow-y-auto whitespace-pre-wrap break-words font-sans text-body-sm text-on-surface">
+                          {values[k].trim() === "" ? "—" : (
+                            <>
+                              {kept}
+                              {added && <mark data-added="true" className="rounded-sm bg-status-success-surface px-[2px] text-status-success">{added}</mark>}
+                            </>
+                          )}
+                        </pre>
+                      );
+                    })()}
+                    {/*JJQR - END */}
                   </li>
                 ))}
               </ul>
@@ -3643,32 +3641,21 @@ Return to patient queue
               <button
                 type="button"
                 className="flex min-h-[44px] w-full items-center justify-between rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-xs text-label-md text-status-warning lg:w-auto"
-                aria-expanded={needHintExpanded}
-                onClick={() => setNeedHintExpanded((v) => !v)}
+                onClick={() => {
+                  //JJQR - AI (Nov 19, 2026) - jump straight to the next missing required section (and start showing warnings)
+                  setCompleteAttempted(true);
+                  const next = nextMissingSection(missingRequiredSections, openSection, SECTION_ORDER);
+                  if (next !== null) setOpenSection(next);
+                }}
+                aria-label={`${missingRequiredSections.length} required section${missingRequiredSections.length === 1 ? "" : "s"} left. Go to the next one`}
               >
                 <span className="font-medium">
                   {missingRequiredSections.length} required section{missingRequiredSections.length === 1 ? "" : "s"} left
                 </span>
-                <Icon name={needHintExpanded ? "expand_less" : "expand_more"} className="text-[20px]" aria-hidden />
+                <span className="ml-sm inline-flex items-center gap-xs text-label-sm underline">
+                  Go to next <Icon name="arrow_forward" className="text-[16px]" aria-hidden />
+                </span>
               </button>
-              {needHintExpanded && (
-                <ul className="mt-xs space-y-xs rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm text-label-sm text-status-warning">
-                  {missingRequiredSections.map((secIdx) => (
-                    <li key={secIdx}>
-                      <button
-                        type="button"
-                        className="min-h-[44px] w-full text-left font-medium text-primary underline"
-                        onClick={() => {
-                          setOpenSection(secIdx);
-                          setNeedHintExpanded(false);
-                        }}
-                      >
-                        {SECTIONS[secIdx]}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           )}
           <div className="flex w-full flex-wrap items-center justify-between gap-md lg:w-auto lg:flex-1">
