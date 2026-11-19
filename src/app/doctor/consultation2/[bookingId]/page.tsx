@@ -2652,7 +2652,7 @@ Return to patient queue
                         </span>
                       </label>
                       {allergyAckRequired && !allergyReviewed && (
-                        <div className="flex flex-col gap-sm rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div id="rx-allergy-review-banner" className="flex flex-col gap-sm rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm sm:flex-row sm:items-center sm:justify-between">
                           <p className="text-label-md text-status-warning">
                             Review allergies (NKDA or add) before prescribing.
                           </p>
@@ -2678,7 +2678,9 @@ Return to patient queue
                         allergyAckRequired={allergyAckRequired}
                         allergyAcked={allergyReviewed}
                         //JJQR - AI (Oct 31, 2026) — soft banner above; do not auto-ack or jump sections
-                        onNeedAllergyAck={() => {}}
+                        //JJQR - AI (Nov 19, 2026) - still no auto-ack; bring the banner into view so the doctor sees what to tap
+                        onNeedAllergyAck={() => document.getElementById("rx-allergy-review-banner")?.scrollIntoView({ block: "center", behavior: "smooth" })}
+                        //JJQR - END
                         priorRxItems={priorRxItems}
                         patientPregnant={!!patientDetail?.is_pregnant}
                         patientAgeYears={patientAgeYears}

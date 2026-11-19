@@ -27,6 +27,9 @@ import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Med
 import type { Database } from "@/data/supabase-types";
 import { checkDrugSafety } from "@/lib/clinical/drug-safety";
 import { mgPerKgDose, mlFromConcentration } from "@/lib/clinical/peds-dosing";
+//JJQR - AI (Nov 19, 2026) - Bug fix: applying an Rx template must add its medicines, or say clearly why not
+import { ALLERGY_REVIEW_MESSAGE, describeTemplateApply, isAllergyGateClosed, planTemplateApply } from "@/lib/clinical/rx-template-apply";
+//JJQR - END
 
 type DbTemplateItem = Database["public"]["Tables"]["prescription_template_items"]["Row"];
 
@@ -597,9 +600,12 @@ interface TemplatesTabProps {
   onAddNew: () => void;
   onEdit: (template: PrescriptionTemplate) => void;
   onDelete: (template: PrescriptionTemplate) => void;
+  //JJQR - AI (Nov 19, 2026) - result of the last tap (added / skipped / blocked), shown right under the search box
+  notice?: { key: number; variant: ToastVariant; message: string } | null;
+  //JJQR - END
 }
 
-function TemplatesTab({ templates, onAddAll, onAddNew, onEdit, onDelete }: TemplatesTabProps) {
+function TemplatesTab({ templates, onAddAll, onAddNew, onEdit, onDelete, notice }: TemplatesTabProps) {
   const [search, setSearch] = useState("");
   const filtered = templates.filter((t) => (t.title ?? "").toLowerCase().includes(search.toLowerCase()));
   return (
@@ -609,6 +615,24 @@ function TemplatesTab({ templates, onAddAll, onAddNew, onEdit, onDelete }: Templ
         Add Template
       </Button>
       <input aria-label="Search Templates" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Templates" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
+      {/*JJQR - AI (Nov 19, 2026) - visible result of tapping a template*/}
+      {notice && (
+        <p
+          key={notice.key}
+          role="status"
+          data-testid="rx-template-notice"
+          className={cn(
+            "rounded-lg border px-md py-sm text-label-md",
+            notice.variant === "success" && "border-status-success-border bg-status-success-surface text-status-success",
+            notice.variant === "warning" && "border-status-warning-border bg-status-warning-surface text-status-warning",
+            notice.variant === "error" && "border-status-danger-border bg-status-danger-surface text-status-danger",
+            notice.variant === "info" && "border-status-info-border bg-status-info-surface text-status-info",
+          )}
+        >
+          {notice.message}
+        </p>
+      )}
+      {/*JJQR - END*/}
       {filtered.length === 0 ? (
         <p className="text-body-md text-on-surface-variant">No templates yet.</p>
       ) : (
@@ -758,6 +782,9 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<PrescriptionTemplate | null>(null);
   const [templateDeleteTarget, setTemplateDeleteTarget] = useState<PrescriptionTemplate | null>(null);
+  //JJQR - AI (Nov 19, 2026) - inline result line for the Templates tab
+  const [templateNotice, setTemplateNotice] = useState<{ key: number; variant: ToastVariant; message: string } | null>(null);
+  //JJQR - END
   // Rarely changes — fetch once per mount (Implementation-Phases/03-reference-clinic-data.md §3d).
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   //JJQR - AI (Oct 31, 2026)
@@ -808,10 +835,13 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
   }
 
   function requireAllergyAckBeforeAdd(): boolean {
-    if (allergyAckRequired && !allergyAcked && items.length === 0) {
+    //JJQR - AI (Nov 19, 2026) - the gate used to stop silently (taps on a template / favorite did "nothing"); now it says why
+    if (isAllergyGateClosed({ required: allergyAckRequired, acked: allergyAcked, itemCount: items.length })) {
+      notify("warning", ALLERGY_REVIEW_MESSAGE);
       onNeedAllergyAck?.();
       return false;
     }
+    //JJQR - END
     return true;
   }
 
@@ -877,6 +907,12 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
   function showToast(variant: ToastVariant, message: string) {
     setToast({ key: Date.now(), variant, message });
   }
+  //JJQR - AI (Nov 19, 2026) - also show the message right next to the list the doctor just tapped (the top toast can be off-screen)
+  function notify(variant: ToastVariant, message: string) {
+    showToast(variant, message);
+    setTemplateNotice({ key: Date.now(), variant, message });
+  }
+  //JJQR - END
 
   useEffect(() => {
     const warns = safetyAlerts.filter((a) => a.level === "warn").map((a) => a.message);
@@ -941,18 +977,19 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
 
   function handleTemplateAddAll(template: PrescriptionTemplate) {
     if (!requireAllergyAckBeforeAdd()) return;
-    template.items.forEach((item) => {
-      const blocked = allergyBlockReason(item.genericName);
-      if (blocked) {
-        reportAllergyConflict(item.genericName, blocked);
-        return;
-      }
-      if (!applySafetyBeforeAdd(item.genericName)) return;
-      if (!isDuplicate(item.genericName, item.dosage)) {
-        setItems((prev) => [...prev, { ...item, id: newId("rxi"), route: item.route ?? "PO" }]);
-      }
+    //JJQR - AI (Nov 19, 2026) - add every medicine of the template in ONE update (the old per-item loop only looked at the list as it was before the click) and report the result
+    const plan = planTemplateApply(template.items, items.map((i) => i.genericName), {
+      allergyConflict: allergyBlockReason,
+      safety: (name, current) => checkDrugSafety([...current, name], { pregnant: patientPregnant }),
+      newId: () => newId("rxi"),
     });
-    setPrintSigError(false);
+    if (plan.toAdd.length) {
+      setItems((prev) => [...prev, ...plan.toAdd]);
+      setPrintSigError(false);
+    }
+    const result = describeTemplateApply(template.title, template.items.length, plan);
+    notify(result.variant, result.message);
+    //JJQR - END
   }
 
   function handleRefillLastVisit() {
@@ -1254,6 +1291,7 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
             <TemplatesTab
               templates={templates}
               onAddAll={handleTemplateAddAll}
+              notice={templateNotice}
               onAddNew={() => {
                 setEditingTemplate(null);
                 setTemplateModalOpen(true);
