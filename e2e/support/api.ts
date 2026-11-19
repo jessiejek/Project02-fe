@@ -292,7 +292,7 @@ export async function deleteAnnouncement(admin: APIRequestContext, id: string) {
 }
 /** Delete every announcement whose title contains `needle` (cleanup for UI-created rows). */
 export async function deleteAnnouncementsByTitle(admin: APIRequestContext, needle: string) {
-  const res = await admin.get("/api/announcements");
+  const res = await admin.get("/api/announcements?activeOnly=false");
   if (!res.ok()) return;
   for (const a of (await res.json()) as { id: string; title: string }[]) if (a.title.includes(needle)) await deleteAnnouncement(admin, a.id);
 }
@@ -312,5 +312,23 @@ export async function restoreDevPassword(email: string, candidates: string[]): P
     }
     await ctx.dispose();
   }
+}
+//JJQR - END
+
+//JJQR - AI (Nov 19, 2026) - e2e-full-coverage: admin-side helpers (staff accounts, patients, bookings)
+export async function staffAccountByEmail(admin: APIRequestContext, email: string): Promise<Record<string, any> | undefined> {
+  const rows: any[] = await (await admin.get("/api/staff-accounts")).json();
+  return rows.find((r) => String(r.email).toLowerCase() === email.toLowerCase());
+}
+/** Delete an invited/test staff login by e-mail (best effort, never touches the four dev logins). */
+export async function deleteStaffByEmail(admin: APIRequestContext, email: string) {
+  if (/@clinic\.test$/i.test(email)) return;
+  const row = await staffAccountByEmail(admin, email);
+  if (row) await admin.delete(`/api/auth/users/${row.user_id}`);
+}
+export async function patientsMatching(api: APIRequestContext, needle: string): Promise<any[]> {
+  const res = await api.get(`/api/patients?search=${encodeURIComponent(needle)}`);
+  const body = await res.json();
+  return Array.isArray(body) ? body : body.items ?? body.data ?? [];
 }
 //JJQR - END
