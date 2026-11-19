@@ -179,11 +179,13 @@ test.describe("/staff/announcements", () => {
 });
 
 test.describe("/staff/profile", () => {
-  async function restoreProfile(api: (r: "staff") => Promise<import("@playwright/test").APIRequestContext>) {
-    const staff = await api("staff");
-    const rows: any[] = await (await staff.get("/api/staff-accounts")).json();
+  // /api/staff-accounts is admin-only, so the put-back goes through the admin API.
+  async function restoreProfile(api: (r: "admin") => Promise<import("@playwright/test").APIRequestContext>) {
+    const admin = await api("admin");
+    const rows: any[] = await (await admin.get("/api/staff-accounts")).json();
     const me = rows.find((r) => r.email === "staff@clinic.test");
-    await staff.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, full_name: "Test Staff", contact_number: "09170002222" } });
+    const res = await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, full_name: "Test Staff", contact_number: "09170002222" } });
+    if (!res.ok()) throw new Error(`restoreProfile → ${res.status()}`);
   }
 
   test("edit name + contact → saved message → reload keeps them; Save is disabled until something changes", async ({ as, api, cleanup }) => {
@@ -214,15 +216,19 @@ test.describe("/staff/profile", () => {
     await expect(page.getByLabel("Full name")).toHaveValue("Test Staff");
   });
 
-  test("a 300-character name is refused", async ({ as, api, cleanup, guard }) => {
-    guard.allow(/\/api\/staff-accounts\//);
+  test("a 300-character name is refused", async ({ as, api, cleanup }) => {
+    test.fail(true, "BUG-01 (B1): the staff profile stores a 300-character name and the phone 'not-a-number' — no length/format validation");
     cleanup(() => restoreProfile(api));
     const page = await as("staff");
     await page.goto("/staff/profile");
     await page.getByLabel("Full name").fill("N".repeat(300));
     await page.getByLabel("Contact number").fill("not-a-number");
     await page.getByRole("button", { name: "Save changes" }).click();
-    await expect(page.getByText(/^Saved /)).toHaveCount(0);
+    await page.waitForTimeout(1000);
+    const admin = await api("admin");
+    const me = ((await (await admin.get("/api/staff-accounts")).json()) as any[]).find((r) => r.email === "staff@clinic.test");
+    expect(me.full_name.length, "stored name length").toBeLessThanOrEqual(200);
+    expect(me.contact_number).not.toBe("not-a-number");
   });
 
   test("password change: needs 6+ chars and a matching confirmation; wrong current password is refused; a correct change works and the new password logs in", async ({ as, api, cleanup, guard }) => {
