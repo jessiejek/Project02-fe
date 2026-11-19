@@ -13,6 +13,7 @@ test('workspace wiring: route keeps the h1 + e2e selectors, panel is guarded, de
   const ws = read('components/doctor/templates/TemplatesWorkspace.tsx');
   assert.match(ws, /"Search this tab…"/);
   assert.match(ws, /const label = `\$\{TAB_LABELS\[id\]\} \(\$\{counts\[id\]\}\)`/);
+  assert.doesNotMatch(ws, /role="tab"/); // e2e uses getByRole('button', { name: /SOAP \\(\\d+\\)/ })
   const panel = read('components/ui/SidePanel.tsx');
   assert.match(panel, /e\.key === "Escape"/);
   assert.match(panel, /\(e\.metaKey \|\| e\.ctrlKey\) && e\.key\.toLowerCase\(\) === "s"/);

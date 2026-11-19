@@ -81,7 +81,8 @@ export function TemplatesWorkspace() {
 
   return (
     <div className="space-y-md">
-      <div role="tablist" aria-label="Template type" className="flex gap-xs overflow-x-auto border-b border-outline-variant">
+      {/*JJQR - AI (Nov 19, 2026) - plain buttons (no ARIA tab roles) so the existing e2e selector getByRole("button", { name: /SOAP \(\d+\)/ }) keeps working */}
+      <nav aria-label="Template type" className="flex gap-xs overflow-x-auto border-b border-outline-variant">
         {TEMPLATE_TABS.map((id) => {
           const label = `${TAB_LABELS[id]} (${counts[id]})`;
           const active = tab === id;
@@ -89,10 +90,8 @@ export function TemplatesWorkspace() {
             <button
               key={id}
               type="button"
-              role="tab"
               id={`tpl-tab-${id}`}
-              aria-selected={active}
-              aria-controls="tpl-tabpanel"
+              aria-current={active ? "page" : undefined}
               onClick={() => go(buildTemplatesUrl({ tab: id }))}
               className={cn(
                 "min-h-11 shrink-0 border-b-2 px-md text-label-lg transition-colors",
@@ -103,7 +102,8 @@ export function TemplatesWorkspace() {
             </button>
           );
         })}
-      </div>
+      </nav>
+      {/*JJQR - END*/}
 
       <div className="flex flex-wrap items-center gap-sm">
         <div className="relative min-w-56 flex-1">
@@ -130,7 +130,7 @@ export function TemplatesWorkspace() {
         </div>
       )}
 
-      <div id="tpl-tabpanel" role="tabpanel" aria-labelledby={`tpl-tab-${tab}`}>
+      <div id="tpl-tabpanel" aria-live="polite">
         {hits ? (
           <SearchResults hits={hits} query={query} onOpen={(t, id, f) => { setQuery(""); go(buildTemplatesUrl({ tab: t, id, field: f })); }} />
         ) : tab === "soap" ? <SoapTab ctx={ctx} />

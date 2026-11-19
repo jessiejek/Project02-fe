@@ -7,9 +7,9 @@ test.describe("Templates workspace", () => {
     await page.goto("/doctor/templates?tab=phrases&field=Plan");
     await expect(page.getByRole("heading", { name: "Templates" })).toBeVisible();
     for (const name of [/SOAP \(\d+\)/, /Phrases \(\d+\)/, /Prescriptions \(\d+\)/, /Favorites \(\d+\)/, /Diagnoses \(\d+\)/, /Certificates \(\d+\)/]) {
-      await expect(page.getByRole("tab", { name })).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByRole("button", { name })).toBeVisible({ timeout: 15_000 });
     }
-    await expect(page.getByRole("tab", { name: /Phrases/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("button", { name: /Phrases/ })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("region", { name: "Plan phrases" })).toBeVisible();
   });
 
@@ -77,7 +77,7 @@ test.describe("Templates workspace", () => {
   test("global search finds items across tabs and opens the editor via deep link", async ({ as }) => {
     const page = await as("doctor");
     await page.goto("/doctor/templates");
-    await expect(page.getByRole("tab", { name: /SOAP \(\d+\)/ })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: /SOAP \(\d+\)/ })).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "All tabs" }).click();
     await page.getByPlaceholder("Search all tabs…").fill("fever");
     const results = page.getByLabel("Search results");
