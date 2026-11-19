@@ -72,6 +72,9 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
         { label: "Patient charts", href: "/doctor/patients", icon: "groups" },
       ] },
       { label: "Your practice", items: [
+        //JJQR - AI (Nov 19, 2026) - the doctor's own performance numbers (Collected / Billed, patients, trends)
+        { label: "Performance", href: "/doctor/performance", icon: "monitoring" },
+        //JJQR - END
         { label: "Availability", href: "/doctor/schedule", icon: "schedule" },
         { label: "Templates", href: "/doctor/templates", icon: "description" },
         //JJQR - AI (Nov 19, 2026) - the doctor Settings link was removed: that page only repeated these links (it now redirects to Profile)
