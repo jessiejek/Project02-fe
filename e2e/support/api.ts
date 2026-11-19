@@ -240,4 +240,19 @@ export async function getDoctor(api: APIRequestContext): Promise<Record<string, 
   const list = await (await api.get("/api/doctors")).json();
   return list[0];
 }
+
+/** Delete a self-registered login by e-mail (patient row lingers). Best effort; used in cleanup. */
+export async function deleteAccountByEmail(email: string, password = PASSWORD): Promise<void> {
+  const anon = await pwRequest.newContext({ baseURL: BE_URL });
+  try {
+    const r = await anon.post("/api/auth/login", { data: { email, password } });
+    if (!r.ok()) return;
+    const id = (await r.json()).user.id as string;
+    const admin = await apiAs("admin");
+    await admin.delete(`/api/auth/users/${id}`).catch(() => undefined);
+    await admin.dispose();
+  } finally {
+    await anon.dispose();
+  }
+}
 //JJQR - END

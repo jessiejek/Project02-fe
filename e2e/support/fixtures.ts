@@ -31,6 +31,8 @@ export type Cleanup = (fn: () => Promise<unknown> | unknown) => void;
 
 type Fixtures = {
   as: (role: Role) => Promise<Page>;
+  /** A fresh logged-OUT page (new browser context, guard attached). */
+  anon: () => Promise<Page>;
   /** A fresh page logged in through the real /login form as any account (e.g. a freshly registered patient). */
   loginAs: (email: string, password: string) => Promise<Page>;
   api: (role: Role) => Promise<APIRequestContext>;
@@ -97,6 +99,17 @@ export const test = base.extend<Fixtures>({
         console.warn(`[e2e cleanup] ${String(e).split("\n")[0]}`);
       }
     }
+  },
+
+  anon: async ({ browser, guard }, use) => {
+    const contexts: BrowserContext[] = [];
+    await use(async () => {
+      const ctx = await browser.newContext();
+      ctx.on("page", (pg) => (guard as unknown as { _attach(p: Page): void })._attach(pg));
+      contexts.push(ctx);
+      return ctx.newPage();
+    });
+    for (const c of contexts) await c.close();
   },
 
   loginAs: async ({ browser, guard }, use) => {
