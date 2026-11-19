@@ -29,7 +29,7 @@ test.describe("Product decisions regression", () => {
     const patient = await createPatient(staffApi, tag);
     const page = await as("doctor");
     await page.goto("/doctor/dashboard");
-    const input = page.getByPlaceholder("Search patients, doctors, or appointments...");
+    const input = page.getByPlaceholder("Search…");
     // Unique tag avoids cap-8 collision with older E2E rows
     await input.fill(patient.first_name);
     await expect(page.getByRole("listbox")).toBeVisible({ timeout: 10_000 });

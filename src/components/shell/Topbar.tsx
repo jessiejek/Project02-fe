@@ -173,7 +173,7 @@ export function Topbar({ onMenuClick, roleBadge }: TopbarProps) {
                 navigateHit(results[activeIndex]!);
               }
             }}
-            placeholder="Search patients, doctors, or appointments..."
+            placeholder="Search…" //JJQR - AI (Nov 19, 2026) - short placeholder (the aria-label still says what is searched)
             className="w-full rounded-lg border border-outline-variant bg-surface-container-low py-xs pl-xl pr-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {search.trim().length >= 2 && !loading && settledQuery === search.trim() && open && (

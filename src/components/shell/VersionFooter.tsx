@@ -25,7 +25,17 @@ function formatStamp(iso: string): string {
 // FE (v{commit count})({when that commit was pushed}) | BE (same, from the
 // API's own version.txt). The version number only ever goes up — no
 // meaning to memorize, just "is this bigger than what I saw last time."
+//JJQR - AI (Nov 19, 2026) - the FE/BE version line is for dev/staging only: hidden in production builds (set NEXT_PUBLIC_SHOW_VERSION=true to force it on)
 export function VersionFooter() {
+  if (!shouldShowVersionFooter(process.env.NODE_ENV, process.env.NEXT_PUBLIC_SHOW_VERSION)) return null;
+  return <VersionFooterLine />;
+}
+export function shouldShowVersionFooter(nodeEnv: string | undefined, forceShow: string | undefined): boolean {
+  return nodeEnv !== "production" || forceShow === "true";
+}
+//JJQR - END
+
+function VersionFooterLine() {
   const feVersion = process.env.NEXT_PUBLIC_APP_VERSION ?? "?";
   const feTime = process.env.NEXT_PUBLIC_BUILD_TIME;
 

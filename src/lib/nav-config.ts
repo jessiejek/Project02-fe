@@ -74,7 +74,7 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
       { label: "Your practice", items: [
         { label: "Availability", href: "/doctor/schedule", icon: "schedule" },
         { label: "Templates", href: "/doctor/templates", icon: "description" },
-        { label: "Settings", href: "/doctor/settings", icon: "settings" },
+        //JJQR - AI (Nov 19, 2026) - the doctor Settings link was removed: that page only repeated these links (it now redirects to Profile)
         { label: "Profile", href: "/doctor/profile", icon: "account_circle" },
       ] },
     ],

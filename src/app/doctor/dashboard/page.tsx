@@ -62,7 +62,9 @@ export default function DoctorDashboardPage() {
   const [statusError, setStatusError] = useState("");
   const [statusSaving, setStatusSaving] = useState<DayStatus | null>(null);
   const [name, setName] = useState("");
-  const [dayStatus, setDayStatus] = useState<DayStatus>("Available");
+  //JJQR - AI (Nov 19, 2026) - null = unknown (still loading or the availability call failed): never show "Available" as if it were set
+  const [dayStatus, setDayStatus] = useState<DayStatus | null>(null);
+  //JJQR - END
   const [earnings, setEarnings] = useState<DoctorEarningsRow[]>([]);
   const [range, setRange] = useState<Range>("month");
   const [customFrom, setCustomFrom] = useState("");
@@ -208,6 +210,20 @@ export default function DoctorDashboardPage() {
     return () => clearInterval(t);
   }, [loadQueue, loadAttention, loadClinicOverview]);
 
+  //JJQR - AI (Nov 19, 2026)
+  const loadDayStatus = useCallback(async () => {
+    setStatusError("");
+    try {
+      const statusRow = await queryDayStatus(null as never, meDoctorId, todayManila());
+      // No row saved for today = the doctor never changed it = Available by default.
+      setDayStatus((statusRow?.status as DayStatus) ?? "Available");
+    } catch {
+      setDayStatus(null);
+      setStatusError("Your availability could not be loaded. Check it before changing your status.");
+    }
+  }, [meDoctorId]);
+  //JJQR - END
+
   useEffect(() => {
     if (!meDoctorId) return;
     async function load() {
@@ -217,9 +233,7 @@ export default function DoctorDashboardPage() {
       // All independent — fire together instead of day-status → earnings →
       // the rest, which stacked three full round trips before first paint.
       await Promise.all([
-        queryDayStatus(supabase, meDoctorId, today).then((statusRow) =>
-          setDayStatus((statusRow?.status as DayStatus) ?? "Available"),
-        ).catch(() => setStatusError("Your availability could not be loaded. Check it before changing your status.")),
+        loadDayStatus(),
         queryDoctorEarnings(supabase, meDoctorId).then(rows => { setEarnings(rows); setEarningsError(false); }, () => setEarningsError(true)),
         loadQueue(),
         loadAttention(),
@@ -228,7 +242,7 @@ export default function DoctorDashboardPage() {
       setLoaded(true);
     }
     load();
-  }, [meDoctorId, loadQueue, loadAttention, loadClinicOverview, session?.displayName]);
+  }, [meDoctorId, loadDayStatus, loadQueue, loadAttention, loadClinicOverview, session?.displayName]);
 
   const currentMonth = todayManila().slice(0, 7); // "YYYY-MM"
   const currentYear = todayManila().slice(0, 4); // "YYYY"
@@ -349,7 +363,7 @@ export default function DoctorDashboardPage() {
   }
 
   return (
-    <AppShell role="doctor" roleBadge={<StatusPill status={dayStatus} />}>
+    <AppShell role="doctor" roleBadge={dayStatus ? <StatusPill status={dayStatus} /> : undefined}>
       <div className="min-w-0 space-y-lg overflow-x-hidden">
         <DoctorPageHeader title="Your clinic today" description={<>{name} · <span className="tabular-nums">{visitDate(todayManila())}</span></>} actions={<Link href="/doctor/appointments" className={buttonStyles("primary")}>Open appointments<Icon name="arrow_forward" className="h-4 w-4" /></Link>} />
         {statusError && <Toast variant="error" key={statusError} message={statusError} />}
@@ -439,6 +453,14 @@ export default function DoctorDashboardPage() {
                 }`
               : "No one waiting right now."}
           </p>
+          {/*JJQR - AI (Nov 19, 2026) - availability failed to load: say so, offer Retry, and don't highlight any status */}
+          {dayStatus === null && statusError && (
+            <p role="alert" data-testid="availability-unknown" className="mb-sm text-label-md text-status-warning">
+              Your status for today is unknown — it couldn&apos;t be loaded.{" "}
+              <button type="button" onClick={() => void loadDayStatus()} className="font-medium underline">Retry</button>
+            </p>
+          )}
+          {/*JJQR - END */}
           <div className="flex flex-wrap gap-sm">
             <Button variant={dayStatus === "Available" ? "primary" : "secondary"} disabled={!!statusSaving} loading={statusSaving === "Available"} onClick={() => setStatus("Available")}>Available</Button>
             <Button variant={dayStatus === "RunningLate" ? "primary" : "secondary"} disabled={!!statusSaving} loading={statusSaving === "RunningLate"} onClick={() => setStatus("RunningLate")}>Running Late</Button>
