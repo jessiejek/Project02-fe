@@ -16,13 +16,16 @@ export type LoadStatus = "idle" | "loading" | "ready" | "error";
 
 export interface LoadedList<T> {
   items: T[];
+  //JJQR - AI (Nov 19, 2026) - templates workspace edits lists in place (save / delete / reorder) without refetching
+  setItems: React.Dispatch<React.SetStateAction<T[]>>;
+  //JJQR - END
   status: LoadStatus;
   reload: () => void;
   /** Local add after a successful create (no refetch). */
   add: (row: T) => void;
 }
 
-function useLoadedList<T>(enabled: boolean, scope: string | undefined, load: () => Promise<T[]>, sort?: (a: T, b: T) => number): LoadedList<T> {
+export function useLoadedList<T>(enabled: boolean, scope: string | undefined, load: () => Promise<T[]>, sort?: (a: T, b: T) => number): LoadedList<T> {
   const [items, setItems] = useState<T[]>([]);
   const [status, setStatus] = useState<LoadStatus>("idle");
   const loadRef = useRef(load);
@@ -51,7 +54,7 @@ function useLoadedList<T>(enabled: boolean, scope: string | undefined, load: () 
     setItems((prev) => (sort ? [...prev, row].sort(sort) : [...prev, row]));
   }, [sort]);
 
-  return { items, status: enabled && status === "idle" ? "loading" : status, reload, add };
+  return { items, setItems, status: enabled && status === "idle" ? "loading" : status, reload, add };
 }
 
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title);

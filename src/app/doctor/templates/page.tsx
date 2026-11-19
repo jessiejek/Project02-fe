@@ -1,13 +1,13 @@
 "use client";
 
+import { Suspense } from "react";
 import { AppShell } from "@/components/shell/AppShell";
-import { DoctorTemplatesPanel } from "@/components/doctor/DoctorTemplatesPanel";
+//JJQR - AI (Nov 19, 2026) - new 6-tab workspace replaces the old single-page panel (DoctorTemplatesPanel.tsx is kept in the repo, unused)
+import { TemplatesWorkspace } from "@/components/doctor/templates/TemplatesWorkspace";
 
-//JJQR - AI (Oct 31, 2026)
 export default function DoctorTemplatesPage() {
   return (
     <AppShell role="doctor">
-      {/* JJQR - AI (Oct 31, 2026) */}
       <div className="mx-auto max-w-5xl space-y-lg">
         <div>
           <h1 className="text-headline-lg text-on-surface">Consultation templates</h1>
@@ -15,9 +15,10 @@ export default function DoctorTemplatesPage() {
             SOAP phrases, diagnoses, prescriptions, and certificates you reuse during consultations.
           </p>
         </div>
-        <DoctorTemplatesPanel />
+        <Suspense fallback={<p className="text-body-md text-on-surface-variant" role="status">Loading your templates…</p>}>
+          <TemplatesWorkspace />
+        </Suspense>
       </div>
-      {/* JJQR - END */}
     </AppShell>
   );
 }
