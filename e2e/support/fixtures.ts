@@ -45,3 +45,6 @@ export const test = base.extend<Fixtures>({
 });
 
 export { expect };
+//JJQR - AI (Nov 19, 2026) - pre-existing fix: specs import { type Page } from "../support/fixtures" but it was never exported (TS2459)
+export type { Page };
+//JJQR - END
