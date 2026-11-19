@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { armHistoryGuard, isReleasingGuard, markGuardConsumed } from "@/lib/templates/historyGuard";
 
 export interface SidePanelProps {
   isOpen: boolean;
@@ -60,6 +61,21 @@ export function SidePanel({ isOpen, title, subtitle, dirty = false, saving = fal
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [isOpen, dirty]);
+
+  //JJQR - AI (Nov 19, 2026) - browser Back with unsaved edits: stay on the page and show the same discard prompt
+  useEffect(() => {
+    if (!isOpen || !dirty) return;
+    armHistoryGuard();
+    function onPop() {
+      if (isReleasingGuard()) return; // our own pop while closing the panel
+      markGuardConsumed(); // Back removed the sentinel…
+      armHistoryGuard(); // …put it back so the next Back is guarded too
+      setConfirmOpen(true);
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [isOpen, dirty]);
+  //JJQR - END
 
   useEffect(() => {
     if (isOpen) panelRef.current?.focus();

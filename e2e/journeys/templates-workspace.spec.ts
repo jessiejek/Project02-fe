@@ -53,6 +53,27 @@ test.describe("Templates workspace", () => {
     await expect(page.getByText(label, { exact: true })).toHaveCount(0);
   });
 
+  test("browser Back with unsaved edits shows the discard prompt", async ({ as }) => {
+    const page = await as("doctor");
+    await page.goto("/doctor/templates?tab=phrases");
+    await page.getByRole("button", { name: "Add phrase" }).click();
+    const panel = page.getByRole("dialog", { name: "New phrase" });
+    await panel.getByPlaceholder("e.g. Normal cardiac exam").fill("Unsaved back test");
+
+    await page.goBack();
+    await expect(page.getByText("Discard unsaved changes?")).toBeVisible();
+    await expect(page).toHaveURL(/\/doctor\/templates\?tab=phrases/);
+    await page.getByRole("button", { name: "Keep editing" }).click();
+    await expect(panel).toBeVisible();
+
+    // a second Back is guarded too; Discard closes the panel and stays on the page
+    await page.goBack();
+    await expect(page.getByText("Discard unsaved changes?")).toBeVisible();
+    await page.getByRole("button", { name: "Discard" }).click();
+    await expect(panel).toHaveCount(0);
+    await expect(page).toHaveURL(/\/doctor\/templates\?tab=phrases$/);
+  });
+
   test("global search finds items across tabs and opens the editor via deep link", async ({ as }) => {
     const page = await as("doctor");
     await page.goto("/doctor/templates");

@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import type { Specialty } from "@/lib/clinical/template-specialty";
 import { TEMPLATE_TABS, TAB_LABELS, buildTemplatesUrl, parseField, parseTab, type TemplateTab } from "@/lib/templates/urlState";
+import { releaseHistoryGuard } from "@/lib/templates/historyGuard";
 import { searchAll, totalHits, type SearchLibrary } from "@/lib/templates/search";
 import { useTemplatesData } from "./useTemplatesData";
 import { useUndoableDelete } from "./useUndoableDelete";
@@ -39,7 +40,9 @@ export function TemplatesWorkspace() {
 
   const go = useCallback((url: string) => router.replace(url, { scroll: false }), [router]);
   const openPanel = useCallback((id: string, f?: string | null) => go(buildTemplatesUrl({ tab, id, field: f ?? field })), [go, tab, field]);
-  const closePanel = useCallback(() => go(buildTemplatesUrl({ tab, field })), [go, tab, field]);
+  //JJQR - AI (Nov 19, 2026) - drop the Back-guard history entry (if the panel had unsaved edits) before replacing the URL
+  const closePanel = useCallback(() => releaseHistoryGuard(() => go(buildTemplatesUrl({ tab, field }))), [go, tab, field]);
+  //JJQR - END
 
   const counts: Record<TemplateTab, number> = {
     soap: data.soap.items.length,
