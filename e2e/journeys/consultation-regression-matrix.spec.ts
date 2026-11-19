@@ -221,7 +221,7 @@ test("template-apply-soap", async ({ as, api }) => {
   const ticket = await checkInWalkIn(staffApi, patient.patient_id);
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
-  await openSectionByTitle(doctor, /1\. SOAP/i);
+  await openSectionByTitle(doctor, /1\. Clinical notes/i);
   //JJQR - AI (Nov 19, 2026) - the template picker lives inside the collapsed "Templates and previous notes" details
   await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
   //JJQR - END
@@ -262,7 +262,7 @@ test("template-apply-soap-append-keeps-text-and-undo", async ({ as, api }) => {
   const ticket = await checkInWalkIn(staffApi, patient.patient_id);
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
-  await openSectionByTitle(doctor, /1\. SOAP/i);
+  await openSectionByTitle(doctor, /1\. Clinical notes/i);
   await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
   await doctor.locator("#note-chiefComplaint").fill("E2E keep this chief complaint");
   const templateSelect = doctor.locator("select").filter({ has: doctor.locator("option", { hasText: /Use Template/ }) }).first();
@@ -289,7 +289,7 @@ test("template-save-as-template-blocked-when-empty", async ({ as, api }) => {
   const ticket = await checkInWalkIn(staffApi, patient.patient_id);
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
-  await openSectionByTitle(doctor, /1\. SOAP/i);
+  await openSectionByTitle(doctor, /1\. Clinical notes/i);
   await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
   await doctor.getByRole("button", { name: "Save as Template" }).click();
   await expect(doctor.getByText(/Can.t save an empty template/)).toBeVisible();
@@ -303,7 +303,7 @@ test("template-manage-links-open-new-tab", async ({ as, api }) => {
   const ticket = await checkInWalkIn(staffApi, patient.patient_id);
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
-  await openSectionByTitle(doctor, /1\. SOAP/i);
+  await openSectionByTitle(doctor, /1\. Clinical notes/i);
   await doctor.locator("summary", { hasText: "Templates and previous notes" }).click();
   const soapManage = doctor.getByRole("link", { name: /Manage SOAP templates/ });
   await expect(soapManage).toHaveAttribute("href", "/doctor/templates?tab=soap");
@@ -355,7 +355,7 @@ test("new-mode-section-save-stays", async ({ as, api }) => {
   const ticket = await checkInWalkIn(staffApi, patient.patient_id);
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
-  await expect(doctor.getByRole("button", { name: /1\. SOAP/i }).first()).toBeVisible({ timeout: 30_000 });
+  await expect(doctor.getByRole("button", { name: /1\. Clinical notes/i }).first()).toBeVisible({ timeout: 30_000 });
   await expandSoapSection(doctor);
   await doctor.getByPlaceholder("Chief Complaint*").fill("In progress save test");
   await clickSoapToolbarSave(doctor);
