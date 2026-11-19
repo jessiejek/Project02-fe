@@ -7,8 +7,9 @@ import { createMedicalCertificateTemplate, updateMedicalCertificateTemplate, del
 import { matchesQuery } from "@/lib/templates/search";
 import { validateCertTemplate } from "@/lib/templates/validation";
 import { cn } from "@/lib/cn";
+import { copyTitle, isCopyTitle, sortMineFirst } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, FilterChip, ItemCard, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, FilterChip, FilterGroup, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title);
 type Source = "all" | "mine" | "system";
@@ -17,7 +18,9 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
   const { data, toast, panelId } = ctx;
   const [source, setSource] = useState<Source>("all");
   const rows = data.certs.items;
-  const visible = rows
+  //JJQR - AI (Nov 19, 2026) - Mine first, then System
+  const visible = sortMineFirst(rows, (t) => t.is_system_template, (t) => t.title)
+    //JJQR - END
     .filter((t) => !ctx.isHidden(t.id))
     .filter((t) => source === "all" || (source === "system") === t.is_system_template)
     .filter((t) => matchesQuery(ctx.query, t.title, t.diagnosis_text, t.recommendations, t.purpose_exception));
@@ -25,7 +28,7 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
   async function duplicate(row: MedicalCertificateTemplateRow) {
     try {
       const created = await createMedicalCertificateTemplate(null, ctx.doctorId, {
-        title: `${row.title} (copy)`,
+        title: copyTitle(row.title, rows.map((r) => r.title)),
         is_system_template: false,
         diagnosis_text: row.diagnosis_text,
         recommendations: row.recommendations,
@@ -52,25 +55,25 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
   return (
     <div className="space-y-md">
       <div className="flex flex-wrap items-center gap-sm">
-        <div className="flex gap-xs overflow-x-auto" role="group" aria-label="Source">
+        <FilterGroup label="Source">
           {(["all", "mine", "system"] as const).map((s) => (
             <FilterChip key={s} active={source === s} onClick={() => setSource(s)}>{s === "all" ? "All" : s === "mine" ? "Mine" : "System"}</FilterChip>
           ))}
-        </div>
+        </FilterGroup>
         <Button className="ml-auto" onClick={() => ctx.openPanel("new")}>New certificate template</Button>
       </div>
       <LoadGate status={data.certs.status} reload={data.certs.reload} empty={false} label="certificate templates">
         {visible.length === 0 ? (
           <EmptyHint>{rows.length === 0 ? "No certificate templates yet." : "No certificate templates match these filters."}</EmptyHint>
         ) : (
-          <ul className="grid grid-cols-1 gap-sm xl:grid-cols-2">
+          <ItemList>
             {visible.map((t) => (
               <ItemCard
                 key={t.id}
                 title={t.title}
                 highlight={panelId === t.id}
                 onOpen={() => ctx.openPanel(t.id)}
-                pills={<Pill tone={t.is_system_template ? "system" : "mine"}>{t.is_system_template ? "System" : "Mine"}</Pill>}
+                pills={<>{isCopyTitle(t.title) && <Pill>Copy</Pill>}<Pill tone={t.is_system_template ? "system" : "mine"}>{t.is_system_template ? "System" : "Mine"}</Pill></>}
                 preview={truncate(t.diagnosis_text || t.recommendations || t.purpose_exception)}
                 actions={
                   <>
@@ -81,7 +84,7 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
                 }
               />
             ))}
-          </ul>
+          </ItemList>
         )}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <CertEditor key={panelId} ctx={ctx} row={editing} onDuplicate={duplicate} />}

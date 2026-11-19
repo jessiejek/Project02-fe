@@ -9,8 +9,9 @@ import { matchesQuery } from "@/lib/templates/search";
 import { validateSoapTemplate } from "@/lib/templates/validation";
 import { SOAP_FIELD_LABELS, SOAP_KEYS, type SoapKey } from "@/lib/clinical/soap-merge";
 import { cn } from "@/lib/cn";
+import { copyTitle, isCopyTitle, sortMineFirst } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, FilterChip, ItemCard, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, FilterChip, FilterGroup, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const COLUMN: Record<SoapKey, keyof SoapTemplateRow> = {
   chiefComplaint: "chief_complaint",
@@ -30,7 +31,9 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
 
   const visible = useMemo(
     () =>
-      rows
+      //JJQR - AI (Nov 19, 2026) - Mine first, then System; A-Z inside each group
+      sortMineFirst(rows, (t) => t.is_system_template, (t) => t.title)
+        //JJQR - END
         .filter((t) => !ctx.isHidden(t.id))
         .filter((t) => source === "all" || (source === "system") === t.is_system_template)
         .filter((t) => matchesSpecialtyFilter("soap", t.title, ctx.specialty))
@@ -41,7 +44,7 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
   async function duplicate(row: SoapTemplateRow) {
     try {
       const created = await createSoapTemplate(null, ctx.doctorId, {
-        title: `${row.title} (copy)`,
+        title: copyTitle(row.title, rows.map((r) => r.title)),
         is_system_template: false,
         chief_complaint: row.chief_complaint,
         subjective: row.subjective,
@@ -71,17 +74,17 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
   return (
     <div className="space-y-md">
       <div className="flex flex-wrap items-center gap-sm">
-        <div className="flex gap-xs overflow-x-auto" role="group" aria-label="Source">
+        <FilterGroup label="Source">
           {(["all", "mine", "system"] as const).map((s) => (
             <FilterChip key={s} active={source === s} onClick={() => setSource(s)}>{s === "all" ? "All" : s === "mine" ? "Mine" : "System"}</FilterChip>
           ))}
-        </div>
+        </FilterGroup>
         <span className="hidden h-6 w-px bg-outline-variant sm:block" aria-hidden />
-        <div className="flex gap-xs overflow-x-auto" role="group" aria-label="Specialty">
+        <FilterGroup label="Specialty">
           {SPECIALTY_CHIP_LABELS.map(({ id, label }) => (
             <FilterChip key={id} active={ctx.specialty === id} onClick={() => ctx.setSpecialty(id)}>{label}</FilterChip>
           ))}
-        </div>
+        </FilterGroup>
         <Button className="ml-auto" onClick={() => ctx.openPanel("new")}>New SOAP template</Button>
       </div>
 
@@ -89,14 +92,14 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
         {visible.length === 0 ? (
           <EmptyHint>{rows.length === 0 ? "No SOAP templates yet. Create one, or save one from a consultation." : "No SOAP templates match these filters."}</EmptyHint>
         ) : (
-          <ul className="grid grid-cols-1 gap-sm xl:grid-cols-2">
+          <ItemList>
             {visible.map((t) => (
               <ItemCard
                 key={t.id}
                 title={t.title}
                 highlight={panelId === t.id}
                 onOpen={() => ctx.openPanel(t.id)}
-                pills={<Pill tone={t.is_system_template ? "system" : "mine"}>{t.is_system_template ? "System" : "Mine"}</Pill>}
+                pills={<>{isCopyTitle(t.title) && <Pill>Copy</Pill>}<Pill tone={t.is_system_template ? "system" : "mine"}>{t.is_system_template ? "System" : "Mine"}</Pill></>}
                 preview={truncate([t.chief_complaint, t.subjective, t.assessment, t.plan, t.objective].find((x) => x && x.trim()) ?? "")}
                 actions={
                   <>
@@ -107,7 +110,7 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
                 }
               />
             ))}
-          </ul>
+          </ItemList>
         )}
       </LoadGate>
 

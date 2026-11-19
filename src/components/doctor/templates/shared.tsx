@@ -1,6 +1,6 @@
 "use client";
 //JJQR - AI (Nov 19, 2026) - new file: small building blocks shared by the templates tabs
-import { type ReactNode, useState } from "react";
+import { createContext, type ReactNode, useContext, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
@@ -53,8 +53,54 @@ export function Pill({ tone = "neutral", children }: { tone?: "neutral" | "syste
   );
 }
 
-/** One card in a list: title row, optional pills, preview text, action row. */
+//JJQR - AI (Nov 19, 2026) - compact list view is the default; cards are optional. Tabs just render <ItemList><ItemCard/></ItemList> and follow the toggle.
+export type ViewMode = "list" | "cards";
+export const ViewModeContext = createContext<ViewMode>("list");
+export const useViewMode = () => useContext(ViewModeContext);
+
+export function ViewToggle({ mode, onChange }: { mode: ViewMode; onChange: (m: ViewMode) => void }) {
+  return (
+    <div className="flex gap-xs" role="group" aria-label="View">
+      <FilterChip active={mode === "list"} onClick={() => onChange("list")}>List</FilterChip>
+      <FilterChip active={mode === "cards"} onClick={() => onChange("cards")}>Cards</FilterChip>
+    </div>
+  );
+}
+
+export function ItemList({ children }: { children: ReactNode }) {
+  const mode = useViewMode();
+  return (
+    <ul data-view={mode} className={mode === "list" ? "divide-y divide-outline-variant overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest" : "grid grid-cols-1 gap-sm xl:grid-cols-2"}>
+      {children}
+    </ul>
+  );
+}
+
+/** Labelled chip group ("Source", "Specialty") so the filters say what they filter. */
+export function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-xs">
+      <span className="shrink-0 text-label-md font-medium text-on-surface-variant">{label}</span>
+      <div className="flex gap-xs overflow-x-auto" role="group" aria-label={label}>{children}</div>
+    </div>
+  );
+}
+
+/** One item: title row, optional pills, preview text, action row. Compact single row in list view. */
 export function ItemCard({ title, pills, preview, actions, onOpen, highlight }: { title: string; pills?: ReactNode; preview?: ReactNode; actions?: ReactNode; onOpen?: () => void; highlight?: boolean }) {
+  const mode = useViewMode();
+  if (mode === "list") {
+    return (
+      <li className={cn("flex flex-wrap items-center gap-x-sm gap-y-xs px-md py-xs", highlight && "bg-primary/5")}>
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 basis-56 py-xs text-left">
+          <span className="block truncate text-body-md font-medium text-on-surface">{title}</span>
+          {preview && <span className="block truncate text-label-md text-on-surface-variant">{preview}</span>}
+        </button>
+        {pills && <div className="flex shrink-0 items-center gap-xs">{pills}</div>}
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-xs">{actions}</div>}
+      </li>
+    );
+  }
   return (
     <li className={cn("rounded-xl border bg-surface-container-lowest p-md", highlight ? "border-primary ring-2 ring-primary/20" : "border-outline-variant")}>
       <div className="flex flex-wrap items-start justify-between gap-sm">
@@ -63,11 +109,12 @@ export function ItemCard({ title, pills, preview, actions, onOpen, highlight }: 
         </button>
         {pills && <div className="flex shrink-0 items-center gap-xs">{pills}</div>}
       </div>
-      {preview && <div className="mt-xs line-clamp-2 text-body-sm text-on-surface-variant">{preview}</div>}
+      {preview && <div className="mt-xs line-clamp-3 text-body-sm text-on-surface-variant">{preview}</div>}
       {actions && <div className="mt-sm flex flex-wrap items-center gap-xs">{actions}</div>}
     </li>
   );
 }
+//JJQR - END
 
 export function IconButton({ label, icon, onClick, disabled, tone }: { label: string; icon: string; onClick: () => void; disabled?: boolean; tone?: "danger" }) {
   return (

@@ -46,7 +46,22 @@ export function FavoritesTab({ ctx }: { ctx: TabCtx }) {
       <div className="flex justify-end"><Button onClick={() => ctx.openPanel("new")}>Add favorite medicine</Button></div>
       <LoadGate status={data.favorites.status} reload={data.favorites.reload} empty={false} label="favorite medicines">
         {visible.length === 0 ? (
-          <EmptyHint>{rows.length === 0 ? "No favorite medicines yet. Add the ones you prescribe most." : "No favorites match your search."}</EmptyHint>
+          rows.length === 0 ? (
+          //JJQR - AI (Nov 19, 2026) - favorites empty state with a short how-to
+          <div data-testid="favorites-empty" className="space-y-sm rounded-xl border border-dashed border-outline-variant p-lg text-on-surface">
+            <p className="text-body-md font-semibold">No favorite medicines yet</p>
+            <p className="text-body-md text-on-surface-variant">Favorites are the medicines you prescribe most, one tap away in the prescription step.</p>
+            <ol className="list-decimal space-y-xs pl-lg text-body-md text-on-surface-variant">
+              <li>Tap <strong className="text-on-surface">Add favorite medicine</strong>.</li>
+              <li>Pick the medicine, then add its usual dose, quantity and directions.</li>
+              <li>Save. Use the ↑ ↓ buttons to put your top picks first.</li>
+            </ol>
+            <Button onClick={() => ctx.openPanel("new")}>Add favorite medicine</Button>
+          </div>
+          //JJQR - END
+        ) : (
+          <EmptyHint>No favorites match your search.</EmptyHint>
+        )
         ) : (
           <ul className="divide-y divide-outline-variant rounded-xl border border-outline-variant bg-surface-container-lowest">
             {visible.map((f) => {

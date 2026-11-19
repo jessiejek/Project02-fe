@@ -7,6 +7,7 @@ import { createSoapPhrase, updateSoapPhrase, deleteSoapPhrase, reorderSoapPhrase
 import { matchesQuery } from "@/lib/templates/search";
 import { validatePhrase } from "@/lib/templates/validation";
 import { moveId } from "@/lib/templates/reorder";
+import { phraseNameFromText } from "@/lib/templates/format";
 import { PHRASE_FIELDS, phraseFieldLabel, type PhraseField } from "@/lib/templates/urlState";
 import { cn } from "@/lib/cn";
 import type { TabCtx } from "./types";
@@ -109,15 +110,9 @@ export function PhrasesTab({ ctx }: { ctx: TabCtx }) {
                         <div className="flex items-center gap-xs">
                           <IconButton label={`Move “${p.label}” up`} icon="expand_less" disabled={filtering || idx <= 0} onClick={() => void reorder(p.field, p.id, -1)} />
                           <IconButton label={`Move “${p.label}” down`} icon="expand_more" disabled={filtering || idx === all.length - 1} onClick={() => void reorder(p.field, p.id, 1)} />
-                          <select
-                            aria-label={`Move “${p.label}” to another field`}
-                            value={p.field}
-                            disabled={movingId === p.id}
-                            onChange={(e) => void moveToField(p, e.target.value)}
-                            className="min-h-11 rounded-lg border border-outline-variant bg-surface-container-lowest px-sm text-label-md text-on-surface"
-                          >
-                            {PHRASE_FIELDS.map((o) => <option key={o.value} value={o.value}>{o.value === p.field ? `Field: ${o.label}` : `Move to ${o.label}`}</option>)}
-                          </select>
+                          {/*JJQR - AI (Nov 19, 2026) - "Move to…" menu replaces the per-row Field dropdown */}
+                          <MoveToMenu label={p.label} current={p.field} busy={movingId === p.id} onMove={(f) => void moveToField(p, f)} />
+                          {/*JJQR - END */}
                           <TextAction onClick={() => ctx.openPanel(p.id, p.field)}>Edit</TextAction>
                           <TextAction tone="danger" onClick={() => confirm.ask(p.id, p.label)}>Delete</TextAction>
                         </div>
@@ -136,11 +131,45 @@ export function PhrasesTab({ ctx }: { ctx: TabCtx }) {
   );
 }
 
+//JJQR - AI (Nov 19, 2026)
+function MoveToMenu({ label, current, busy, onMove }: { label: string; current: string; busy: boolean; onMove: (field: string) => void }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  return (
+    <details ref={ref} className="relative">
+      <summary
+        aria-label={`Move “${label}” to another field`}
+        className="flex min-h-11 cursor-pointer list-none items-center gap-xs rounded-lg px-sm text-label-md text-primary hover:bg-surface-container-high [&::-webkit-details-marker]:hidden"
+      >
+        Move to…
+      </summary>
+      <ul role="menu" className="absolute right-0 z-20 mt-xs min-w-44 overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest py-xs shadow-lg">
+        {PHRASE_FIELDS.filter((o) => o.value !== current).map((o) => (
+          <li key={o.value} role="none">
+            <button
+              type="button"
+              role="menuitem"
+              disabled={busy}
+              onClick={() => { if (ref.current) ref.current.open = false; onMove(o.value); }}
+              className="block min-h-11 w-full px-md text-left text-body-md text-on-surface hover:bg-surface-container-high disabled:opacity-40"
+            >
+              {o.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+//JJQR - END
+
 function PhraseEditor({ ctx, row }: { ctx: TabCtx; row: SoapPhraseRow | null }) {
   const initial = { field: (row?.field as PhraseField) ?? ctx.field ?? "ChiefComplaint", label: row?.label ?? "", body: row?.body ?? "" };
   const [field, setField] = useState<string>(initial.field);
   const [label, setLabel] = useState(initial.label);
   const [body, setBody] = useState(initial.body);
+  //JJQR - AI (Nov 19, 2026) - the name follows the first words of the text until the doctor types their own name
+  const [nameEdited, setNameEdited] = useState(!!row?.label);
+  //JJQR - END
   const [saving, setSaving] = useState(false);
   const dirty = field !== initial.field || label !== initial.label || body !== initial.body;
   const reason = validatePhrase({ label, body });
@@ -174,11 +203,11 @@ function PhraseEditor({ ctx, row }: { ctx: TabCtx; row: SoapPhraseRow | null }) 
             {PHRASE_FIELDS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Field>
-        <Field label="Phrase name" hint="Shown in the “Insert phrase…” list.">
-          <input className={inputCls} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Normal cardiac exam" autoFocus />
+        <Field label="Phrase name" hint="Filled in from the first words of your text. Shown in the “Insert phrase…” list.">
+          <input className={inputCls} value={label} onChange={(e) => { setLabel(e.target.value); setNameEdited(true); }} placeholder="Fills in from your text — or type your own" autoFocus />
         </Field>
         <Field label="Phrase text" hint="Inserted into the note at the cursor, on its own line.">
-          <textarea className={cn(inputCls, "min-h-40")} rows={6} value={body} onChange={(e) => setBody(e.target.value)} />
+          <textarea className={cn(inputCls, "min-h-40")} rows={6} value={body} onChange={(e) => { setBody(e.target.value); if (!nameEdited) setLabel(phraseNameFromText(e.target.value)); }} />
         </Field>
       </div>
     </SidePanel>

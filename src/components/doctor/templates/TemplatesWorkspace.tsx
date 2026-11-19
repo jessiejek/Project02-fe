@@ -14,7 +14,7 @@ import { searchAll, totalHits, type SearchLibrary } from "@/lib/templates/search
 import { useTemplatesData } from "./useTemplatesData";
 import { useUndoableDelete } from "./useUndoableDelete";
 import type { TabCtx } from "./types";
-import { FilterChip } from "./shared";
+import { FilterChip, ViewModeContext, ViewToggle, type ViewMode } from "./shared";
 import { SoapTab } from "./SoapTab";
 import { PhrasesTab } from "./PhrasesTab";
 import { RxTab } from "./RxTab";
@@ -35,6 +35,9 @@ export function TemplatesWorkspace() {
   const { items: toastItems, api: toast } = useToastQueue();
   const { isHidden, deleteWithUndo } = useUndoableDelete(toast);
   const [query, setQuery] = useState("");
+  //JJQR - AI (Nov 19, 2026) - compact list view by default
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  //JJQR - END
   const [scope, setScope] = useState<"tab" | "all">("tab");
   const [specialty, setSpecialty] = useState<Specialty | "All">("All");
 
@@ -82,7 +85,7 @@ export function TemplatesWorkspace() {
   return (
     <div className="space-y-md">
       {/*JJQR - AI (Nov 19, 2026) - plain buttons (no ARIA tab roles) so the existing e2e selector getByRole("button", { name: /SOAP \(\d+\)/ }) keeps working */}
-      <nav aria-label="Template type" className="flex gap-xs overflow-x-auto border-b border-outline-variant">
+      <nav aria-label="Template type" className="flex flex-wrap gap-x-xs border-b border-outline-variant">
         {TEMPLATE_TABS.map((id) => {
           const label = `${TAB_LABELS[id]} (${counts[id]})`;
           const active = tab === id;
@@ -94,7 +97,7 @@ export function TemplatesWorkspace() {
               aria-current={active ? "page" : undefined}
               onClick={() => go(buildTemplatesUrl({ tab: id }))}
               className={cn(
-                "min-h-11 shrink-0 border-b-2 px-sm text-label-lg transition-colors md:px-md",
+                "min-h-11 shrink-0 whitespace-nowrap border-b-2 px-sm text-label-md transition-colors sm:text-label-lg md:px-md",
                 active ? "border-primary text-primary" : "border-transparent text-on-surface-variant hover:text-on-surface",
               )}
             >
@@ -121,6 +124,7 @@ export function TemplatesWorkspace() {
           <FilterChip active={scope === "tab"} onClick={() => setScope("tab")}>This tab</FilterChip>
           <FilterChip active={scope === "all"} onClick={() => setScope("all")}>All tabs</FilterChip>
         </div>
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
       </div>
 
       {missing && (
@@ -130,6 +134,7 @@ export function TemplatesWorkspace() {
         </div>
       )}
 
+      <ViewModeContext.Provider value={viewMode}>
       <div id="tpl-tabpanel" aria-live="polite">
         {hits ? (
           <SearchResults hits={hits} query={query} onOpen={(t, id, f) => { setQuery(""); go(buildTemplatesUrl({ tab: t, id, field: f })); }} />
@@ -140,6 +145,7 @@ export function TemplatesWorkspace() {
           : tab === "diagnoses" ? <DiagnosesTab ctx={ctx} />
           : <CertsTab ctx={ctx} />}
       </div>
+      </ViewModeContext.Provider>
       <ToastHost items={toastItems} dismiss={toast.dismiss} />
     </div>
   );

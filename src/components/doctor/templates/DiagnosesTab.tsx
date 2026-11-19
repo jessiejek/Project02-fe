@@ -8,7 +8,7 @@ import { createDiagnosisTemplate, updateDiagnosisTemplate, deleteDiagnosisTempla
 import { matchesQuery } from "@/lib/templates/search";
 import { validateDiagnosis } from "@/lib/templates/validation";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, ItemCard, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
 
@@ -33,7 +33,7 @@ export function DiagnosesTab({ ctx }: { ctx: TabCtx }) {
         {visible.length === 0 ? (
           <EmptyHint>{rows.length === 0 ? "No saved diagnoses yet." : "No diagnoses match your search."}</EmptyHint>
         ) : (
-          <ul className="grid grid-cols-1 gap-sm xl:grid-cols-2">
+          <ItemList>
             {visible.map((d) => (
               <ItemCard
                 key={d.id}
@@ -45,7 +45,7 @@ export function DiagnosesTab({ ctx }: { ctx: TabCtx }) {
                 actions={<><TextAction onClick={() => ctx.openPanel(d.id)}>Edit</TextAction><TextAction tone="danger" onClick={() => confirm.ask(d.id, d.label)}>Delete</TextAction></>}
               />
             ))}
-          </ul>
+          </ItemList>
         )}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <DiagnosisEditor key={panelId} ctx={ctx} row={editing} />}
