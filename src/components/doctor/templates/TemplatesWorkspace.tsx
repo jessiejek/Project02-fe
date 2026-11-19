@@ -94,7 +94,7 @@ export function TemplatesWorkspace() {
               aria-current={active ? "page" : undefined}
               onClick={() => go(buildTemplatesUrl({ tab: id }))}
               className={cn(
-                "min-h-11 shrink-0 border-b-2 px-md text-label-lg transition-colors",
+                "min-h-11 shrink-0 border-b-2 px-sm text-label-lg transition-colors md:px-md",
                 active ? "border-primary text-primary" : "border-transparent text-on-surface-variant hover:text-on-surface",
               )}
             >
