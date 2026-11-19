@@ -2373,7 +2373,7 @@ Return to patient queue
                 aria-pressed={openSection === i}
                 aria-controls={openSection === i ? `consultation-section-${i}` : undefined}
                 className={cn(
-                  "flex min-h-11 shrink-0 items-center gap-sm rounded-nav border px-md py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
+                  "flex min-h-11 shrink-0 items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
                   openSection === i ? "border-primary bg-primary/10 font-semibold text-primary" : "border-transparent text-on-surface-variant hover:bg-surface-container-low",
                 )}
               >
@@ -2388,7 +2388,7 @@ Return to patient queue
               type="button"
               onClick={() => setShowOccasional((v) => !v)}
               aria-expanded={showOccasional}
-              className="flex min-h-11 shrink-0 items-center gap-xs rounded-nav border border-dashed border-outline-variant px-md py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
+              className="flex min-h-11 shrink-0 items-center gap-xs rounded-nav border border-dashed border-outline-variant px-sm py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
             >
               {showOccasional ? "Less" : "More"}
               <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
