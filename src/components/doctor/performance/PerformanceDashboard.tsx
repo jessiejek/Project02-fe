@@ -77,7 +77,7 @@ export function PerformanceDashboard({ initialPeriod }: { initialPeriod?: string
         title={data && result?.fetchedAt ? greeting(result.fetchedAt, session?.displayName) : "Your performance"}
         description={
           <span data-testid="perf-headline">
-            {data ? headline(period, data.current, data.previous) : "Gathering your numbers…"}
+            {data ? headline(period, data.current, data.previous) : showError ? "Your numbers are safe — we just couldn't fetch them right now." : "Gathering your numbers…"}
           </span>
         }
         actions={
