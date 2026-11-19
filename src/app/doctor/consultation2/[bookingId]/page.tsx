@@ -2469,7 +2469,7 @@ Return to patient queue
                           href={manageTemplatesHref("soap")}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label="Manage templates and phrases (opens in a new tab)"
+                          aria-label="Manage templates (opens in a new tab)"
                           className="inline-flex min-h-[44px] items-center px-sm text-label-md text-on-surface-variant hover:text-primary hover:underline"
                         >
                           Manage templates

@@ -271,6 +271,9 @@ test("template-apply-soap-append-keeps-text-and-undo", async ({ as, api }) => {
   await expect(dialog).toBeVisible();
   //JJQR - END
   await dialog.getByLabel(/Append/).check();
+  //JJQR - AI (Nov 19, 2026) - text that will be added is highlighted green in the preview
+  await expect(dialog.locator('mark[data-added="true"]').first()).toBeVisible();
+  //JJQR - END
   await dialog.getByRole("button", { name: "Apply template" }).click();
   // Append never wipes what the doctor typed.
   await expect(doctor.locator("#note-chiefComplaint")).toHaveValue(/E2E keep this chief complaint/);
