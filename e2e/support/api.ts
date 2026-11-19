@@ -214,9 +214,32 @@ export async function getPaymentForBooking(api: APIRequestContext, bookingId: st
   return res.json();
 }
 
-/** Best-effort: cancel a queue entry (before paid). Used in cleanup so tagged rows don't stay in today's queue. */
+/** Best-effort: cancel a queue entry (before paid). Falls back to the booking status endpoint (needed for "Confirmed"). */
 export async function cancelQueueEntry(api: APIRequestContext, bookingId: string, reason = "E2E cleanup") {
-  await api.put(`/api/queue/${bookingId}/cancel`, { data: { reason } }).catch(() => undefined);
+  const r = await api.put(`/api/queue/${bookingId}/cancel`, { data: { reason } }).catch(() => undefined);
+  if (r?.ok()) return;
+  await api.put(`/api/bookings/${bookingId}/status`, { data: { status: "Cancelled", reason } }).catch(() => undefined);
+}
+
+export interface QueueItem {
+  booking_id: string; queue_number: string; patient_id: string; patient_name: string; patient_code: string;
+  status: string; visit_type: string; amount_due: number; is_walk_in: boolean;
+}
+/** Today's queue board (staff/admin). */
+export async function getQueue(api: APIRequestContext): Promise<{ summary: Record<string, number>; items: QueueItem[] }> {
+  const res = await api.get("/api/queue");
+  if (!res.ok()) throw new Error(`getQueue → ${res.status()}`);
+  return res.json();
+}
+/** Cancel every still-open queue entry whose patient name contains `needle` (cleanup for UI-created walk-ins). */
+export async function cancelQueueByName(api: APIRequestContext, needle: string) {
+  const { items } = await getQueue(api);
+  for (const it of items.filter((i) => i.patient_name.toLowerCase().includes(needle.toLowerCase()) && !["Completed", "Cancelled", "NoShow"].includes(i.status))) {
+    await cancelQueueEntry(api, it.booking_id);
+  }
+}
+export async function queueFor(api: APIRequestContext, needle: string): Promise<QueueItem[]> {
+  return (await getQueue(api)).items.filter((i) => i.patient_name.toLowerCase().includes(needle.toLowerCase()));
 }
 
 /** A patient books via the real online endpoint. */
