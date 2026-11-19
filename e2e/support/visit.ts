@@ -79,3 +79,16 @@ export async function completeVisitViaApi(
   return out;
 }
 //JJQR - END
+
+//JJQR - AI (Nov 19, 2026) - e2e-full-coverage: settle a seeded visit so test data does not pile up in the front-desk "Collect payments" list
+/** Best-effort: record a cash payment for a still-unpaid booking (cleanup only). */
+export async function settleViaApi(staff: APIRequestContext, bookingId: string): Promise<void> {
+  const res = await staff.get(`/api/payments/booking/${bookingId}`);
+  if (!res.ok()) return;
+  const p = await res.json();
+  if (p.status !== "Unpaid") return;
+  await staff.post(`/api/payments/${p.payment_id}/confirm`, {
+    data: { payment_method: "Cash", amount_received: p.amount, or_number: `E2E-CLEAN-${bookingId.slice(0, 8)}`, confirm_notes: "E2E cleanup", reference_number: null },
+  }).catch(() => undefined);
+}
+//JJQR - END
