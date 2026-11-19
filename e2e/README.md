@@ -55,3 +55,36 @@ every action so you can follow along.
   no PDF library). The test reads that popup's HTML and also renders it with
   headless Chromium's `page.pdf()` for a real file artifact.
 - `e2e/` is excluded from the app's `tsconfig`/eslint and has its own `tsconfig.json`.
+
+## Full-coverage suite (`test/e2e-full-coverage`)
+
+Added on top of the specs above, following `COVERAGE-PLAN.md`:
+
+| Spec | Covers |
+|---|---|
+| `s0-setup-redirects.spec.ts` | Setup checks and redirects (§0) |
+| `s2-suspected-bugs.spec.ts` | B1–B7 suspected bugs, each asserting the *correct* behaviour |
+| `s3-public`, `s3-patient-a/b` | Public pages and the whole patient portal, form by form |
+| `s3-staff-a/b/c` | Walk-in wizard, queue, booking detail + payments, patients, doctor status, announcements, profile, dashboard |
+| `s3-doctor-a/b` | Dashboard, appointments, schedule, profile, patient chart, vitals, Rx pages |
+| `s3-admin-a/b` | Doctors, staff team, patients, announcements, bookings (list/week/detail), settings, reports, audit log, dashboard |
+| `s4-journeys` | Cross-role journeys 1–6 |
+| `s5-security` | Role fences, expired sessions, API role matrix, patient A vs B, template privacy |
+| `s6-screens` | iPad portrait (768×1024) and phone (375×812) |
+
+Conventions:
+- Every test tags what it creates `E2E-<runId>-…` (`tag()` fixture) and removes it afterwards (`cleanup()` fixture, runs even on failure). No test relies on another test.
+- A test that finds an app bug keeps asserting the **correct** behaviour and is marked `test.fail(true, "BUG-nn: …")` inside the test body. It shows as an *expected failure* now and turns red the day the bug is fixed — remove the marker then.
+- The `guard` fixture fails an expected-pass test on any 4xx/5xx API response or page error; expected ones are allow-listed per test with `guard.allow(...)`.
+- Patients have no delete endpoint, so tagged patients (`E2E-…`) linger in the dev database.
+
+### Running against an isolated stack (does not touch :3000 / :5055)
+
+```bash
+# 1. a second API on :5155 from a throwaway worktree of the backend, same local Docker SQL Server
+cd ../Project02-be && ASPNETCORE_ENVIRONMENT=Development ASPNETCORE_URLS=http://127.0.0.1:5155 dotnet run --project src/ClinicApp.Api --no-launch-profile
+# 2. a production build of the frontend on :3100 pointed at it
+cd ../Project02-fe && npm run build && npx next start -p 3100
+# 3. run the suite
+E2E_FE_URL=http://localhost:3100 E2E_BE_URL=http://127.0.0.1:5155 npx playwright test -c e2e/playwright.config.ts
+```
