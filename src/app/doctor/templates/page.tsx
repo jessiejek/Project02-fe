@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { AppShell } from "@/components/shell/AppShell";
-//JJQR - AI (Nov 19, 2026) - new 6-tab workspace replaces the old single-page panel (DoctorTemplatesPanel.tsx is kept in the repo, unused)
+//JJQR - AI (Nov 19, 2026) - new 6-tab workspace replaces the old single-page panel
 import { TemplatesWorkspace } from "@/components/doctor/templates/TemplatesWorkspace";
 
 export default function DoctorTemplatesPage() {
