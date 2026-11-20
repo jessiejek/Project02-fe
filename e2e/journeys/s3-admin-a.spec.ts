@@ -464,7 +464,7 @@ test.describe("/admin/announcements", () => {
   });
 
   test("patients see an active announcement on their dashboard (admin copy: 'shown on the patient and staff dashboards')", async ({ as, api, tag, cleanup }) => {
-    test.fail(true, "BUG-30: no patient page (and no staff/patient dashboard) ever loads announcements — only /staff/announcements does, although the admin page says they are shown on the patient and staff dashboards");
+    //JJQR - AI (Nov 20, 2026) - BUG-30 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const shown = tag("annP");
     cleanup(() => deleteAnnouncementsByTitle(admin, "E2E-"));

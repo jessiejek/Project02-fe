@@ -84,7 +84,7 @@ test.describe("/doctor/dashboard", () => {
 
   //JJQR - AI (Nov 20, 2026) - batch 2: BUG-41
   test("'Needs attention' says when it is hiding more than 5 unpaid visits", async ({ as, api, tag, cleanup }) => {
-    test.fail(true, "BUG-41: the dashboard 'Needs attention' list is cut to the first 5 unpaid completed visits (page.tsx unpaidCompleted.slice(0, 5)) with no '+N more' or 'view all' — with 6+ the doctor cannot tell some are missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-41 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const staff = await api("staff");
     const doctor = await api("doctor");
     for (let i = 0; i < 6; i++) {

@@ -14,6 +14,7 @@ import { Icon } from "@/components/ui/Icon";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { formatClinicDate, formatClockTime } from "@/lib/format";
+import { AnnouncementsPanel } from "@/components/ui/AnnouncementsPanel";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctors } from "@/lib/data/doctors";
 import { queryClinicSettings, queryDoctorRatings } from "@/lib/data/admin";
@@ -232,6 +233,8 @@ export default function PatientDashboardPage() {
             </Link>
           }
         />
+        {/* JJQR - AI (Nov 20, 2026) - B-30 */}
+        <AnnouncementsPanel />
 
         {nextBooking ? (
           <section aria-labelledby="next-appointment" className="rounded-xl bg-primary p-lg text-on-primary shadow-sm">

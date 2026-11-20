@@ -250,6 +250,16 @@ export async function queryStaffBookings(
   return unwrap(res).map(projectBooking);
 }
 
+// JJQR - AI (Nov 20, 2026) - B-42: the front-desk dashboard wants today's LIVE rows (no Cancelled/Expired) and the true total, so a busy day cannot hide new walk-ins behind a 500-row cap
+export async function queryStaffToday(_supabase?: unknown): Promise<{ rows: BookingRow[]; total: number }> {
+  const res = await api.get<{ items?: Raw[]; totalCount?: number }>("/api/bookings/staff/today", {
+    query: { pageSize: 500, activeOnly: true },
+  });
+  const rows = unwrap(res).map(projectBooking);
+  return { rows, total: Array.isArray(res) ? rows.length : (res.totalCount ?? rows.length) };
+}
+// JJQR - END
+
 /** The logged-in doctor's bookings (all, or just today). */
 export async function queryDoctorBookings(
   _supabase: unknown,
