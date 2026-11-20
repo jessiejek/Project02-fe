@@ -140,7 +140,7 @@ test.describe("/staff/walk-in · quick register", () => {
   });
 
   test("a future date of birth is not accepted", async ({ as, api, tag, cleanup }) => {
-    test.fail(true, "BUG-14: quick-register accepts a date of birth in year 2999 (max= is only a hint; no check in UI or API)");
+    //JJQR - AI (Nov 20, 2026) - BUG-14 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const staff = await api("staff");
     const first = tag("qrfut");
     cleanup(() => cancelQueueByName(staff, first));
@@ -156,7 +156,7 @@ test.describe("/staff/walk-in · quick register", () => {
   });
 
   test("absurdly long names and a non-numeric phone are rejected (nothing stored)", async ({ as, api, tag, cleanup }) => {
-    test.fail(true, "BUG-15: quick-register stores a 400-character surname and the phone 'abc-not-a-phone' (no length/format validation)");
+    //JJQR - AI (Nov 20, 2026) - BUG-15 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const staff = await api("staff");
     const first = tag("qrbad");
     cleanup(() => cancelQueueByName(staff, first));

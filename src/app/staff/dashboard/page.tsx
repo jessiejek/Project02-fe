@@ -8,13 +8,14 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Toast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { AnnouncementsPanel } from "@/components/ui/AnnouncementsPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
 import { buttonStyles } from "@/components/ui/buttonStyles";
 import { formatClockTime } from "@/lib/format";
-import { queryStaffBookings, updateBookingStatus } from "@/lib/data/bookings";
+import { queryStaffToday, updateBookingStatus } from "@/lib/data/bookings";
 import { queryQueue, type QueueBoard } from "@/lib/data/queue";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
@@ -36,12 +37,16 @@ export default function StaffDashboardPage() {
   const [loadError, setLoadError] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [bookings, setBookings] = useState<QueueRow[]>([]);
+  const [todayTotal, setTodayTotal] = useState(0); // JJQR - AI (Nov 20, 2026) - B-42
   const [board, setBoard] = useState<QueueBoard>(EMPTY_BOARD);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
 
   const loadBookings = useCallback(async () => {
-    const data = await queryStaffBookings(null as never, "today");
+    // JJQR - AI (Nov 20, 2026) - B-42: live rows only + the server's true total
+    const { rows: data, total } = await queryStaffToday();
+    setTodayTotal(total);
+    // JJQR - END
     setBookings(
       data.map((b) => ({
         id: b.booking_id,
@@ -106,7 +111,7 @@ export default function StaffDashboardPage() {
   const readyForPayment = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
   // Staff sees headcount, not money — revenue belongs on the doctor's own
   // dashboard, not the front desk's.
-  const totalPatientsToday = bookings.length;
+  const totalPatientsToday = Math.max(todayTotal, bookings.length); // JJQR - AI (Nov 20, 2026) - B-42: cancelled are not counted; never below the rows shown
 
   async function toggleCheckIn(id: string, currentStatus: string) {
     const nextStatus = currentStatus === "Confirmed" ? "CheckedIn" : "Confirmed";
@@ -143,6 +148,8 @@ export default function StaffDashboardPage() {
             </Link>
           }
         />
+        {/* JJQR - AI (Nov 20, 2026) - B-30 */}
+        <AnnouncementsPanel />
 
         {!loaded ? (
           <div className="space-y-lg" aria-busy="true">

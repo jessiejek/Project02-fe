@@ -1,7 +1,7 @@
 import { test, expect } from "../support/fixtures";
 import {
   bookOnline, cancelOwnBooking, cancelQueueEntry, checkInWalkIn, createTaggedPatient, getDoctor,
-  getPaymentForBooking, getSettings, loginViaUi, manilaDate, putSettings, registerFreshPatient,
+  getPaymentForBooking, getSettings, loginViaUi, manilaDate, manilaOpenDate, putSettings, registerFreshPatient,
 } from "../support/api";
 
 /**
@@ -16,7 +16,7 @@ const bad = (label: string, res: { status(): number }) =>
 
 test.describe("B1 · server-side validation", () => {
   test("Patients PUT/POST reject empty names, 5000-char strings and a bad date", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off(); // we intentionally send bad payloads
     const staff = await api("staff");
     const p = await createTaggedPatient(staff, tag("b1p"));
@@ -31,7 +31,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("Announcements POST rejects empty title / empty message / 5000-char message", async ({ api, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const admin = await api("admin");
     const made: string[] = [];
@@ -48,8 +48,8 @@ test.describe("B1 · server-side validation", () => {
     }
   });
 
-  test("Settings PUT rejects blank clinic name, negative fee, discount > 100%, 5000-char address", async ({ api, guard, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+  test("Settings PUT rejects blank clinic name, negative fee, discount > 100%, 5000-char address @global", async ({ api, guard, cleanup }) => {
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const admin = await api("admin");
     const original = await getSettings(admin);
@@ -68,7 +68,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("StaffAccounts PUT rejects blank full name and a 5000-char contact number", async ({ api, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const admin = await api("admin");
     const email = `${tag("b1s").toLowerCase()}@example.test`;
@@ -82,7 +82,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("Vitals PUT rejects an unknown template id and a 5000-char value", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const staff = await api("staff");
     const p = await createTaggedPatient(staff, tag("b1v"));
@@ -94,7 +94,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("Vaccinations POST rejects blank vaccine, 5000-char vaccine, negative dose number", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const doc = await api("doctor");
     const staff = await api("staff");
@@ -106,7 +106,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("LabOrders PUT rejects a blank test name and a 5000-char test name", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const staff = await api("staff");
     const doc = await api("doctor");
@@ -128,7 +128,7 @@ test.describe("B1 · server-side validation", () => {
 test.describe("B2 · payment AmountReceived is validated", () => {
   for (const [label, amount] of [["negative (-50)", -50], ["zero (0)", 0], ["huge (99,999,999)", 99_999_999]] as const) {
     test(`confirm with ${label} is refused`, async ({ api, tag, guard }) => {
-      test.fail(true, "BUG-02 (B2): POST /api/payments/{id}/confirm accepts any AmountReceived");
+      //JJQR - AI (Nov 20, 2026) - BUG-02 fixed: test.fail marker removed, the test must now pass //JJQR - END
       guard.off();
       const staff = await api("staff");
       const p = await createTaggedPatient(staff, tag("b2"));
@@ -149,7 +149,7 @@ test.describe("B2 · payment AmountReceived is validated", () => {
 test.describe("B3 · /staff/payments amount field", () => {
   for (const [label, typed] of [["abc", "abc"], ["0", "0"], ["-50", "-50"]] as const) {
     test(`typing "${label}" shows a validation error and records nothing`, async ({ as, api, tag, guard }) => {
-      test.fail(true, "BUG-03 (B3): /staff/payments records the payment for NaN / 0 / negative amount");
+      //JJQR - AI (Nov 20, 2026) - BUG-03 fixed: test.fail marker removed, the test must now pass //JJQR - END
       guard.off();
       const staff = await api("staff");
       const p = await createTaggedPatient(staff, tag("b3"));
@@ -173,7 +173,7 @@ test.describe("B3 · /staff/payments amount field", () => {
 
 test.describe("B4 · review only a Completed visit", () => {
   test("API: patient reviewing their own Pending booking is refused", async ({ tag, guard, cleanup, api }) => {
-    test.fail(true, "BUG-04 (B4): POST /api/reviews does not require a Completed booking");
+    //JJQR - AI (Nov 20, 2026) - BUG-04 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b4"));
     cleanup(() => me.dispose());
@@ -186,7 +186,7 @@ test.describe("B4 · review only a Completed visit", () => {
   });
 
   test("UI: /patient/reviews/[bookingId] does not offer the form for a visit that never happened", async ({ loginAs, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-04 (B4): the review page shows the form for a Pending booking");
+    //JJQR - AI (Nov 20, 2026) - BUG-04 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b4u"));
     cleanup(() => me.dispose());
@@ -199,7 +199,7 @@ test.describe("B4 · review only a Completed visit", () => {
   });
 
   test("API: patient reviewing a Cancelled booking is refused", async ({ tag, guard, cleanup, api }) => {
-    test.fail(true, "BUG-04 (B4): POST /api/reviews does not require a Completed booking");
+    //JJQR - AI (Nov 20, 2026) - BUG-04 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b4x"));
     cleanup(() => me.dispose());
@@ -213,20 +213,20 @@ test.describe("B4 · review only a Completed visit", () => {
 
 test.describe("B6 · double booking the same day", () => {
   test("API: the same patient booking today twice is refused the second time", async ({ tag, guard, cleanup }) => {
-    test.fail(true, "BUG-05 (B6): POST /api/bookings/book allows the same patient to book the same date twice");
+    //JJQR - AI (Nov 20, 2026) - BUG-05 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b6"));
     cleanup(() => me.dispose());
-    const first = await bookOnline(me.api, manilaDate(1), tag("b6a"));
+    const first = await bookOnline(me.api, manilaOpenDate(1), tag("b6a"));
     expect(first.status).toBe(201);
     cleanup(() => cancelOwnBooking(me.api, first.body.booking_id));
-    const second = await bookOnline(me.api, manilaDate(1), tag("b6b"));
+    const second = await bookOnline(me.api, manilaOpenDate(1), tag("b6b"));
     if (second.status === 201) cleanup(() => cancelOwnBooking(me.api, second.body.booking_id));
     expect([400, 409], `second booking for the same date returned ${second.status} (queue ${second.body.queue_number} vs ${first.body.queue_number})`).toContain(second.status);
   });
 
   test("UI: /patient/bookings refuses a second booking for the same day", async ({ loginAs, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-05 (B6): /patient/bookings lets the same patient book the same date twice");
+    //JJQR - AI (Nov 20, 2026) - BUG-05 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b6u"));
     cleanup(() => me.dispose());
@@ -246,11 +246,11 @@ test.describe("B6 · double booking the same day", () => {
 
 test.describe("B7 · booking ignores blocked dates and closed days", () => {
   test("API: patient cannot book a date the doctor has blocked", async ({ api, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-06 (B7): online booking ignores the doctor blocked dates");
+    //JJQR - AI (Nov 20, 2026) - BUG-06 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const doc = await api("doctor");
     const d = await getDoctor(doc);
-    const date = manilaDate(5);
+    const date = manilaOpenDate(5);
     const blk = await doc.post(`/api/doctors/${d.doctor_id}/blocked-dates`, { data: { blocked_date: date, reason: tag("b7") } });
     expect(blk.ok(), await blk.text()).toBeTruthy();
     const blockedId = (await blk.json()).id;
@@ -264,21 +264,27 @@ test.describe("B7 · booking ignores blocked dates and closed days", () => {
 });
 
 test.describe("B7b · closed weekday", () => {
-  test("API: patient cannot book a weekday the doctor schedule marks closed", async ({ api, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-06 (B7): online booking ignores the doctor's closed weekdays");
+  test("API: patient cannot book a weekday the doctor schedule marks closed @global", async ({ api, tag, guard, cleanup }) => {
+    //JJQR - AI (Nov 20, 2026) - BUG-06 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const doc = await api("doctor");
     const d = await getDoctor(doc);
-    const date = manilaDate(6);
+    const date = manilaOpenDate(6);
     const dow = new Date(`${date}T12:00:00Z`).getUTCDay();
     const sched: any[] = await (await doc.get(`/api/doctors/${d.doctor_id}/schedules`)).json();
     // The dev doctor starts with no schedule rows: give that weekday hours first, then close it; the cleanup puts it back (inactive = how it started).
     const row = sched.find((x) => x.day_of_week === dow) ?? { doctor_id: d.doctor_id, day_of_week: dow, is_active: false, start_time: "09:00:00", end_time: "17:00:00" };
     cleanup(async () => void (await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: row })));
-    const opened = await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: { ...row, is_active: true } });
-    expect(opened.ok(), await opened.text()).toBeTruthy();
+    //JJQR - AI (Nov 20, 2026) - B-06: a weekday is "closed" only once the doctor has a real schedule (at least one working day; all-off = nothing set up).
+    // So: give the doctor a working day other than the target, then switch the target weekday off.
+    const other = (dow + 1) % 7;
+    const otherRow = sched.find((x) => x.day_of_week === other) ?? { doctor_id: d.doctor_id, day_of_week: other, is_active: false, start_time: "09:00:00", end_time: "17:00:00" };
+    cleanup(async () => void (await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: otherRow })));
+    const workDay = await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: { ...otherRow, is_active: true } });
+    expect(workDay.ok(), await workDay.text()).toBeTruthy();
     const closed = await doc.put(`/api/doctors/${d.doctor_id}/schedules`, { data: { ...row, is_active: false } });
     expect(closed.ok(), await closed.text()).toBeTruthy();
+    //JJQR - END
     const me = await registerFreshPatient(tag("b7c"));
     cleanup(() => me.dispose());
     const r = await bookOnline(me.api, date, tag("b7cn"));

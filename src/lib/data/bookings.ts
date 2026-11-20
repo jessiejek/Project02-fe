@@ -216,13 +216,27 @@ export async function createOnlineBooking(opts: {
   visitType?: "New" | "FollowUp";
   notes?: string;
 }): Promise<BookingRow> {
+  // JJQR - AI (Nov 20, 2026) - B-06 (and BUG-07): the data API is snake_case; camelCase keys were silently ignored, so "Book this day" always booked today
   const raw = await api.post<Raw>("/api/bookings/book", {
-    appointmentDate: opts.appointmentDate ?? null,
-    visitType: opts.visitType ?? null,
+    appointment_date: opts.appointmentDate ?? null,
+    visit_type: opts.visitType ?? null,
     notes: opts.notes ?? null,
   });
+  // JJQR - END
   return projectBooking(raw);
 }
+
+// JJQR - AI (Nov 20, 2026) - B-06 / B-29: days online booking refuses (clinic closed, doctor blocked / off) and why
+export interface ClosedDate {
+  date: string; // yyyy-MM-dd
+  reason: string;
+}
+
+/** Upcoming days that cannot be booked, with the reason to show the patient. */
+export async function queryClosedDates(days = 90): Promise<ClosedDate[]> {
+  return api.get<ClosedDate[]>(`/api/bookings/closed-dates?days=${days}`);
+}
+// JJQR - END
 
 /** Staff/admin list: all, today, or unpaid-for-payment. */
 export async function queryStaffBookings(
@@ -235,6 +249,19 @@ export async function queryStaffBookings(
   });
   return unwrap(res).map(projectBooking);
 }
+
+// JJQR - AI (Nov 20, 2026) - B-42: the front-desk dashboard wants today's LIVE rows (no Cancelled/Expired) and the true total, so a busy day cannot hide new walk-ins behind a 500-row cap
+export async function queryStaffToday(_supabase?: unknown): Promise<{ rows: BookingRow[]; total: number }> {
+  // The arrivals list only shows Confirmed / CheckedIn rows, so ask for exactly those (a busy day cannot push them past the page cap),
+  // and read the true "on today's list" count (live rows only) from a second, one-row request.
+  const [list, count] = await Promise.all([
+    api.get<{ items?: Raw[] }>("/api/bookings/staff/today", { query: { pageSize: 500, activeOnly: true, statuses: "Confirmed,CheckedIn" } }),
+    api.get<{ totalCount?: number }>("/api/bookings/staff/today", { query: { pageSize: 1, activeOnly: true } }),
+  ]);
+  const rows = unwrap(list).map(projectBooking);
+  return { rows, total: count.totalCount ?? rows.length };
+}
+// JJQR - END
 
 /** The logged-in doctor's bookings (all, or just today). */
 export async function queryDoctorBookings(

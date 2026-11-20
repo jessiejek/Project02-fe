@@ -13,5 +13,10 @@ export async function GET(request: Request) {
     clearSessionCookies(res);
   }
 
+  //JJQR - AI (Nov 14, 2026)
+  res.headers.set("Clear-Site-Data", '"cache", "storage"');
+  res.headers.set("Cache-Control", "no-store");
+  //JJQR - END
+
   return res;
 }

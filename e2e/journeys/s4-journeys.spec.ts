@@ -11,7 +11,7 @@ test.describe("§4 journeys", () => {
   });
 
   test("J2 · doctor blocks tomorrow → patient cannot book tomorrow (covered by B7 in s2-suspected-bugs.spec.ts)", async ({ api, cleanup, tag }) => {
-    test.fail(true, "BUG-06 (B7): a blocked date is not enforced when booking online");
+    //JJQR - AI (Nov 20, 2026) - BUG-06 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const doc = await api("doctor");
     const d = (await (await doc.get("/api/doctors")).json())[0];
     const blockedDate = manilaDate(3);
@@ -30,7 +30,7 @@ test.describe("§4 journeys", () => {
     expect(status).toBeGreaterThanOrEqual(400);
   });
 
-  test("J3 · admin changes the standard fee → the next online booking's amount due uses it", async ({ api, tag, cleanup }) => {
+  test("J3 · admin changes the standard fee → the next online booking's amount due uses it @global", async ({ api, tag, cleanup }) => {
     const admin = await api("admin");
     const staff = await api("staff");
     const orig = await getSettings(admin);
@@ -45,8 +45,8 @@ test.describe("§4 journeys", () => {
     expect(Number(pay.amount)).toBe(463);
   });
 
-  test("J4 · admin publishes a new consent version → a patient who consented before is asked to consent again", async ({ as, loginAs, api, tag, cleanup }) => {
-    test.fail(true, "BUG-37: the consent bump is not stored by the server, and the patient dashboard only checks 'ever consented', never the version");
+  test("J4 · admin publishes a new consent version → a patient who consented before is asked to consent again @global", async ({ as, loginAs, api, tag, cleanup }) => {
+    //JJQR - AI (Nov 20, 2026) - BUG-37 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const orig = await getSettings(admin);
     cleanup(() => putSettings(admin, orig));

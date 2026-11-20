@@ -1,21 +1,20 @@
 "use client";
 
+import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJQR - AI (Nov 20, 2026) - PV-3 // JJQR - END
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
-import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
-import { buttonStyles } from "@/components/ui/buttonStyles";
 import { inputStyles, labelStyles, hintStyles } from "@/components/ui/fieldStyles";
-import { formatClinicDateTime } from "@/lib/format";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryPatientById, updatePatient } from "@/lib/data/patients";
+import { PrivacyTab } from "@/components/patient/PrivacyTab"; // JJQR - AI (Nov 20, 2026) - PV-12 // JJQR - END
 import { changePassword } from "@/lib/auth/account";
 import type { Patient } from "@/data/types";
 
@@ -101,20 +100,9 @@ export default function PatientProfilePage() {
             <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
             {tab === "info" && <ProfileInfoTab key={patient.id} patient={patient} />}
             {tab === "password" && <ChangePasswordTab />}
-            {tab === "consent" && (
-              <div className="space-y-md">
-                {patient.consentedAt ? (
-                  <FormAlert tone="success">
-                    You agreed to the privacy policy (version <span className="tabular-nums">{patient.consentVersion}</span>) on {formatClinicDateTime(patient.consentedAt)}.
-                  </FormAlert>
-                ) : (
-                  <FormAlert tone="warning">You haven&apos;t agreed to the current privacy policy yet.</FormAlert>
-                )}
-                <Link href="/patient/privacy-consent" className={buttonStyles(patient.consentedAt ? "secondary" : "primary")}>
-                  {patient.consentedAt ? "Read the policy" : "Review and agree"}
-                </Link>
-              </div>
-            )}
+            {/* JJQR - AI (Nov 20, 2026) - PV-12/13/14: consent + withdraw + download + correction/deletion */}
+            {tab === "consent" && <PrivacyTab patientId={patient.id} />}
+            {/* JJQR - END */}
           </Card>
         )}
       </div>
@@ -295,7 +283,7 @@ function ChangePasswordTab() {
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= 6 && newPassword === confirmPassword;
+  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= PASSWORD_MIN_LENGTH && newPassword === confirmPassword;
 
   async function handleUpdate() {
     if (!canUpdate) return;
@@ -322,7 +310,7 @@ function ChangePasswordTab() {
       {savedAt && <FormAlert tone="success">Password updated. Use it the next time you sign in.</FormAlert>}
       {error && <FormAlert>{error}</FormAlert>}
       <Field label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={setCurrentPassword} />
-      <Field label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={setNewPassword} hint="At least 6 characters." />
+      <Field label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={setNewPassword} hint={PASSWORD_HINT} />
       <Field label="Confirm new password" type="password" autoComplete="new-password" value={confirmPassword} onChange={setConfirmPassword} error={mismatch ? "Passwords don’t match yet." : undefined} />
       <Button type="submit" disabled={!canUpdate} loading={updating}>
         {updating ? "Updating…" : "Update password"}

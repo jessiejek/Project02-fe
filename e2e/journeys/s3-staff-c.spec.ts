@@ -217,7 +217,7 @@ test.describe("/staff/profile", () => {
   });
 
   test("a 300-character name is refused", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): the staff profile stores a 300-character name and the phone 'not-a-number' — no length/format validation");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     cleanup(() => restoreProfile(api));
     const page = await as("staff");
     await page.goto("/staff/profile");
@@ -231,7 +231,7 @@ test.describe("/staff/profile", () => {
     expect(me.contact_number).not.toBe("not-a-number");
   });
 
-  test("password change: needs 6+ chars and a matching confirmation; wrong current password is refused; a correct change works and the new password logs in", async ({ as, api, cleanup, guard }) => {
+  test("password change: needs 12+ chars and a matching confirmation; wrong current password is refused; a correct change works and the new password logs in", async ({ as, api, cleanup, guard }) => {
     guard.allow(/\/api\/auth\/change-password/);
     const NEW = "E2e-Temp-Pass-1!";
     cleanup(() => restoreDevPassword("staff@clinic.test", [NEW]));
@@ -270,10 +270,7 @@ test.describe("/staff/dashboard", () => {
 
   test("tiles count a new walk-in; shortcuts and 'Open queue board' go to the right pages", async ({ as, api, tag, cleanup }) => {
     const staff = await api("staff");
-    //JJQR - AI (Nov 20, 2026) - batch 2: BUG-42. The dashboard only loads the first 500 of today's bookings, so on a day with
-    // that many rows (the shared test DB piles ~130 rows a day per full run; cancelled rows still count) new walk-ins vanish from the tiles.
-    const rowsToday = (await getQueue(staff)).summary.total;
-    test.skip(rowsToday >= 450, `BUG-42: ${rowsToday} rows today — the staff dashboard caps today's list at 500 (queryStaffBookings pageSize), so its tiles cannot show a new walk-in; rerun on a fresher day`);
+    //JJQR - AI (Nov 20, 2026) - B-42 fixed: the dashboard now lists live rows only (cancelled excluded) and counts from the server total, so the old "skip when 450+ rows today" guard is gone //JJQR - END
     const page = await as("staff");
     await page.goto("/staff/dashboard");
     await expect(page.getByRole("heading", { name: "Front desk today" })).toBeVisible();

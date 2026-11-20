@@ -34,8 +34,9 @@ test.describe("/patient/privacy-consent", () => {
     expect(mine.consented_at).toBeTruthy();
   });
 
-  test("a registered patient already has consent: no consent banner on the dashboard", async ({ loginAs, tag, cleanup }) => {
-    const me = await newPatient({ tag, cleanup }, "noban");
+  // JJQR - AI (Nov 20, 2026) - PV-12: registering no longer pre-agrees to anything; consent exists only if the patient ticked the notice box
+  test("a patient who ticked the privacy notice at registration has consent: no consent banner on the dashboard", async ({ loginAs, tag, cleanup }) => {
+    const me = await newPatient({ tag, cleanup }, "noban", { acceptedPrivacyNotice: true });
     const page = await loginAs(me.email, me.password);
     await page.goto("/patient/dashboard");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Welcome back");
@@ -94,7 +95,8 @@ test.describe("/patient/profile", () => {
     });
   }
 
-  test("very long address (2,000 chars) does not crash the page (no 5xx) and reloads cleanly", async ({ loginAs, tag, cleanup }) => {
+  test("very long address (2,000 chars) does not crash the page (no 5xx) and reloads cleanly", async ({ loginAs, tag, cleanup, guard }) => {
+    guard.allow(/400 PUT \/api\/patients\//); // JJQR - AI (Nov 20, 2026) - B-01: the server now refuses an over-long address with a 400 and a message; the page shows it // JJQR - END
     const me = await newPatient({ tag, cleanup }, "proflong");
     const page = await loginAs(me.email, me.password);
     await page.goto("/patient/profile");
@@ -131,7 +133,7 @@ test.describe("/patient/profile", () => {
     expect((await (await me.api.get("/api/patients/me")).json()).city).toBe("Mandaue");
   });
 
-  test("Password tab: wrong current password is refused; mismatch / <6 chars keep the button disabled", async ({ loginAs, tag, cleanup, guard }) => {
+  test("Password tab: wrong current password is refused; mismatch / <12 chars keep the button disabled", async ({ loginAs, tag, cleanup, guard }) => {
     guard.allow(/4\d\d POST \/api\/(session|auth)\//);
     const me = await newPatient({ tag, cleanup }, "pw");
     const page = await loginAs(me.email, me.password);
@@ -143,6 +145,11 @@ test.describe("/patient/profile", () => {
     await page.getByLabel("New password", { exact: true }).fill("short");
     await page.getByLabel("Confirm new password").fill("short");
     await expect(update, "5-char password").toBeDisabled();
+    // JJQR - AI (Nov 20, 2026) - PV-3: minimum is now 12
+    await page.getByLabel("New password", { exact: true }).fill("Short-Pass1");
+    await page.getByLabel("Confirm new password").fill("Short-Pass1");
+    await expect(update, "11-char password").toBeDisabled();
+    // JJQR - END
     await page.getByLabel("New password", { exact: true }).fill("Longer-Pass-1");
     await page.getByLabel("Confirm new password").fill("Different-Pass-2");
     await expect(page.getByText("Passwords don’t match yet.")).toBeVisible();
@@ -242,7 +249,7 @@ test.describe("/patient/bookings", () => {
   });
 
   test("a future date books THAT date (not today)", async ({ loginAs, tag, cleanup }) => {
-    test.fail(true, "BUG-07: the UI sends camelCase appointmentDate; the API only binds appointment_date → 'Book this day' books TODAY");
+    //JJQR - AI (Nov 20, 2026) - BUG-07 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const me = await newPatient({ tag, cleanup }, "bkfut");
     const page = await loginAs(me.email, me.password);
     await page.goto("/patient/bookings");
@@ -421,7 +428,8 @@ test.describe("/patient/reviews/[bookingId]", () => {
     expect(reviews).toHaveLength(1);
   });
 
-  test("a 5,000-char comment is stored or refused cleanly (never a 500)", async ({ loginAs, api, tag, cleanup }) => {
+  test("a 5,000-char comment is stored or refused cleanly (never a 500)", async ({ loginAs, api, tag, cleanup, guard }) => {
+    guard.allow(/4\d\d POST \/api\/reviews/); // JJQR - AI (Nov 20, 2026) - B-01: a refusal (4xx + message on the page) is a valid outcome // JJQR - END
     const me = await newPatient({ tag, cleanup }, "revlong");
     const v = await completeVisitViaApi({ staff: await api("staff"), doctor: await api("doctor") }, me.patientId);
     const page = await loginAs(me.email, me.password);
@@ -429,7 +437,13 @@ test.describe("/patient/reviews/[bookingId]", () => {
     await page.getByRole("radio", { name: "3 stars" }).click();
     await page.getByLabel(/Comment/).fill("y".repeat(5000));
     await page.getByRole("button", { name: "Send review" }).click();
-    await expect(page).toHaveURL(/\/patient\/bookings\//);
+    // JJQR - AI (Nov 20, 2026) - stored (moves on to the booking) OR refused with a visible message; never a blank failure
+    await expect(async () => {
+      const moved = /\/patient\/bookings\//.test(page.url());
+      const refused = await page.getByRole("alert").filter({ hasText: /\S/ }).first().isVisible();
+      expect(moved || refused).toBeTruthy();
+    }).toPass({ timeout: 10_000 });
+    // JJQR - END
   });
 
   test("another patient cannot review this visit", async ({ api, tag, cleanup, guard }) => {

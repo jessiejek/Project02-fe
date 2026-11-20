@@ -1,5 +1,7 @@
 "use client";
 
+import { DataRequestsPanel } from "@/components/admin/DataRequestsPanel"; // JJQR - AI (Nov 20, 2026) - PV-14 // JJQR - END
+import { friendlyError } from "@/lib/api/friendly-error";
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -136,8 +138,10 @@ export default function AdminSettingsPage() {
     setSaveError("");
     try {
       await action();
-    } catch {
-      setSaveError(failure);
+    } catch (e) {
+      // JJQR - AI (Nov 20, 2026) - B-01: surface the server's validation message
+      setSaveError(friendlyError(e, failure));
+      // JJQR - END
     } finally {
       setSaving(false);
     }
@@ -208,6 +212,10 @@ export default function AdminSettingsPage() {
   }
 
   const invalidHour = hours.find((h) => !h.isClosed && h.openTime && h.closeTime && !(h.closeTime > h.openTime));
+  // JJQR - AI (Nov 20, 2026) - B-36 / B-34: block an empty clinic name/address and a negative fee before they are sent (the server refuses them too)
+  const generalInvalid = !settings.clinicName.trim() || !settings.address.trim();
+  const feesInvalid = [settings.feeConsultation, settings.feeFollowUp, settings.feeSeniorPwd, settings.feeMedCert].some((f) => !Number.isFinite(f) || f < 0);
+  // JJQR - END
   const DAY_LABEL: Record<string, string> = { Sun: "Sunday", Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday" };
   const field = (id: string, label: string, control: React.ReactNode, hint?: string) => (
     <div className="space-y-xs">
@@ -239,6 +247,7 @@ export default function AdminSettingsPage() {
 
         {tab === "general" && (
           <div className="space-y-md">
+            {generalInvalid && <FormAlert tone="warning">Clinic name and address cannot be empty.</FormAlert>}
             {field("set-name", "Clinic name", <input id="set-name" required value={settings.clinicName} onChange={(e) => setSettings({ ...settings, clinicName: e.target.value })} className={inputStyles()} />)}
             {field("set-address", "Address", <input id="set-address" required value={settings.address} onChange={(e) => setSettings({ ...settings, address: e.target.value })} className={inputStyles()} />, "Shown on the public home page under “Find us”.")}
             <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
@@ -246,7 +255,7 @@ export default function AdminSettingsPage() {
               {field("set-email", "Email", <input id="set-email" type="email" value={settings.email ?? ""} onChange={(e) => setSettings({ ...settings, email: e.target.value })} className={inputStyles()} />)}
             </div>
             {field("set-desc", "Description", <textarea id="set-desc" value={settings.description ?? ""} onChange={(e) => setSettings({ ...settings, description: e.target.value })} rows={3} className={inputStyles("py-md")} />)}
-            {saveBar(() => run(async () => { await saveSettings(); }, "Clinic details could not be saved. Your changes are still here; try again."))}
+            {saveBar(() => run(async () => { await saveSettings(); }, "Clinic details could not be saved. Your changes are still here; try again."), "Save changes", generalInvalid)}
           </div>
         )}
 
@@ -284,6 +293,7 @@ export default function AdminSettingsPage() {
               line applies during the consultation; the booking total is recomputed
               on save.
             </p>
+            {feesInvalid && <FormAlert tone="warning">Fees cannot be negative.</FormAlert>}
             <div className="divide-y divide-outline-variant">
             {(
               [
@@ -316,7 +326,7 @@ export default function AdminSettingsPage() {
               </span>
             </label>
             </div>
-            {saveBar(() => run(saveFees, "Fees could not be saved. Try again."), "Save fees")}
+            {saveBar(() => run(saveFees, "Fees could not be saved. Try again."), "Save fees", feesInvalid)}
           </div>
         )}
 
@@ -383,6 +393,9 @@ export default function AdminSettingsPage() {
                 {bumpConfirmOpen && <Button variant="ghost" disabled={saving} onClick={() => setBumpConfirmOpen(false)}>Cancel</Button>}
               </div>
             </section>
+            {/* JJQR - AI (Nov 20, 2026) - PV-14: patients' correction / deletion requests */}
+            <DataRequestsPanel />
+            {/* JJQR - END */}
           </div>
         )}
 

@@ -23,7 +23,9 @@ interface AuditLogRow {
 }
 
 const PAGE_SIZE = 25;
-const ENTITY_TYPES = ["Booking", "Patient", "Doctor", "Payment", "Settings", "Consultation", "Staff"];
+// JJQR - AI (Nov 20, 2026) - PV-5/PV-14: Access (who opened a record), Auth (sign-ins and failed sign-ins) and DataRequest rows are only shown when picked here
+const ENTITY_TYPES = ["Booking", "Patient", "Doctor", "Payment", "Settings", "Consultation", "Staff", "Access", "Auth", "DataRequest"];
+// JJQR - END
 
 // Stitch system_audit_logs. §16.2 — server-side search + pagination (was
 // load-200-then-filter-client-side).

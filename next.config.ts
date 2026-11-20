@@ -1,6 +1,9 @@
 import path from "node:path";
 import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+//JJQR - AI (Nov 14, 2026)
+import { withSerwist } from "@serwist/turbopack";
+//JJQR - END
 
 // An auto-incrementing "version number" (total commit count) instead of a
 // hash — goes up by one every commit, no manual bumping, no meaning to
@@ -22,6 +25,17 @@ function commitTimeIso(): string {
   }
 }
 
+// HTTPS + basic security headers. Production only: HSTS on plain-http
+// localhost would pin browsers to https for dev.
+const securityHeaders = [
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+];
+
 const nextConfig: NextConfig = {
   // Pins the workspace root to this project. Without this, Next.js infers
   // the root from the nearest lockfile and picks up a stray
@@ -36,6 +50,31 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: commitCount(),
     NEXT_PUBLIC_BUILD_TIME: commitTimeIso(),
   },
+  //JJQR - AI (Nov 14, 2026)
+  async rewrites() {
+    return [
+      { source: "/sw.js", destination: "/serwist/sw.js" },
+      { source: "/sw.js.map", destination: "/serwist/sw.js.map" },
+    ];
+  },
+  async headers() {
+    return [
+      ...(process.env.NODE_ENV === "production"
+        ? [{ source: "/:path*", headers: securityHeaders }]
+        : []),
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+      {
+        source: "/serwist/:path*",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+    ];
+  },
+  //JJQR - END
 };
 
-export default nextConfig;
+//JJQR - AI (Nov 14, 2026)
+export default withSerwist(nextConfig);
+//JJQR - END

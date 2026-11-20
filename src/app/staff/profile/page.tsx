@@ -1,5 +1,7 @@
 "use client";
 
+import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJQR - AI (Nov 20, 2026) - PV-3 // JJQR - END
+import { lengthProblem, phoneProblem } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -83,6 +85,13 @@ function ProfileCard({ staffId, initial }: { staffId: string; initial: StaffProf
       setError("Enter your full name.");
       return;
     }
+    // JJQR - AI (Nov 20, 2026) - B-01: same limits as the API
+    const problem = lengthProblem(form.fullName, 200, "Full name") ?? phoneProblem(form.contactNumber);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    // JJQR - END
     setSaving(true);
     setError("");
     const supabase = null as never;
@@ -137,7 +146,7 @@ function ChangePasswordSection() {
   const [saved, setSaved] = useState(false);
 
   const mismatch = confirmPassword !== "" && newPassword !== confirmPassword;
-  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= 6 && newPassword === confirmPassword;
+  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= PASSWORD_MIN_LENGTH && newPassword === confirmPassword;
 
   async function handleUpdate(e: React.FormEvent) {
     e.preventDefault();
@@ -172,7 +181,7 @@ function ChangePasswordSection() {
         <div className="space-y-xs">
           <label htmlFor="newPassword" className={labelStyles}>New password</label>
           <input id="newPassword" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} aria-describedby="newPasswordHint" className={inputStyles()} />
-          <p id="newPasswordHint" className={hintStyles}>At least 6 characters.</p>
+          <p id="newPasswordHint" className={hintStyles}>{PASSWORD_HINT}</p>
         </div>
         <div className="space-y-xs">
           <label htmlFor="confirmPassword" className={labelStyles}>Confirm new password</label>

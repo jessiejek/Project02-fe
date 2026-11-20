@@ -1,5 +1,7 @@
 "use client";
 
+import { friendlyError } from "@/lib/api/friendly-error";
+import { futureDateProblem, lengthProblem, phoneProblem } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { DataTable } from "@/components/ui/DataTable";
@@ -92,7 +94,14 @@ export default function AdminPatientsPage() {
   const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, total);
 
-  const canCreate = newPatient.firstName.trim() !== "" && newPatient.lastName.trim() !== "" && newPatient.dateOfBirth.trim() !== "" && newPatient.sex !== "";
+  // JJQR - AI (Nov 20, 2026) - B-33 / B-01: no future birth date, no huge names, no non-phone contact number
+  const newPatientProblem =
+    futureDateProblem(newPatient.dateOfBirth, todayManila()) ??
+    lengthProblem(newPatient.firstName, 100, "First name") ??
+    lengthProblem(newPatient.lastName, 100, "Last name") ??
+    phoneProblem(newPatient.contactNumber);
+  // JJQR - END
+  const canCreate = newPatientProblem === null && newPatient.firstName.trim() !== "" && newPatient.lastName.trim() !== "" && newPatient.dateOfBirth.trim() !== "" && newPatient.sex !== "";
 
   async function handleCreate() {
     if (!canCreate) return;
@@ -125,7 +134,7 @@ export default function AdminPatientsPage() {
       setAddOpen(false);
     } catch (e) {
       // Keep the modal and the typed details open on failure.
-      setCreateError(e instanceof Error && e.message ? e.message : "The patient could not be added. Check the details and try again.");
+      setCreateError(friendlyError(e, "The patient could not be added. Check the details and try again.")); // JJQR - AI (Nov 20, 2026) - B-01
     } finally {
       setCreating(false);
     }
@@ -217,6 +226,7 @@ export default function AdminPatientsPage() {
       >
         <div className="space-y-md">
           {createError && <FormAlert>{createError}</FormAlert>}
+          {newPatientProblem && <FormAlert tone="warning">{newPatientProblem}</FormAlert>}
           <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
             <label className="space-y-xs">
               <span className={labelStyles}>First name</span>

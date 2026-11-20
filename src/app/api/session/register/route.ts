@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { dotnetAuth } from "@/lib/auth/dotnet";
 import { setSessionCookies } from "@/lib/auth/cookies";
+import { PASSWORD_MIN_LENGTH } from "@/lib/password-rules"; // JJQR - AI (Nov 20, 2026) - PV-3 // JJQR - END
 
 /**
  * Self-registration against Project02-be: creates a Patient-role account,
@@ -21,6 +22,7 @@ export async function POST(request: Request) {
     dateOfBirth?: string;
     sex?: string;
     contactNumber?: string;
+    acceptedPrivacyNotice?: boolean; // JJQR - AI (Nov 20, 2026) - PV-12 // JJQR - END
   };
 
   const { firstName, lastName, email, password } = body;
@@ -33,9 +35,11 @@ export async function POST(request: Request) {
   if (body.sex !== "Male" && body.sex !== "Female") {
     return NextResponse.json({ error: "Please select your sex." }, { status: 400 });
   }
-  if (password.length < 6) {
-    return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 });
+  // JJQR - AI (Nov 20, 2026) - PV-3: 12+ (server enforces the full policy and its message is passed through)
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return NextResponse.json({ error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.` }, { status: 400 });
   }
+  // JJQR - END
 
   const result = await dotnetAuth.register({
     firstName: firstName.trim(),
@@ -46,6 +50,7 @@ export async function POST(request: Request) {
     dateOfBirth: body.dateOfBirth,
     sex: body.sex,
     contactNumber: body.contactNumber?.trim() || undefined,
+    acceptedPrivacyNotice: body.acceptedPrivacyNotice === true, // JJQR - AI (Nov 20, 2026) - PV-12 // JJQR - END
   });
 
   if (!result.ok) {

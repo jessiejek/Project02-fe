@@ -17,15 +17,45 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
-import { formatClinicDate, formatClinicDateShort } from "@/lib/format";
+import { formatClinicDate, formatClinicDateShort, formatClinicDateTime } from "@/lib/format";
+import { queryPatientAccess, type PatientAccessEntry } from "@/lib/data/admin";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 import { queryPatientById, updatePatient, toTitleCase } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
+
+// JJQR - AI (Nov 20, 2026) - PV-5: staff/doctor/admin views of this record, newest first (ids and area names only — no patient details are stored in it)
+function AccessLogPanel({ patientId }: { patientId: string }) {
+  const [rows, setRows] = useState<PatientAccessEntry[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    queryPatientAccess(patientId).then((r) => { if (!cancelled) setRows(r); }).catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [patientId]);
+  if (failed) return <p className="py-md text-body-md text-on-surface-variant">The access log could not be loaded.</p>;
+  if (rows === null) return <p className="py-md text-body-md text-on-surface-variant" role="status">Loading…</p>;
+  if (rows.length === 0) return <p className="py-md text-body-md text-on-surface-variant">No one on the clinic team has opened this record yet.</p>;
+  return (
+    <div>
+      <p className="mb-sm text-label-md text-on-surface-variant">Every time clinic staff, a doctor or an admin opens this patient&apos;s record, it is written here.</p>
+      <ul className="divide-y divide-outline-variant">
+        {rows.map((r, i) => (
+          <li key={`${r.at}-${i}`} className="flex flex-wrap items-baseline justify-between gap-sm py-sm">
+            <span className="text-body-md text-on-surface">{r.who} <span className="text-on-surface-variant">({r.role || "—"})</span> · {r.area}</span>
+            <span className="text-label-md tabular-nums text-on-surface-variant">{formatClinicDateTime(r.at)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+// JJQR - END
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "bookings", label: "Bookings" },
   { id: "records", label: "Consultations" },
+  { id: "access", label: "Access log" }, // JJQR - AI (Nov 20, 2026) - PV-5
 ];
 
 interface PatientDetail {
@@ -245,6 +275,8 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
               )}
             </ul>
           )}
+          {/* JJQR - AI (Nov 20, 2026) - PV-5: who looked at this patient */}
+          {tab === "access" && <AccessLogPanel patientId={id} />}
           {tab === "records" && (
             <ul className="divide-y divide-outline-variant">
               {consultations.length === 0 ? (

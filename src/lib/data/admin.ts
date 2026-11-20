@@ -135,6 +135,19 @@ export async function queryAuditLogs(
   });
 }
 
+// JJQR - AI (Nov 20, 2026) - PV-5: who looked at a patient's record (admin only)
+export interface PatientAccessEntry {
+  at: string;
+  who: string;
+  role: string;
+  area: string;
+}
+
+export async function queryPatientAccess(patientId: string): Promise<PatientAccessEntry[]> {
+  return api.get<PatientAccessEntry[]>(`/api/audit-logs/patient/${patientId}/access`);
+}
+// JJQR - END
+
 /** §16.2 — server-side paged + searched audit trail (admin screen). */
 export async function queryAuditLogsPaged(
   _supabase: unknown,

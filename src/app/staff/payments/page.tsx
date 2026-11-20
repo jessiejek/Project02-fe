@@ -16,6 +16,7 @@ import { todayManila } from "@/lib/clock";
 import { queryQueue } from "@/lib/data/queue";
 import { queryStaffBookings } from "@/lib/data/bookings";
 import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
+import { checkAmountReceived } from "@/lib/payment-amount";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 interface QueueRow {
@@ -140,13 +141,20 @@ export default function PaymentsQueuePage() {
 
   async function handleConfirm() {
     if (!activeBooking) return;
+    //JJQR - AI (Nov 20, 2026) - B-03: a blank / NaN / zero / negative / short amount is an error shown in the dialog, never silently turned into the full fee
+    const amount = checkAmountReceived(amountReceived, activeBooking.amountDue);
+    if (!amount.ok) {
+      setConfirmError(amount.error);
+      return;
+    }
+    //JJQR - END
     setSubmitting(true);
     setConfirmError("");
     const supabase = null as never;
     try {
       await confirmPaymentApi(supabase, activeBooking.id, {
         paymentMethod,
-        amountReceived: Number(amountReceived) || activeBooking.amountDue,
+        amountReceived: amount.value,
         referenceNumber: referenceNumber.trim() || null,
         confirmNotes: confirmNotes.trim() || null,
         orNumber: newOrNumber(activeBooking.id),
@@ -158,7 +166,7 @@ export default function PaymentsQueuePage() {
       return;
     }
 
-    setLastPaid(`${formatPeso(Number(amountReceived) || activeBooking.amountDue)} recorded for ${activeBooking.patientName}.`);
+    setLastPaid(`${formatPeso(amount.value)} recorded for ${activeBooking.patientName}.`);
     setQueue((prev) => prev.filter((b) => b.id !== activeBooking.id));
     setSubmitting(false);
     setActiveId(null);
@@ -301,7 +309,7 @@ export default function PaymentsQueuePage() {
           </div>
           <div className="space-y-xs">
             <label htmlFor="payAmount" className={labelStyles}>Amount received (₱)</label>
-            <input id="payAmount" inputMode="decimal" value={amountReceived} onChange={(e) => setAmountReceived(e.target.value)} className={inputStyles("tabular-nums")} />
+            <input id="payAmount" inputMode="decimal" value={amountReceived} onChange={(e) => { setAmountReceived(e.target.value); setConfirmError(""); }} aria-invalid={confirmError ? true : undefined} className={inputStyles("tabular-nums")} />
           </div>
           <div className="space-y-xs">
             <label htmlFor="payRef" className={labelStyles}>Reference number <span className="font-normal text-on-surface-variant">(optional)</span></label>

@@ -156,7 +156,7 @@ test.describe("consultation-regression-matrix — amend cluster", () => {
 
 //JJQR - AI (Nov 20, 2026) - batch 2: BUG-40
 test("amend: a consultation completed with 'No follow-up' can be amended straight away (Save amendment is not locked)", async ({ as, api, tag, cleanup }) => {
-  test.fail(true, "BUG-40: after completing with 'No follow-up' the amend screen re-opens with the Follow-up step unsatisfied (page.tsx ~1290 never restores mode 'none'); Save amendment and all Review buttons are disabled and nothing says why");
+  //JJQR - AI (Nov 20, 2026) - BUG-40 fixed: test.fail marker removed, the test must now pass //JJQR - END
   const { doctor, ticket } = await seedAndComplete(as, api, "New", tag, cleanup);
   await openCompletedConsult(doctor, ticket.booking_id);
   await enterAmendMode(doctor, { workaround: false });

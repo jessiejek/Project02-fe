@@ -15,6 +15,17 @@ async function patientWithVisit(fx: Fx, api: (r: "staff" | "doctor") => Promise<
 
 const PDF = { name: "e2e.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF") };
 
+// JJQR - AI (Nov 20, 2026) - PV-7: the server now checks a file's first bytes against its type, so each accepted-type fixture starts like the real thing
+const SIGNATURE: Record<string, Buffer> = {
+  "image/png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]),
+  "image/jpeg": Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0]),
+  "image/webp": Buffer.from("RIFF\x04\x00\x00\x00WEBPVP8 "),
+  "image/gif": Buffer.from("GIF89a\x01\x00\x01\x00"),
+  "application/msword": Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0]),
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": Buffer.from([0x50, 0x4b, 0x03, 0x04, 0]),
+};
+// JJQR - END
+
 /** Same upload form on /patient/documents and /patient/lab-results */
 for (const [path, noun, submit, listHeading, emptyMsg, textLabel] of [
   ["/patient/documents", "document", "Upload document", /Your documents \(\d+\)/, "No documents yet.", "Title (optional)"],
@@ -61,7 +72,7 @@ for (const [path, noun, submit, listHeading, emptyMsg, textLabel] of [
         const { me } = await patientWithVisit({ tag, cleanup }, api, "ty");
         const page = await loginAs(me.email, me.password);
         await page.goto(path);
-        await fileInput(page).setInputFiles({ name, mimeType, buffer: Buffer.from("GIF89a\x01\x00\x01\x00") });
+        await fileInput(page).setInputFiles({ name, mimeType, buffer: SIGNATURE[mimeType] });
         await page.getByLabel("Visit it belongs to").selectOption({ index: 1 });
         await page.getByRole("button", { name: submit }).click();
         await expect(page.getByText(/uploaded\./i), `${name} should be accepted`).toBeVisible();

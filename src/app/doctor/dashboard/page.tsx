@@ -413,6 +413,13 @@ export default function DoctorDashboardPage() {
                   <span className="text-label-sm text-on-surface-variant">₱{e.amount_due} due</span>
                 </Link>
               ))}
+              {/* JJQR - AI (Nov 20, 2026) - B-41: say so when the list is cut at 5, and link to the full list */}
+              {unpaidCompleted.length > 5 && (
+                <Link href="/doctor/appointments" className="block rounded-lg px-sm py-xs text-label-md font-medium text-primary hover:bg-surface-container-low">
+                  +{unpaidCompleted.length - 5} more unpaid visits — view all
+                </Link>
+              )}
+              {/* JJQR - END */}
               {consultationsToday.slice(0, 5).map((c) => (
                 <Link
                   key={`incomplete-${c.consultation_id}`}

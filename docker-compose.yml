@@ -8,7 +8,7 @@
 #   docker compose stop        # when not in use
 #
 # Connection string (appsettings.Development.json):
-#   Server=localhost,1433;Database=ClinicAppDb;User Id=sa;Password=Clinic_Dev_Pass123;TrustServerCertificate=True
+#   Server=localhost,1433;Database=ClinicAppDb;User Id=sa;Password=<SQL_SA_PASSWORD>;TrustServerCertificate=True
 
 services:
   db:
@@ -17,7 +17,7 @@ services:
     container_name: clinic-mssql
     environment:
       ACCEPT_EULA: "Y"
-      MSSQL_SA_PASSWORD: "Clinic_Dev_Pass123"
+      MSSQL_SA_PASSWORD: "${SQL_SA_PASSWORD:?set SQL_SA_PASSWORD in .env (see .env.example)}"
       MSSQL_PID: "Express"
     ports:
       - "1433:1433"

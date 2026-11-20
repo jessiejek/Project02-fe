@@ -14,7 +14,7 @@ import { InfoField } from "@/components/ui/InfoField";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FormAlert } from "@/components/ui/FormAlert";
 import { SkeletonCard } from "@/components/ui/Skeleton";
-import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
+import { inputStyles, labelStyles, hintStyles } from "@/components/ui/fieldStyles";
 import { formatClinicDate, formatPeso } from "@/lib/format";
 import { showPaymentStatus } from "@/lib/paymentDisplay";
 import { BookingTimeline } from "@/components/ui/BookingTimeline";
@@ -324,7 +324,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
             <Button variant="secondary" disabled={actionSubmitting} onClick={() => { setReasonModal(null); setReasonText(""); setActionError(""); }}>Back</Button>
             <Button
               variant="danger"
-              disabled={!reasonText.trim()}
+              disabled={reasonModal === "cancel" ? reasonText.trim().length < 5 : !reasonText.trim()} /* JJQR - AI (Nov 20, 2026) - B-35: cancel needs 5+ characters, same as staff */
               loading={actionSubmitting}
               onClick={() => submitModal(async () => {
                 // Patient.md's BookingStatus enum has no separate "Rejected" value,
@@ -348,6 +348,7 @@ export default function AdminBookingDetailPage({ params }: { params: Promise<{ i
           <div className="space-y-xs">
             <label htmlFor="reason-cancel" className={labelStyles}>Reason</label>
             <textarea id="reason-cancel" required value={reasonText} onChange={(e) => setReasonText(e.target.value)} className={inputStyles("py-md")} rows={3} />
+            {reasonModal === "cancel" && <p className={hintStyles}>At least 5 characters.</p>}
           </div>
         </div>
       </Modal>

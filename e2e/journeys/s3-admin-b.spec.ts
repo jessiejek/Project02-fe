@@ -160,7 +160,7 @@ test.describe("/admin/bookings/[id] · actions", () => {
   });
 
   test("Cancel booking: a 4-character reason is refused (staff need 5+)", async ({ as, api, tag, cleanup }) => {
-    test.fail(true, "BUG-35: /admin/bookings/[id] 'Cancel booking' accepts a 4-character reason, while /staff/bookings/[id] requires 5+ — the rule differs by role");
+    //JJQR - AI (Nov 20, 2026) - BUG-35 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const b = await confirmedBooking({ api, tag, cleanup }, "abd-can4");
     const page = await as("admin");
     await page.goto(`/admin/bookings/${b.bookingId}`);
@@ -252,7 +252,7 @@ test.describe("/admin/bookings/[id] · actions", () => {
 
   test("Refund: an amount larger than what was paid is not accepted", async ({ as, api, tag, cleanup, guard }) => {
     guard.allow(/\/refund|\/api\/payments\//);
-    test.fail(true, "BUG-38: refunding ₱999,999 on a ₱450 payment is accepted — the booking becomes Refunded with a refund larger than the amount paid");
+    //JJQR - AI (Nov 20, 2026) - BUG-38 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const v = await unpaidVisit({ api, tag, cleanup }, "abd-rfx");
     await settleViaApi(v.staff, v.bookingId);
     const page = await as("admin");
@@ -292,7 +292,7 @@ test.describe("/admin/bookings/[id] · actions", () => {
   });
 });
 
-test.describe("/admin/settings", () => {
+test.describe("/admin/settings @global", () => { // JJQR - AI (Nov 20, 2026) - F-1: these edit clinic-wide settings, so they run in the serial @global pass // JJQR - END
   async function snapshot(admin: APIRequestContext) {
     const settings = await getSettings(admin);
     const hours = await (await admin.get("/api/admin/operating-hours")).json();
@@ -330,7 +330,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("General: an empty clinic name is not stored", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-36: the General tab saves an empty clinic name (and the public site would show a blank name)");
+    //JJQR - AI (Nov 20, 2026) - BUG-36 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));
@@ -343,7 +343,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("General: an empty address is not stored", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-36b: the General tab also saves an empty address");
+    //JJQR - AI (Nov 20, 2026) - BUG-36 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));
@@ -414,7 +414,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("Fees: a negative fee is not stored", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-34: the Fees tab accepts and stores a negative standard consultation fee");
+    //JJQR - AI (Nov 20, 2026) - BUG-34 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));
@@ -469,7 +469,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("Privacy: a published consent version is still there after a reload / in the API", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-37: 'Publish new consent version' only changes the number on screen — PUT /api/settings ignores consent_version, so after reload it is back to the old version and patients are never asked to re-consent");
+    //JJQR - AI (Nov 20, 2026) - BUG-37 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));
@@ -545,7 +545,9 @@ test.describe("/admin/audit-logs", () => {
     await admin.put(`/api/patients/${p.patient_id}`, { data: { ...p, contact_number: "09171112233" } });
     const page = await as("admin");
     await page.goto("/admin/audit-logs");
-    await page.getByRole("searchbox", { name: "Search" }).fill(p.first_name);
+    // JJQR - AI (Nov 20, 2026) - PV-9: the change log no longer holds the patient's name, so search by the record id
+    await page.getByRole("searchbox", { name: "Search" }).fill(p.patient_id);
+    // JJQR - END
     const rows = page.getByRole("row").filter({ hasText: p.patient_id });
     await expect(rows.first()).toBeVisible();
     await expect(rows.first()).toContainText("Patient");
@@ -598,7 +600,7 @@ test.describe("/admin/dashboard", () => {
   });
 
   test("an unpaid booking on a Sunday (clinic closed) cannot be booked online", async ({ api, tag, cleanup }) => {
-    test.fail(true, "BUG-29: the clinic hours say Sunday is closed, yet POST /api/bookings/book accepts a Sunday date");
+    //JJQR - AI (Nov 20, 2026) - BUG-29 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const staff = await api("staff");
     const me = await registerFreshPatient(tag("sun"));
     cleanup(() => me.dispose());

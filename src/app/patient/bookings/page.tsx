@@ -8,7 +8,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryMyBookings, createOnlineBooking, cancelMyBooking } from "@/lib/data/bookings";
+import { queryMyBookings, createOnlineBooking, cancelMyBooking, queryClosedDates } from "@/lib/data/bookings";
 import { ApiError } from "@/lib/api/client";
 import { todayManila } from "@/lib/clock";
 import { showPaymentStatus } from "@/lib/paymentDisplay";
@@ -68,6 +68,17 @@ export default function MyBookingsPage() {
   const [bookedNote, setBookedNote] = useState("");
   const todayStr = todayManila();
   const [bookDate, setBookDate] = useState(todayStr);
+  // JJQR - AI (Nov 20, 2026) - B-06 / B-29: days the clinic or doctor is closed, so the picker can say so before the patient presses Book
+  const [closedDates, setClosedDates] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let alive = true;
+    queryClosedDates(120)
+      .then((rows) => { if (alive) setClosedDates(Object.fromEntries(rows.map((r) => [r.date, r.reason]))); })
+      .catch(() => { /* the server still refuses a closed day; this is only an early warning */ });
+    return () => { alive = false; };
+  }, []);
+  const closedReason = closedDates[bookDate];
+  // JJQR - END
 
   function project(rows: import("@/lib/data/bookings").BookingRow[]) {
     return rows.map((b) => ({
@@ -181,9 +192,10 @@ export default function MyBookingsPage() {
                 className={inputStyles("tabular-nums")}
               />
             </div>
-            <Button type="submit" loading={booking}>
+            <Button type="submit" loading={booking} disabled={Boolean(closedReason)}>
               {booking ? "Booking…" : bookDate === todayStr ? "Join today’s queue" : "Book this day"}
             </Button>
+            {closedReason && <p role="alert" className="basis-full text-label-md text-error">{closedReason}</p>}
             <p className={`${hintStyles} basis-full`}>First come, first served. You get a queue number when you book; pay at the clinic after your visit.</p>
           </form>
         </Card>

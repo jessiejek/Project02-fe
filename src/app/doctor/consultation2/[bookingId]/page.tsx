@@ -1293,7 +1293,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         if ((loadedConsultation.followUpReason ?? "").includes("PRN")) {
           setFollowUpMode("prn");
         } else if (!loadedConsultation.followUpDate && !loadedConsultation.followUpReason) {
-          setFollowUpMode("dated");
+          //JJQR - AI (Nov 20, 2026) - B-40: a visit that was completed/amended with no follow-up passed the "No follow-up for this visit" gate; restore that choice
+          // so amend mode doesn't re-open with Follow-up unsatisfied (which left Save amendment / Review disabled with no reason)
+          if (consultRes.data?.status === "Completed" || consultRes.data?.status === "Amended") {
+            setFollowUpMode("none");
+            setNoFollowUpConfirmed(true);
+          } else {
+            setFollowUpMode("dated");
+          }
+          //JJQR - END
         } else {
           setFollowUpMode("dated");
         }
@@ -1415,6 +1423,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
 
   const missingRequiredSections = REQUIRED_SECTIONS.filter((i) => !isRequiredSectionDone(i));
+  //JJQR - AI (Nov 20, 2026) - B-40: say WHICH section is missing wherever Save / Review / Complete is disabled
+  const missingSectionNames = missingRequiredSections.map((i) => SECTIONS[i]).join(", ");
+  //JJQR - END
   const sectionHasDraft = [
     false,
     false,
@@ -1526,6 +1537,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           >
             Review section
           </Button>
+          {/* JJQR - AI (Nov 20, 2026) - B-40: the button is locked until every required section is done; name what is missing */}
+          {mode === "amend" && !canComplete && missingSectionNames && (
+            <p role="status" className="text-label-md text-status-warning">Finish {missingSectionNames} to save changes.</p>
+          )}
+          {/* JJQR - END */}
         </div>
       </div>
     );
@@ -3638,7 +3654,8 @@ Return to patient queue
         className="consultation-workspace fixed inset-x-0 bottom-0 z-40 border-t border-outline-variant bg-surface-container-lowest pb-[env(safe-area-inset-bottom)] lg:inset-x-0 lg:left-[var(--app-main-left,var(--spacing-sidebar))] lg:right-0"
       >
         <div className="mx-auto flex w-full max-w-content flex-col gap-sm px-md py-sm lg:flex-row lg:items-center lg:justify-between lg:gap-md">
-          {mode === "complete" && !canComplete && missingRequiredSections.length > 0 && (
+          {/* JJQR - AI (Nov 20, 2026) - B-40: also in amend mode, where Save amendment / Review section are locked by the same rule */}
+          {!canComplete && missingRequiredSections.length > 0 && (
             <div className="shrink-0">
               <button
                 type="button"
@@ -3649,10 +3666,10 @@ Return to patient queue
                   const next = nextMissingSection(missingRequiredSections, openSection, SECTION_ORDER);
                   if (next !== null) setOpenSection(next);
                 }}
-                aria-label={`${missingRequiredSections.length} required section${missingRequiredSections.length === 1 ? "" : "s"} left. Go to the next one`}
+                aria-label={`${missingRequiredSections.length} required section${missingRequiredSections.length === 1 ? "" : "s"} left: ${missingSectionNames}. Go to the next one`}
               >
                 <span className="font-medium">
-                  {missingRequiredSections.length} required section{missingRequiredSections.length === 1 ? "" : "s"} left
+                  {missingRequiredSections.length} required section{missingRequiredSections.length === 1 ? "" : "s"} left: {missingSectionNames}
                 </span>
                 <span className="ml-sm inline-flex items-center gap-xs text-label-sm underline">
                   Go to next <Icon name="arrow_forward" className="text-[16px]" aria-hidden />
@@ -3660,6 +3677,7 @@ Return to patient queue
               </button>
             </div>
           )}
+          {/* JJQR - END */}
           <div className="flex w-full flex-wrap items-center justify-between gap-md lg:w-auto lg:flex-1">
             <p role="status" aria-live="polite" aria-atomic="true" className="consultation-save-status text-label-md tabular-nums text-on-surface-variant">{savingDraft || savingChanges ? "Saving your changes…" : saveError ? "Not saved — your entries are still here." : mode === "amend" ? (amendSavedAt ? `Amendment saved ${amendSavedAt}` : "Amendment · manual save") : savedDraftSnapshot && currentFormSnapshot() !== savedDraftSnapshot ? "Unsaved changes · auto-save every 30 seconds" : draftSavedAt ? `Draft saved ${draftSavedAt}` : consultationId ? "Draft loaded · no new changes" : "Draft not saved · changes auto-save every 30 seconds"}</p>
             <div className="flex items-center gap-sm">
