@@ -39,6 +39,8 @@ import { GrowthChart } from "@/components/doctor/GrowthChart";
 import {
   queryPatientAllergies,
   replacePatientAllergies,
+  queryPatientById,
+  updatePatient,
   type PatientAllergyRow,
   type PatientRow,
 } from "@/lib/data/patients";
@@ -85,10 +87,16 @@ import {
   createMedicalCertificateTemplate,
   type MedicalCertificateTemplateRow,
 } from "@/lib/data/clinical";
-import { queryDoctorById } from "@/lib/data/doctors";
+import { queryDoctorById, type DoctorRow } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
-import { queryPatientById } from "@/lib/data/patients";
 import { printMedicalCertificate } from "@/lib/print-forms";
+//JJQR - AI (Nov 20, 2026) E1
+import {
+  diagnosisTextFromConsult,
+  examinedAtFromClinic,
+  patientAddressFromProfile,
+} from "@/lib/clinical/med-cert-fields";
+//JJQR - END
 import {
   printLabOrdersForBooking,
   printPrescriptionForBooking,
@@ -330,6 +338,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Oct 31, 2026) — prior visit Rx lines for PrescriptionForm
   const [priorRxItems, setPriorRxItems] = useState<PrescriptionLineItem[]>([]);
   const [patientDetail, setPatientDetail] = useState<PatientRow | null>(null);
+  //JJQR - AI (Nov 20, 2026) E1
+  const [doctorProfile, setDoctorProfile] = useState<DoctorRow | null>(null);
+  const patientAddressMissingRef = useRef(false);
+  //JJQR - END
   const [patientLabValues, setPatientLabValues] = useState<PatientLabValueRow[]>([]);
   const [patientVaxHistory, setPatientVaxHistory] = useState<VaccinationRow[]>([]);
   const [soapSpecialtyFilter, setSoapSpecialtyFilter] = useState<Specialty | "All">("All");
@@ -934,10 +946,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
   const [mcAddress, setMcAddress] = useState("");
   const [mcExaminedAt, setMcExaminedAt] = useState("");
-  // Default "has been examined in ___" to the doctor's own clinic (a solo
-  // practice — the printed cert reads more naturally naming the doctor than
-  // a generic clinic_name), while staying an editable field either way.
-  const doctorClinicLabel = booking ? `${booking.doctorName.replace(/^Dr\.?\s+/i, "").trim()}, MD Clinic` : "";
+  //JJQR - AI (Nov 20, 2026) E1 — exam dates default to today (Manila); overwritten if a saved cert hydrates
+  const [mcExamFrom, setMcExamFrom] = useState(() => todayManila());
+  const [mcExamTo, setMcExamTo] = useState(() => todayManila());
+  //JJQR - END
 
   // Standard clinical patient identifier: Name, Sex, Birthday (+ age) — this
   // is what should always be on screen, not a services list that's empty for
@@ -1076,8 +1088,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       b.patientDob ? `${formatDob(b.patientDob)}${age !== null ? ` (${age}y)` : ""}` : null,
     ].filter(Boolean).join(" · ");
   }
-  const [mcExamFrom, setMcExamFrom] = useState("");
-  const [mcExamTo, setMcExamTo] = useState("");
   const [mcDiagnosis, setMcDiagnosis] = useState("");
   const [mcRecommendations, setMcRecommendations] = useState("");
   const [mcPurposeException, setMcPurposeException] = useState("");
@@ -1094,6 +1104,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     ? computeClinicFee(feeSchedule, visitType, discountCategory, medCertRequested)
     : null;
   const previewFee = feePreview?.total ?? null;
+  //JJQR - END
+
+  //JJQR - AI (Nov 20, 2026) E1 — diagnosis on the certificate follows diagnoses, then Assessment
+  const mcDiagnosisDefault = diagnosisTextFromConsult(
+    diagnoses.map((d) => d.description),
+    assessment,
+  );
+  useEffect(() => {
+    if (certExists) return;
+    setMcDiagnosis(mcDiagnosisDefault);
+  }, [certExists, mcDiagnosisDefault]);
   //JJQR - END
 
   // Single load effect: real booking (joined), consultation + diagnoses +
@@ -1128,6 +1149,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         setPatientDetail(patientRow);
         setPatientLabValues(labVals);
         setPatientVaxHistory(vaxHistory);
+        //JJQR - AI (Nov 20, 2026) E1
+        setDoctorProfile(doctorRow);
+        patientAddressMissingRef.current = !(patientRow?.address ?? "").trim();
+        setMcAddress(patientAddressFromProfile(patientRow?.address, patientRow?.city));
+        //JJQR - END
         if (doctorRow?.specialization) {
           setSoapSpecialtyFilter(defaultSpecialtyFromDoctor(doctorRow.specialization));
         }
@@ -1315,6 +1341,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               medCert: s.fee_med_cert,
               discountPct: s.discount_pct,
             });
+            //JJQR - AI (Nov 20, 2026) E1 — keep a saved certificate's examined-at if already hydrated
+            setMcExaminedAt((prev) => prev || examinedAtFromClinic(s.clinic_name, s.address));
+            //JJQR - END
           }
         })
         .catch(() => {});
@@ -1791,15 +1820,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         consultationId ?? (await persistConsultation(mode === "amend" ? "Amended" : "Draft"));
       if (!consultId) return;
       const today = todayManila();
+      //JJQR - AI (Nov 20, 2026) E1 — persist a typed address onto the patient profile when none was on file
+      const typedAddress = mcAddress.trim();
+      if (typedAddress && patientAddressMissingRef.current) {
+        try {
+          await updatePatient(supabase, booking.patientId, { address: typedAddress });
+          patientAddressMissingRef.current = false;
+          setPatientDetail((p) => (p ? { ...p, address: typedAddress } : p));
+        } catch {
+          // Certificate still issues; profile write is best-effort.
+        }
+      }
+      //JJQR - END
       const cert = {
         patient_id: booking.patientId,
         doctor_id: booking.doctorId,
         issue_date: today,
-        patient_address_snapshot: mcAddress || null,
-        examined_at: mcExaminedAt || doctorClinicLabel || clinicRow.clinic_name,
+        patient_address_snapshot: typedAddress || null,
+        examined_at: mcExaminedAt.trim() || examinedAtFromClinic(clinicRow.clinic_name, clinicRow.address),
         examination_date_from: mcExamFrom || today,
         examination_date_to: mcExamTo || mcExamFrom || today,
-        diagnosis_text: mcDiagnosis || assessment || null,
+        diagnosis_text: mcDiagnosis.trim() || mcDiagnosisDefault || null,
         recommendations: mcRecommendations || plan || null,
         purpose_exception: mcPurposeException || null,
         come_back_on: mcComeBackOn || followUpDate || null,
@@ -2939,6 +2980,22 @@ Return to patient queue
                         §16.8 Form 2. Blank fields fall back to the SOAP Assessment / Plan and the
                         follow-up date. Issuing marks &ldquo;medical certificate&rdquo; on the fee (+₱{feeSchedule?.medCert ?? 50}).
                       </p>
+                      {/*JJQR - AI (Nov 20, 2026) E1 — read-only patient / doctor lines; she does not retype these */}
+                      {booking && (
+                        <p className="text-body-md text-on-surface">
+                          {booking.patientName}
+                          {patientAgeYears != null ? `, ${patientAgeYears}y` : ""}
+                          {booking.patientSex ? `, ${booking.patientSex}` : ""}
+                        </p>
+                      )}
+                      <p className="text-label-md text-on-surface-variant">
+                        {booking?.doctorName || doctorProfile?.staff_accounts?.full_name || "Doctor"}
+                        {" · License No. "}
+                        {doctorProfile?.license_number?.trim() || "—"}
+                        {" · PTR No. "}
+                        {doctorProfile?.ptr_number?.trim() || "—"}
+                      </p>
+                      {/*JJQR - END */}
                       <div className="flex flex-wrap items-center justify-end gap-md">
                         {mcTemplates.length > 0 && (
                           <select
@@ -2986,18 +3043,19 @@ Return to patient queue
                         </Button>
                       </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Patient address (&ldquo;residing at …&rdquo;)</span><input
+                        <label className="block min-w-0 flex-1 space-y-xs sm:col-span-2"><span className="text-label-md font-medium text-on-surface">Patient address (&ldquo;residing at …&rdquo;)</span><input
                           value={mcAddress}
                           onChange={(e) => setMcAddress(e.target.value)}
-                          placeholder="Patient address (&ldquo;residing at …&rdquo;)"
-                          className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
+                          placeholder={mcAddress.trim() ? undefined : "No address on file"}
+                          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
                         /></label>
-                        <input
+                        {/*JJQR - AI (Nov 20, 2026) E1 */}
+                        <label className="block min-w-0 flex-1 space-y-xs sm:col-span-2"><span className="text-label-md font-medium text-on-surface">Examined at</span><input
                           value={mcExaminedAt}
                           onChange={(e) => setMcExaminedAt(e.target.value)}
-                          placeholder={`Examined in… (default: ${doctorClinicLabel || clinicRow?.clinic_name || "clinic"})`}
-                          className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
-                        />
+                          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
+                        /></label>
+                        {/*JJQR - END */}
                         <label className="text-label-sm text-on-surface-variant">
                           Examination from
                           <input type="date" value={mcExamFrom} onChange={(e) => setMcExamFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
@@ -3007,13 +3065,15 @@ Return to patient queue
                           <input type="date" value={mcExamTo} onChange={(e) => setMcExamTo(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
                         </label>
                       </div>
-                      <textarea
+                      {/*JJQR - AI (Nov 20, 2026) E1 */}
+                      <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Diagnosis / Impressions</span><textarea
                         value={mcDiagnosis}
                         onChange={(e) => setMcDiagnosis(e.target.value)}
                         placeholder={assessment ? `Diagnosis / Impressions (default: “${assessment}”)` : "Diagnosis / Impressions"}
                         rows={2}
                         className="w-full rounded-lg border border-outline-variant p-md text-body-md"
-                      />
+                      /></label>
+                      {/*JJQR - END */}
                       <textarea
                         value={mcRecommendations}
                         onChange={(e) => setMcRecommendations(e.target.value)}

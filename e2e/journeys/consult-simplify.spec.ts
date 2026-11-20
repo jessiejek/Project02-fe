@@ -150,3 +150,27 @@ test.describe("Consultation2 simplify F1–F4 professional fee", () => {
   });
 });
 //JJQR - END
+
+//JJQR - AI (Nov 20, 2026) E1
+test.describe("Consultation2 simplify E1–E5 medical certificate", () => {
+  async function openFreshConsult(as: (role: Role) => Promise<Page>, api: (role: Role) => Promise<APIRequestContext>) {
+    const staffApi = await api("staff");
+    const patient = await createPatient(staffApi, Date.now().toString(36));
+    const ticket = await checkInWalkIn(staffApi, patient.patient_id);
+    const doctor = await as("doctor");
+    await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
+    return doctor;
+  }
+
+  test("E1 fields prefilled (examined at = clinic name, exam date = today, doctor license shown, address hint)", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    await openSectionByTitle(doctor, /7\. Medical Certificate/i);
+    await expect(doctor.getByRole("textbox", { name: /Examined at/i })).toHaveValue(/Grace Medical Clinic/, { timeout: 15_000 });
+    const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await expect(doctor.getByLabel(/Examination from/i)).toHaveValue(today);
+    await expect(doctor.getByText(/License No\./)).toBeVisible();
+    await expect(doctor.getByPlaceholder("No address on file")).toBeVisible();
+  });
+});
+//JJQR - END
+
