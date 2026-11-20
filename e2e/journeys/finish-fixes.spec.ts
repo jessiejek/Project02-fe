@@ -1,5 +1,5 @@
 import { test, expect } from "../support/fixtures";
-import { cancelOwnBooking, createTaggedPatient, getDoctor, getPaymentForBooking, manilaOpenDate, registerFreshPatient } from "../support/api";
+import { cancelOwnBooking, cancelQueueEntry, checkInWalkIn, createTaggedPatient, getDoctor, getPaymentForBooking, manilaOpenDate, registerFreshPatient } from "../support/api";
 import { completeVisitViaApi, settleViaApi } from "../support/visit";
 
 /**
@@ -72,5 +72,21 @@ test.describe("B-02 / B-03 · payment amount", () => {
     const pay = await getPaymentForBooking(staff, v.booking_id);
     expect(pay.status).toBe("Paid");
     expect(Number(pay.amount_received)).toBe(500);
+  });
+});
+
+test.describe("B-40 · locked Save / Review / Complete says which section is missing", () => {
+  test("a fresh visit's bottom bar names the required sections still open", async ({ as, api, tag, cleanup }) => {
+    const staff = await api("staff");
+    const p = await createTaggedPatient(staff, tag("b40"));
+    const q = await checkInWalkIn(staff, p.patient_id);
+    cleanup(() => cancelQueueEntry(staff, q.booking_id));
+    const doctor = await as("doctor");
+    await doctor.goto(`/doctor/consultation2/${q.booking_id}`);
+    const left = doctor.getByRole("button", { name: /required sections? left/ });
+    await expect(left).toBeVisible();
+    await expect(left).toContainText(/Clinical notes/);
+    await expect(left).toContainText(/Follow-up/);
+    await expect(doctor.getByRole("button", { name: "Complete Consultation" })).toBeDisabled();
   });
 });
