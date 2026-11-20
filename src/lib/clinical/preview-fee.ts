@@ -59,4 +59,37 @@ export function computeClinicFee(
     .join("");
   return { total, parts, summary: `Total: ${formatPeso(total)} (${breakdown})` };
 }
+
+//JJQR - AI (Nov 20, 2026) F5 — Charge is the editor default when nothing is stored; view still shows stored null as Decide at desk
+export type PfStoredDecision = {
+  type: "Charge" | "Waive";
+  amount?: number | null;
+  waiveReason?: string | null;
+};
+
+export function pfEditorDecisionFromStored(
+  stored: PfStoredDecision | null | undefined,
+): "charge" | "waive" {
+  return stored?.type === "Waive" ? "waive" : "charge";
+}
+
+export function pfViewDecisionFromStored(
+  stored: PfStoredDecision | null | undefined,
+): "charge" | "waive" | null {
+  if (stored?.type === "Charge") return "charge";
+  if (stored?.type === "Waive") return "waive";
+  return null;
+}
+
+export function pfEditorAmountFromStored(stored: PfStoredDecision | null | undefined): string {
+  return stored?.type === "Charge" && stored.amount != null ? String(stored.amount) : "";
+}
+
+export function shouldPrefillChargeAmount(
+  decision: "charge" | "waive" | null,
+  amount: string,
+  storedType?: "Charge" | "Waive" | null,
+): boolean {
+  return decision === "charge" && amount.trim() === "" && storedType !== "Charge";
+}
 //JJQR - END

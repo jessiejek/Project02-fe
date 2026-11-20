@@ -83,8 +83,8 @@ test.describe("Consultation2 simplify C1–C6", () => {
 });
 //JJQR - END
 
-//JJQR - AI (Nov 20, 2026) F1–F4
-test.describe("Consultation2 simplify F1–F4 professional fee", () => {
+//JJQR - AI (Nov 20, 2026) F1–F5
+test.describe("Consultation2 simplify F1–F5 professional fee", () => {
   async function openFreshConsult(as: (role: Role) => Promise<Page>, api: (role: Role) => Promise<APIRequestContext>) {
     const staffApi = await api("staff");
     const patient = await createPatient(staffApi, Date.now().toString(36));
@@ -98,7 +98,7 @@ test.describe("Consultation2 simplify F1–F4 professional fee", () => {
     const doctor = await openFreshConsult(as, api);
     await fillRequiredConsultFields(doctor);
     await completeConsultFromUi(doctor);
-    await expect(doctor.getByText("Professional fee: Decide at desk")).toBeVisible();
+    await expect(doctor.getByText(/Professional fee: Charge ₱/)).toBeVisible();
     await expect(doctor.getByRole("button", { name: "Save fee decision" })).toHaveCount(0);
     await doctor.getByRole("button", { name: "Edit", exact: true }).click();
     await expect(doctor.getByRole("heading", { name: "Amend consultation" })).toBeVisible();
@@ -148,6 +148,34 @@ test.describe("Consultation2 simplify F1–F4 professional fee", () => {
     await doctor.getByRole("button", { name: "Edit", exact: true }).click();
     await expect(doctor.getByRole("heading", { name: "Amend consultation" })).toBeVisible();
     await expect(doctor.getByRole("textbox", { name: "Amount" })).toHaveValue("400");
+  });
+
+  test("F5 new visit section 9 defaults to Charge with Amount = Total; saved Waive reloads as Waive", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await steps.getByRole("button", { name: "More", exact: true }).click();
+    await openSectionByTitle(doctor, /Professional Fee/i);
+    await expect(doctor.getByRole("textbox", { name: "Amount" })).toBeVisible();
+    const totalLine = doctor.getByText(/^Total: ₱\d+/);
+    await expect(totalLine).toBeVisible({ timeout: 15_000 });
+    const summary = await totalLine.innerText();
+    const total = /Total: ₱([\d,]+)/.exec(summary)?.[1]?.replace(/,/g, "");
+    expect(total).toBeTruthy();
+    await expect(doctor.getByRole("textbox", { name: "Amount" })).toHaveValue(total!);
+
+    const staffApi = await api("staff");
+    const doctorApi = await api("doctor");
+    const patient = await createPatient(staffApi, Date.now().toString(36));
+    const visit = await completeVisitViaApi({ staff: staffApi, doctor: doctorApi }, patient.patient_id, {
+      pfDecision: "Waive",
+      pfReason: "Indigent patient",
+    });
+    await doctor.goto(`/doctor/consultation2/${visit.booking_id}`);
+    await expect(doctor.getByText("Professional fee: Waive — Indigent patient")).toBeVisible();
+    await doctor.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(doctor.getByRole("heading", { name: "Amend consultation" })).toBeVisible();
+    await expect(doctor.getByRole("textbox", { name: /Reason \(minimum 5 characters\)/ })).toHaveValue("Indigent patient");
+    await expect(doctor.getByRole("textbox", { name: "Amount" })).toHaveCount(0);
   });
 });
 //JJQR - END

@@ -106,7 +106,14 @@ import {
 } from "@/lib/consult-print";
 import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
 import { formatPeso } from "@/lib/format";
-import { computeClinicFee, type ClinicFeeSchedule } from "@/lib/clinical/preview-fee";
+import {
+  computeClinicFee,
+  pfEditorAmountFromStored,
+  pfEditorDecisionFromStored,
+  pfViewDecisionFromStored,
+  shouldPrefillChargeAmount,
+  type ClinicFeeSchedule,
+} from "@/lib/clinical/preview-fee";
 import type {
   Consultation,
   Diagnosis,
@@ -916,7 +923,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Optional for completion (see REQUIRED_SECTIONS above); the tabs' own
   // sub-fields (amount / waive reason) are what's "required" once a tab is chosen.
   // No real table backs this yet, so it stays local-only like Lab Orders/Vaccinations.
-  const [pfDecision, setPfDecision] = useState<"charge" | "waive" | null>(null);
+  //JJQR - AI (Nov 20, 2026) F5 — Charge is the editor default until a stored decision loads
+  const [pfDecision, setPfDecision] = useState<"charge" | "waive" | null>("charge");
   const [pfAmount, setPfAmount] = useState("");
   const [pfWaiveReason, setPfWaiveReason] = useState("");
   // §16.6 — doctor picks the fee line; the backend recomputes the booking total
@@ -1098,6 +1106,14 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     ? computeClinicFee(feeSchedule, visitType, discountCategory, medCertRequested)
     : null;
   const previewFee = feePreview?.total ?? null;
+  //JJQR - END
+
+  //JJQR - AI (Nov 20, 2026) F5 — show/persist the Total as Charge amount when nothing is stored; editor state stays empty until she types or saves
+  const pfAmountShown =
+    previewFee !== null &&
+    shouldPrefillChargeAmount(pfDecision, pfAmount, savedConsultation?.feeDecision?.type ?? null)
+      ? String(previewFee)
+      : pfAmount;
   //JJQR - END
 
   //JJQR - AI (Nov 20, 2026) E1 — diagnosis on the certificate follows diagnoses, then Assessment (no sync effect)
@@ -1393,9 +1409,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         }
         setVaccinations(toVaxDraft(loadedConsultation.vaccinationsAdministered));
         const fd = loadedConsultation.feeDecision;
-        //JJQR - AI (Nov 20, 2026) F4 — restore the stored PF decision as-is; never seed amount from booking.totalFee
-        setPfDecision(fd ? (fd.type === "Charge" ? "charge" : "waive") : null);
-        setPfAmount(fd?.type === "Charge" && fd.amount != null ? String(fd.amount) : "");
+        //JJQR - AI (Nov 20, 2026) F4 F5 — restore Charge/Waive as stored; null becomes Charge in the editor only
+        setPfDecision(pfEditorDecisionFromStored(fd));
+        setPfAmount(pfEditorAmountFromStored(fd));
         setPfWaiveReason(fd?.type === "Waive" ? (fd.waiveReason ?? "") : "");
         //JJQR - END
       }
@@ -1494,7 +1510,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     vaccinations.length > 0,
     false,
     certExists,
-    pfDecision !== null && (pfDecision === "charge" ? pfAmount.trim() !== "" : pfWaiveReason.trim().length >= 5),
+    pfDecision !== null && (pfDecision === "charge" ? pfAmountShown.trim() !== "" : pfWaiveReason.trim().length >= 5),
   ];
   const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
   const followUpSatisfied =
@@ -1645,7 +1661,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       vaccinationsAdministered: vaccinations,
       feeDecision:
         pfDecision === "charge"
-          ? { type: "Charge", amount: pfAmount.trim() === "" ? undefined : Number(pfAmount) }
+          ? { type: "Charge", amount: pfAmountShown.trim() === "" ? undefined : Number(pfAmountShown) }
           : pfDecision === "waive"
             ? { type: "Waive", waiveReason: pfWaiveReason }
             : undefined,
@@ -1685,7 +1701,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         discount_category: discountCategory || null,
         // §16.6 — the doctor's PF call travels on the consultation row.
         pf_decision: pfDecision === "charge" ? "Charge" : pfDecision === "waive" ? "Waive" : null,
-        pf_amount: pfDecision === "charge" ? Number(pfAmount) || null : null,
+        pf_amount: pfDecision === "charge" ? Number(pfAmountShown) || null : null,
         pf_waive_reason: pfDecision === "waive" ? pfWaiveReason || null : null,
       });
     } catch {
@@ -1969,13 +1985,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setFollowUpReason(source?.followUpReason ?? "");
     setFollowUpInstructions(source?.followUpInstructions ?? "");
     setFollowUpReminder(source?.followUpReminder ?? true);
-    setPfDecision(source?.feeDecision ? (source.feeDecision.type === "Charge" ? "charge" : "waive") : null);
+    //JJQR - AI (Nov 20, 2026) F5 — cancel-amend restores stored Charge/Waive; null stored → Charge editor default
+    setPfDecision(pfEditorDecisionFromStored(source?.feeDecision));
     //JJQR - AI (Nov 20, 2026) F4 — cancel-amend restores the stored amount, not booking.totalFee
-    setPfAmount(
-      source?.feeDecision?.type === "Charge" && source.feeDecision.amount != null
-        ? String(source.feeDecision.amount)
-        : "",
-    );
+    setPfAmount(pfEditorAmountFromStored(source?.feeDecision));
     setPfWaiveReason(source?.feeDecision?.type === "Waive" ? (source.feeDecision.waiveReason ?? "") : "");
   }
 
@@ -2190,7 +2203,7 @@ Return to patient queue
           </Card>
           {/*JJQR - AI (Nov 20, 2026) F1 — read-only PF line; Edit opens section 9 */}
           <p className="text-body-md text-on-surface">
-            {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason, computedTotal: previewFee })}{" "}
+            {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmountShown, waiveReason: pfWaiveReason, computedTotal: previewFee })}{" "}
             <button
               type="button"
               onClick={openProfessionalFeeForEdit}
@@ -2341,9 +2354,14 @@ Return to patient queue
                   {sc.followUpDate ? `${sc.followUpDate} — ${sc.followUpReason ?? ""}${sc.followUpInstructions ? ` (${sc.followUpInstructions})` : ""}${sc.followUpReminder ? " · reminder on" : ""}` : "No follow-up recorded."}
                 </p>
               </Card>
-              {/*JJQR - AI (Nov 20, 2026) F1 — same read-only PF line on the completed record; Edit opens section 9 */}
+              {/*JJQR - AI (Nov 20, 2026) F1 F5 — read-only line uses the stored decision (Decide at desk when null) */}
               <p className="text-body-md text-on-surface">
-                {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason, computedTotal: previewFee })}{" "}
+                {formatProfessionalFeeLine({
+                  decision: pfViewDecisionFromStored(sc.feeDecision),
+                  amount: pfEditorAmountFromStored(sc.feeDecision),
+                  waiveReason: sc.feeDecision?.type === "Waive" ? (sc.feeDecision.waiveReason ?? "") : "",
+                  computedTotal: previewFee,
+                })}{" "}
                 <button
                   type="button"
                   onClick={openProfessionalFeeForEdit}
@@ -3252,7 +3270,7 @@ Return to patient queue
                       </div>
                       {pfDecision === "charge" && (
                         <div className="space-y-md">
-                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmount} onChange={(e) => setPfAmount(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmountShown} onChange={(e) => setPfAmount(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
                           <select className="w-full rounded-lg border border-outline-variant px-md py-sm">
                             <option>Pay at Clinic</option>
                             <option>Online</option>

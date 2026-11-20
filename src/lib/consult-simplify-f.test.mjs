@@ -1,4 +1,4 @@
-//JJQR - AI (Nov 20, 2026) F1–F4 — static source assertions for professional fee
+//JJQR - AI (Nov 20, 2026) F1–F5 — static source assertions for professional fee
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -81,10 +81,50 @@ test('F4 stored PF decisions load as-is (no totalFee overwrite); Charge with nul
   assert.doesNotMatch(page, /setPfAmount\(String\(realBooking\.totalFee/);
   assert.doesNotMatch(page, /pf_amount \?\? 0/);
   assert.doesNotMatch(page, /feeDecision\?\.amount \?\? booking\?\.totalFee/);
-  assert.match(page, /fd\?\.type === "Charge" && fd\.amount != null \? String\(fd\.amount\) : ""/);
+  assert.match(page, /pfEditorAmountFromStored\(fd\)/);
   assert.match(page, /consultRes\.data\.pf_amount \?\? undefined/);
-  assert.match(page, /pfAmount\.trim\(\) === "" \? undefined : Number\(pfAmount\)/);
+  assert.match(page, /pfAmountShown\.trim\(\) === "" \? undefined : Number\(pfAmountShown\)/);
   assert.match(page, /\(Total: \$\{formatPeso\(opts\.computedTotal\)\}\)/);
   assert.match(page, /computedTotal: previewFee/);
+});
+
+test('F5 Charge is the editor default when pf_decision is null; view still shows stored Decide at desk', () => {
+  const formatMod = load('lib/format.ts');
+  const {
+    pfEditorDecisionFromStored,
+    pfViewDecisionFromStored,
+    pfEditorAmountFromStored,
+    shouldPrefillChargeAmount,
+    computeClinicFee,
+  } = load('lib/clinical/preview-fee.ts', (id) => {
+    if (String(id).includes('format')) return formatMod;
+    return {};
+  });
+  assert.equal(pfEditorDecisionFromStored(undefined), 'charge');
+  assert.equal(pfEditorDecisionFromStored(null), 'charge');
+  assert.equal(pfEditorDecisionFromStored({ type: 'Charge', amount: 400 }), 'charge');
+  assert.equal(pfEditorDecisionFromStored({ type: 'Waive', waiveReason: 'indigent' }), 'waive');
+  assert.equal(pfViewDecisionFromStored(undefined), null);
+  assert.equal(pfViewDecisionFromStored({ type: 'Charge', amount: 400 }), 'charge');
+  assert.equal(pfViewDecisionFromStored({ type: 'Waive' }), 'waive');
+  assert.equal(pfEditorAmountFromStored({ type: 'Charge', amount: 400 }), '400');
+  assert.equal(pfEditorAmountFromStored({ type: 'Charge', amount: null }), '');
+  assert.equal(pfEditorAmountFromStored({ type: 'Waive' }), '');
+  assert.equal(shouldPrefillChargeAmount('charge', '', null), true);
+  assert.equal(shouldPrefillChargeAmount('charge', '', 'Charge'), false);
+  assert.equal(shouldPrefillChargeAmount('waive', '', null), false);
+  const newVisit = computeClinicFee({ consultation: 450, followUp: 350, seniorPwd: 400, medCert: 50, discountPct: 0.2 }, 'New', '', false);
+  assert.equal(newVisit.total, 450);
+  assert.match(page, /useState<"charge" \| "waive" \| null>\("charge"\)/);
+  assert.match(page, /pfEditorDecisionFromStored/);
+  assert.match(page, /pfViewDecisionFromStored\(sc\.feeDecision\)/);
+  assert.match(page, /const pfAmountShown/);
+  assert.match(page, /shouldPrefillChargeAmount/);
+  assert.match(page, /value=\{pfAmountShown\}/);
+  assert.match(page, /Professional fee: Decide at desk/);
+  const loadStart = page.indexOf('async function load()');
+  const loadEnd = page.indexOf('if (cancelled) return;', loadStart);
+  const loadBody = page.slice(loadStart, loadEnd);
+  assert.doesNotMatch(loadBody, /persistConsultation/);
 });
 //JJQR - END
