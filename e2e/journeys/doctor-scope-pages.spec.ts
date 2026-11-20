@@ -57,7 +57,9 @@ test.describe("doctor scope · pages and lists", () => {
     await expect(page.locator("h1, h2").first()).toBeVisible();
 
     await page.goto(`/doctor/consultation2/${ticket.booking_id}`);
-    await expect(page.getByText(`E2E ${tag} Tester`).first()).toBeVisible();
+    //JJQR - AI (Nov 20, 2026) - batch 2: the redesigned patient banner no longer prints the name as one text node
+    await expect(page.getByText(new RegExp(`E2E ${tag}.*Tester`, "i")).first()).toBeVisible();
+    //JJQR - END
     await page.getByRole("button", { name: "View Patient History" }).click();
     const history = page.getByRole("dialog");
     await expect(history).toContainText("Patient History");

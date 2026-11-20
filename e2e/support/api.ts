@@ -1,5 +1,7 @@
 import { request as pwRequest, type APIRequestContext } from "@playwright/test";
 import { BE_URL, DEV_PASSWORD } from "../playwright.config";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 export type Role = "admin" | "staff" | "doctor" | "patient";
 const EMAIL: Record<Role, string> = {
@@ -11,21 +13,62 @@ const EMAIL: Record<Role, string> = {
 
 const tokenCache = new Map<Role, string>();
 
-/** Raw .NET access token for a dev role (cached for the run). */
-export async function token(role: Role): Promise<string> {
-  const cached = tokenCache.get(role);
-  if (cached) return cached;
-  const ctx = await pwRequest.newContext();
-  const res = await ctx.post(`${BE_URL}/api/auth/login`, {
-    data: { email: EMAIL[role], password: DEV_PASSWORD },
-  });
-  if (!res.ok()) throw new Error(`login ${role} → ${res.status()} ${await res.text()}`);
-  const body = await res.json();
-  await ctx.dispose();
-  const t = body.accessToken as string;
-  tokenCache.set(role, t);
-  return t;
+//JJQR - AI (Nov 20, 2026) - batch 2 (rate limit): the API's /api/auth/* limiter is per client IP, so a separate account per spec would not help.
+// What does help is not logging in again: keep each role's access token on disk (e2e/.auth/, git-ignored) and reuse it across workers
+// (Playwright starts a fresh worker after every failed test, which used to throw the in-memory cache away) until ~2 minutes before it expires.
+// A real 429 on login is retried with a wait instead of failing the test.
+const TOKEN_DIR = join(__dirname, "..", ".auth");
+const tokenFile = (role: Role) => join(TOKEN_DIR, `api-token-${role}.json`);
+function jwtExp(t: string): number {
+  try {
+    return JSON.parse(Buffer.from(t.split(".")[1], "base64url").toString("utf8")).exp * 1000;
+  } catch {
+    return 0;
+  }
 }
+function readTokenFromDisk(role: Role): string | null {
+  try {
+    const f = JSON.parse(readFileSync(tokenFile(role), "utf8")) as { token: string; be: string };
+    if (f.be === BE_URL && jwtExp(f.token) - Date.now() > 120_000) return f.token;
+  } catch {
+    /* no cache yet */
+  }
+  return null;
+}
+
+/** Raw .NET access token for a dev role (cached in memory and on disk). */
+export async function token(role: Role): Promise<string> {
+  const cached = tokenCache.get(role) ?? readTokenFromDisk(role);
+  if (cached && jwtExp(cached) - Date.now() > 120_000) {
+    tokenCache.set(role, cached);
+    return cached;
+  }
+  const ctx = await pwRequest.newContext();
+  try {
+    for (let attempt = 0; ; attempt++) {
+      const res = await ctx.post(`${BE_URL}/api/auth/login`, {
+        data: { email: EMAIL[role], password: DEV_PASSWORD },
+      });
+      if (res.status() === 429 && attempt < 6) {
+        await new Promise((r) => setTimeout(r, 12_000));
+        continue;
+      }
+      if (!res.ok()) throw new Error(`login ${role} → ${res.status()} ${await res.text()}`);
+      const t = (await res.json()).accessToken as string;
+      tokenCache.set(role, t);
+      try {
+        mkdirSync(TOKEN_DIR, { recursive: true });
+        writeFileSync(tokenFile(role), JSON.stringify({ token: t, be: BE_URL }));
+      } catch {
+        /* cache is best-effort */
+      }
+      return t;
+    }
+  } finally {
+    await ctx.dispose();
+  }
+}
+//JJQR - END
 
 /** An APIRequestContext pre-authorised as `role`, based at the .NET API. */
 export async function apiAs(role: Role): Promise<APIRequestContext> {

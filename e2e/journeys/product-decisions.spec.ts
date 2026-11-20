@@ -1,5 +1,6 @@
 import { test, expect } from "../support/fixtures";
 import { checkInWalkIn, createPatient, getBooking, getConsultationByBooking } from "../support/api";
+import { completeConsultFromUi, fillRequiredConsultFields, showOccasionalSections } from "../support/consultation-flow";
 
 //JJQR - AI (Oct 31, 2026)
 test.describe("Product decisions regression", () => {
@@ -36,16 +37,21 @@ test.describe("Product decisions regression", () => {
     await expect(page.getByRole("listbox").getByRole("option").filter({ hasText: patient.first_name })).not.toHaveCount(0, { timeout: 15_000 });
   });
 
-  test("vaccinations section visible without occasional toggle", async ({ as, api }) => {
+  //JJQR - AI (Nov 20, 2026) - batch 2: the redesign (consult-uiux #5) deliberately moved Vaccinations + Professional Fee behind "More"; this test now asserts that
+  test("vaccinations section is behind More on the step bar and appears when More is opened", async ({ as, api }) => {
     const staffApi = await api("staff");
     const tag = Date.now().toString(36);
     const patient = await createPatient(staffApi, tag);
     const ticket = await checkInWalkIn(staffApi, patient.patient_id, { visit_type: "New" });
     const page = await as("doctor");
     await page.goto(`/doctor/consultation2/${ticket.booking_id}?mode=complete`);
-    await expect(page.getByRole("heading", { name: /Vaccinations/i })).toBeVisible({ timeout: 15_000 });
-    // Lab/MedCert/PF remain under Show occasional — button may still be present
+    const steps = page.getByRole("navigation", { name: "Consultation sections" });
+    await expect(steps.getByRole("button", { name: /1\. Clinical notes/ })).toBeVisible({ timeout: 15_000 });
+    await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
+    await showOccasionalSections(page);
+    await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
   });
+  //JJQR - END
 
   test("patient cancel pending uses in-app modal", async ({ as, api }) => {
     const patientApi = await api("patient");
@@ -58,12 +64,15 @@ test.describe("Product decisions regression", () => {
 
     const page = await as("patient");
     await page.goto(`/patient/bookings/${booked.booking_id}`);
-    await expect(page.getByRole("button", { name: "Cancel Booking" })).toBeVisible({ timeout: 15_000 });
-    await page.getByRole("button", { name: "Cancel Booking" }).click();
-    await expect(page.getByRole("dialog", { name: /Cancel/i })).toBeVisible();
-    await page.getByPlaceholder("Reason (optional)").fill("E2E schedule conflict");
-    await page.getByRole("button", { name: "Confirm Cancel" }).click();
-    await expect(page.getByText("Cancelled")).toBeVisible({ timeout: 15_000 });
+    //JJQR - AI (Nov 20, 2026) - batch 2: the page's button is "Cancel booking" and its modal has a labelled Reason box
+    await expect(page.getByRole("button", { name: "Cancel booking" })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Cancel booking" }).click();
+    const dlg = page.getByRole("dialog", { name: /Cancel this booking/i });
+    await expect(dlg).toBeVisible();
+    await dlg.getByLabel(/Reason/).fill("E2E schedule conflict");
+    await dlg.getByRole("button", { name: "Cancel booking" }).click();
+    await expect(page.getByText("Cancelled").first()).toBeVisible({ timeout: 15_000 });
+    //JJQR - END
   });
 
   test("allergies editable on completed consult view", async ({ as, api }) => {
@@ -77,37 +86,8 @@ test.describe("Product decisions regression", () => {
 
     const doctor = await as("doctor");
     await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
-    await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
-
-    await doctor.getByPlaceholder("Chief Complaint*").fill("E2E allergies view — sore throat");
-    await doctor.getByRole("heading", { name: /2\. Vital Signs/ }).click();
-    await doctor.getByPlaceholder("Enter blood pressure").fill("118/76");
-    await doctor.getByPlaceholder("Enter pulse rate").fill("72");
-    await doctor.getByPlaceholder("Enter temperature").fill("37.0");
-    await doctor.getByPlaceholder("Enter respiratory rate").fill("16");
-    await doctor.getByPlaceholder("Enter o2 saturation").fill("99");
-    await doctor.getByPlaceholder("Enter weight").fill("65");
-    await doctor.getByPlaceholder("Enter height").fill("165");
-    await doctor.getByRole("button", { name: "Save", exact: true }).click();
-    await doctor.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-    await expect(doctor.getByText(/Vitals saved at/)).toBeVisible();
-
-    await doctor.getByRole("heading", { name: /3\. Diagnosis/ }).click();
-    const dxInput = doctor.getByPlaceholder(/Diagnosis \(/);
-    await dxInput.fill("Acute pharyngitis");
-    const addButtons = doctor.getByRole("button", { name: "Add", exact: true });
-    await (await addButtons.count()) > 1 ? addButtons.nth(1).click() : addButtons.click();
-    await expect(doctor.getByText("Acute pharyngitis (Primary)")).toBeVisible();
-
-    await doctor.getByRole("heading", { name: /4\. Prescription/ }).click();
-    await doctor.getByText(/No medicines this visit/i).click();
-    await doctor.locator("h3").filter({ hasText: /Follow-up/ }).click();
-    await doctor.getByRole("button", { name: "Select date" }).click();
-    await doctor.getByRole("button", { name: "Today" }).click();
-
-    await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).first().click();
-    await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
-    await expect(doctor.getByText("Consultation saved")).toBeVisible({ timeout: 15_000 });
+    await fillRequiredConsultFields(doctor, "E2E allergies view — sore throat");
+    await completeConsultFromUi(doctor);
     await expect
       .poll(async () => (await getConsultationByBooking(doctorApi, ticket.booking_id))?.status, { timeout: 15_000 })
       .toBe("Completed");

@@ -1,40 +1,79 @@
 import { expect, type Page } from "@playwright/test";
 
-/** Fill gates required for Complete on consultation2 (Grace clinic). */
+//JJQR - AI (Nov 20, 2026) - batch 2: helpers rewritten for the redesigned /doctor/consultation2 screen
+// ("1. Clinical notes" step bar, labelled text boxes, "Review notes / Review section" → dialog → "Confirm & Save",
+//  "Save vital signs", "Review & complete" (aria "Complete Consultation") → "Completion Checklist" → "Confirm & Complete",
+//  amend mode = "Amend consultation" + "Save amendment" + "Cancel amendment").
+const stepBar = (page: Page) => page.getByRole("navigation", { name: "Consultation sections" });
+
+/** Open a step in the section bar by its title, e.g. /3\. Diagnosis/. */
+export async function openSectionByTitle(page: Page, titleRe: RegExp) {
+  await stepBar(page).getByRole("button", { name: titleRe }).first().click();
+}
+
+/** Open "1. Clinical notes" and wait for the Chief complaint box. */
+export async function expandSoapSection(page: Page) {
+  await openSectionByTitle(page, /1\. Clinical notes/i);
+  await expect(page.getByRole("textbox", { name: /Chief complaint/i })).toBeVisible();
+}
+
+export const chiefComplaintBox = (page: Page) => page.getByRole("textbox", { name: /Chief complaint/i });
+
+/** Click the confirming button of the open dialog (Confirm & Save / Save vital signs / …) — never Cancel / Go Back / Close. */
+export async function confirmReviewSectionSave(page: Page) {
+  const dlg = page.getByRole("dialog");
+  await expect(dlg).toBeVisible();
+  await dlg.getByRole("button").filter({ hasNotText: /^(Cancel|Go Back|Close)$/ }).last().click();
+  await expect(dlg).toHaveCount(0, { timeout: 15_000 });
+}
+
+/** Clinical notes → "Review notes" → confirm. */
+export async function clickSoapToolbarSave(page: Page) {
+  await page.getByRole("main").getByRole("button", { name: "Review notes" }).first().click();
+}
+
+/** Open section header "Review section" → confirm (works for every section that has it). */
+export async function saveOpenSectionViaReview(page: Page) {
+  await page.getByRole("main").getByRole("button", { name: /^Review (section|notes)$/ }).first().click();
+  await confirmReviewSectionSave(page);
+}
+
+/** Fill every gate required for Complete on consultation2. */
 export async function fillRequiredConsultFields(page: Page, chiefComplaint = "E2E sore throat") {
   await expandSoapSection(page);
-  await page.getByPlaceholder("Chief Complaint*").fill(chiefComplaint);
+  await chiefComplaintBox(page).fill(chiefComplaint);
 
-  await page.getByRole("button", { name: /2\. Vital Signs/ }).first().click();
-  await page.getByPlaceholder("Enter blood pressure").fill("118/76");
-  await page.getByPlaceholder("Enter pulse rate").fill("72");
-  await page.getByPlaceholder("Enter temperature").fill("37.0");
-  await page.getByPlaceholder("Enter respiratory rate").fill("16");
-  await page.getByPlaceholder("Enter o2 saturation").fill("99");
-  await page.getByPlaceholder("Enter weight").fill("65");
-  await page.getByPlaceholder("Enter height").fill("165");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-  await expect(page.getByText(/Vitals saved at/)).toBeVisible();
+  await openSectionByTitle(page, /2\. Vital Signs/);
+  await page.getByRole("textbox", { name: /Enter blood pressure/i }).fill("118/76");
+  await page.getByRole("textbox", { name: /Enter pulse rate/i }).fill("72");
+  for (const [n, v] of [[/Enter temperature/i, "37.0"], [/Enter respiratory rate/i, "16"], [/Enter o2 saturation/i, "99"], [/Enter weight/i, "65"], [/Enter height/i, "165"]] as [RegExp, string][]) {
+    const box = page.getByRole("textbox", { name: n });
+    if (await box.count()) await box.first().fill(v);
+  }
+  await page.getByRole("button", { name: "Save vital signs" }).click();
+  await confirmReviewSectionSave(page);
 
-  await page.getByRole("button", { name: /3\. Diagnosis/ }).first().click();
-  const dxInput = page.getByPlaceholder(/Diagnosis \(/);
-  await dxInput.fill("Acute pharyngitis");
-  const addButtons = page.getByRole("button", { name: "Add", exact: true });
-  await ((await addButtons.count()) > 1 ? addButtons.nth(1) : addButtons).click();
-  await expect(page.getByText("Acute pharyngitis (Primary)")).toBeVisible();
+  await openSectionByTitle(page, /3\. Diagnosis/);
+  await page.getByRole("textbox", { name: /Diagnosis \(search ICD-10/ }).fill("Acute pharyngitis");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText(/Acute pharyngitis/).first()).toBeVisible();
 
-  await page.getByRole("button", { name: /4\. Prescription/ }).first().click();
-  await page.getByText(/No medicines this visit/i).click();
+  await openSectionByTitle(page, /4\. Prescription/);
+  await page.getByRole("checkbox", { name: /No medicines this visit/ }).click({ force: true });
 
-  await page.locator("h3").filter({ hasText: /Follow-up/ }).click();
-  await expect(page.getByRole("button", { name: "Select date" })).toBeVisible();
-  await page.getByRole("button", { name: "Select date" }).click();
-  await page.getByRole("button", { name: "Today" }).click();
+  await markNoFollowUp(page);
+}
+
+/** Follow-up step: choose "No follow-up" AND tick "No follow-up for this visit" (the radio alone does not satisfy the step). */
+export async function markNoFollowUp(page: Page) {
+  await openSectionByTitle(page, /6\. Follow-up/);
+  await page.getByRole("radio", { name: "No follow-up" }).check({ force: true });
+  await page.getByRole("checkbox", { name: /No follow-up for this visit/ }).check();
 }
 
 export async function completeConsultFromUi(page: Page) {
-  await page.getByRole("button", { name: "Complete Consultation", exact: true }).first().click();
+  await expect(page.getByRole("button", { name: "Complete Consultation" })).toBeEnabled({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Complete Consultation" }).click();
   await page.getByRole("button", { name: "Confirm & Complete" }).click();
   await expect(page.getByText("Consultation saved")).toBeVisible({ timeout: 20_000 });
 }
@@ -47,48 +86,20 @@ export async function openCompletedConsult(page: Page, bookingId: string) {
 export async function enterAmendMode(page: Page) {
   await page.getByRole("button", { name: "Edit Consultation" }).click();
   await expect(page.getByText(/Manual save only/)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Consultation" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save Changes" })).toBeEnabled({ timeout: 15_000 });
-  await expect(page.getByRole("button", { name: "Cancel", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Amend consultation" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save amendment" })).toBeEnabled({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Cancel amendment" })).toBeVisible();
 }
 
 export async function assertStillInAmendMode(page: Page, contextLabel: string) {
   await expect(page.getByRole("button", { name: "Edit Consultation" }), `${contextLabel}: should not be view-only`).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Save Changes" }), contextLabel).toBeVisible();
-  await expect(page.locator("main").getByRole("button", { name: "Cancel", exact: true }), contextLabel).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save amendment" }), contextLabel).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel amendment" }), contextLabel).toBeVisible();
   await expect(page.getByText(/Manual save only/)).toBeVisible();
 }
 
-export async function confirmReviewSectionSave(page: Page) {
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Confirm & Save" }).click();
-}
-
-export async function expandSoapSection(page: Page) {
-  await page.getByRole("button", { name: /1\. SOAP/i }).first().click();
-  await expect(page.getByPlaceholder("Chief Complaint*")).toBeVisible();
-}
-
-export async function clickSoapToolbarSave(page: Page) {
-  await page
-    .getByRole("button", { name: "Save as Template" })
-    .locator("xpath=..")
-    .getByRole("button", { name: "Save", exact: true })
-    .click();
-}
-
-/** Section header Save → review modal → Confirm & Save (amend/complete progress save). */
-export async function saveOpenSectionViaReview(page: Page) {
-  await page.locator(".mt-md").getByRole("button", { name: "Save", exact: true }).first().click();
-  await confirmReviewSectionSave(page);
-}
-
-export async function openSectionByTitle(page: Page, titleRe: RegExp) {
-  await page.getByRole("button", { name: titleRe }).first().click();
-}
-
 export async function showOccasionalSections(page: Page) {
-  const toggle = page.getByRole("button", { name: "More", exact: true });
+  const toggle = stepBar(page).getByRole("button", { name: "More", exact: true });
   if (await toggle.isVisible().catch(() => false)) await toggle.click();
 }
+//JJQR - END
