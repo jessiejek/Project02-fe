@@ -38,4 +38,4 @@ Examples: a lost/stolen laptop or phone that was signed in, a wrong person recei
 - The server needs these set as **environment variables**, not in files: the database connection, the signing secret (`Jwt__Secret`), the allowed web address (`Cors__AllowedOrigins__0`). In production the API refuses to start on the placeholder secret.
 - Serve the site over **HTTPS only**.
 - Back up the database and the uploads folder, and keep backups as protected as the live data.
-- Keep the access log and sign-in log (Admin → Audit log; each patient's *Access log* tab).
+- Keep the access log and sign-in log (Admin → Audit log → Record type "Auth" for sign-ins and failed sign-ins, "Access" for record views; each patient's *Access log* tab).
