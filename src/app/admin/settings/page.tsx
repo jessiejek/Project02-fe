@@ -1,5 +1,6 @@
 "use client";
 
+import { DataRequestsPanel } from "@/components/admin/DataRequestsPanel"; // JJQR - AI (Nov 20, 2026) - PV-14 // JJQR - END
 import { friendlyError } from "@/lib/api/friendly-error";
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -392,6 +393,9 @@ export default function AdminSettingsPage() {
                 {bumpConfirmOpen && <Button variant="ghost" disabled={saving} onClick={() => setBumpConfirmOpen(false)}>Cancel</Button>}
               </div>
             </section>
+            {/* JJQR - AI (Nov 20, 2026) - PV-14: patients' correction / deletion requests */}
+            <DataRequestsPanel />
+            {/* JJQR - END */}
           </div>
         )}
 

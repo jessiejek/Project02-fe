@@ -162,7 +162,7 @@ function RegisterPageForm() {
         {/* JJQR - AI (Nov 20, 2026) - PV-12: optional, unticked. Creating an account does not depend on it; the consent screen before booking records the decision. */}
         <label className="flex items-start gap-sm text-body-md text-on-surface">
           <input type="checkbox" checked={readNotice} onChange={(e) => setReadNotice(e.target.checked)} className="mt-1 h-4 w-4" />
-          <span>I have read the <Link href="/privacy" target="_blank" className="underline">Privacy Notice</Link> (optional — you will be asked again before you book).</span>
+          <span>I have read the <a href="/api/public/privacy-notice" target="_blank" className="underline" rel="noopener">Privacy Notice</a> (optional — you will be asked again before you book).</span>
         </label>
         {/* JJQR - END */}
 

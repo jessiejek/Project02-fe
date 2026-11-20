@@ -34,8 +34,9 @@ test.describe("/patient/privacy-consent", () => {
     expect(mine.consented_at).toBeTruthy();
   });
 
-  test("a registered patient already has consent: no consent banner on the dashboard", async ({ loginAs, tag, cleanup }) => {
-    const me = await newPatient({ tag, cleanup }, "noban");
+  // JJQR - AI (Nov 20, 2026) - PV-12: registering no longer pre-agrees to anything; consent exists only if the patient ticked the notice box
+  test("a patient who ticked the privacy notice at registration has consent: no consent banner on the dashboard", async ({ loginAs, tag, cleanup }) => {
+    const me = await newPatient({ tag, cleanup }, "noban", { acceptedPrivacyNotice: true });
     const page = await loginAs(me.email, me.password);
     await page.goto("/patient/dashboard");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Welcome back");
