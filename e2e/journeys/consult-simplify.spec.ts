@@ -211,13 +211,11 @@ test.describe("Consultation2 simplify E1–E5 medical certificate", () => {
     await doctor.getByRole("button", { name: "Save without printing" }).click();
     await doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ }).getByRole("button", { name: /Confirm & Save/ }).click();
     await expect(doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ })).toHaveCount(0, { timeout: 15_000 });
-    await steps.getByRole("button", { name: "More", exact: true }).click();
     await openSectionByTitle(doctor, /Professional Fee/i);
     await expect(doctor.getByText("Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)")).toBeVisible();
     await expect(doctor.getByText(/Medical certificate \+₱50 — included because a certificate was issued/)).toBeVisible();
     await openSectionByTitle(doctor, /7\. Medical Certificate/i);
     await doctor.getByRole("button", { name: "Remove certificate" }).click();
-    await steps.getByRole("button", { name: "More", exact: true }).click();
     await openSectionByTitle(doctor, /Professional Fee/i);
     await expect(doctor.getByText("Total: ₱350 (Follow-up ₱350)")).toBeVisible();
     await expect(doctor.getByText(/included because a certificate was issued/)).toHaveCount(0);
