@@ -1,12 +1,17 @@
 /**
  * Printable clinic-form HTML builders (medical certificate, prescription, lab
  * request). Loaded by unit tests via Node's type stripping — keep this file
- * free of TypeScript-only syntax (enums, parameter properties, imports).
+ * free of TypeScript-only syntax (enums, parameter properties).
  *
  * Letterhead is pre-printed stationery (LETTERHEAD) and is not taken from
  * clinic settings. Callers pass already-formatted dates/age; this module only
  * escapes and lays out.
  */
+
+//JJQR - AI (Nov 20, 2026)
+import { parseRxSig, rxDisplayName } from "./rx-sig-parse.ts";
+import { timingToSlots } from "./rx-structured.ts";
+//JJQR - END
 
 interface HtmlDoctor {
   full_name: string;
@@ -30,6 +35,9 @@ interface HtmlRxLine {
   instruction?: string | null;
   timing?: string | null;
   meal_relation?: string | null;
+  //JJQR - AI (Nov 20, 2026)
+  as_needed?: boolean | null;
+  //JJQR - END
   duration_kind?: string | null;
   duration_value?: number | null;
   indication?: string | null;
@@ -620,38 +628,37 @@ export function buildMedicalCertificateHtml(opts: McHtmlOpts): string {
   return "<style>" + css + '</style><div class="form form-mc">' + inner + "</div>";
 }
 
-function timingHas(timing: string | null | undefined, slot: string): boolean {
-  const parts = (timing ?? "").split(",");
-  const want = slot.toLowerCase();
-  for (let i = 0; i < parts.length; i++) {
-    if (parts[i].trim().toLowerCase() === want) return true;
+//JJQR - AI (Nov 20, 2026)
+function slotSpan(label: string, kind: string): string {
+  const cls = kind === "pill" ? "slot pill" : kind === "faint" ? "slot faint" : "slot";
+  return '<span class="' + cls + '">' + label + "</span>";
+}
+
+function slotLine(slots: string[], asNeeded: boolean, asDirected: boolean): string {
+  if ((asNeeded || asDirected) && slots.length === 0) {
+    const note = asNeeded ? "as needed" : "as directed";
+    return '<span class="slot-note">' + note + "</span>";
   }
-  return false;
-}
-
-function pill(label: string, on: boolean): string {
-  return '<span class="slot' + (on ? " pill" : "") + '">' + label + "</span>";
-}
-
-function slotLine(timing: string | null | undefined): string {
-  const slots = [
-    ["BREAKFAST", "Breakfast"],
-    ["LUNCH", "Lunch"],
-    ["DINNER", "Dinner"],
-    ["BEDTIME", "Bedtime"],
-  ];
+  const chosen: { [k: string]: boolean } = {};
+  for (let i = 0; i < slots.length; i++) chosen[slots[i]] = true;
+  const mark = slots.length > 0;
+  const labels = ["BREAKFAST", "LUNCH", "DINNER", "BEDTIME"];
   const parts: string[] = [];
-  for (let i = 0; i < slots.length; i++) {
+  for (let i = 0; i < labels.length; i++) {
     if (i) parts.push(" - ");
-    parts.push(pill(slots[i][0], timingHas(timing, slots[i][1])));
+    const kind = mark ? (chosen[labels[i]] ? "pill" : "faint") : "plain";
+    parts.push(slotSpan(labels[i], kind));
   }
   return parts.join("");
 }
 
 function mealLine(meal: string | null | undefined): string {
-  const m = (meal ?? "").trim().toLowerCase();
-  return pill("before/", m === "before") + " " + pill("after", m === "after");
+  const m = meal === "before" || meal === "after" ? meal : null;
+  const beforeKind = m ? (m === "before" ? "pill" : "faint") : "plain";
+  const afterKind = m ? (m === "after" ? "pill" : "faint") : "plain";
+  return slotSpan("before/", beforeKind) + " " + slotSpan("after", afterKind);
 }
+//JJQR - END
 
 function durFill(kind: string | null | undefined, want: string, value: number | null | undefined): string {
   if (kind === want && value !== null && value !== undefined) return e(String(value));
@@ -699,17 +706,56 @@ function sigFreeText(item: HtmlRxLine): string {
   return collapseDupFirstWord(text);
 }
 
-function rxRow(item: HtmlRxLine | null): string {
-  const name = item ? [item.generic_name, item.dosage].filter(Boolean).join(" ") : "";
-  const qty = item ? item.quantity : "";
-  const sig = item ? sigFreeText(item) : "";
+//JJQR - AI (Nov 20, 2026)
+function savedMeal(mealRelation: string | null | undefined): "before" | "after" | null {
+  const m = (mealRelation ?? "").trim().toLowerCase();
+  if (m === "before" || m === "after") return m;
+  return null;
+}
+
+function savedPrintSlots(timing: string | null | undefined): string[] {
+  const labels = timingToSlots(timing);
+  const out: string[] = [];
+  for (let i = 0; i < labels.length; i++) out.push(labels[i].toUpperCase());
+  return out;
+}
+
+function hasSavedStructured(item: HtmlRxLine): boolean {
+  const meal = (item.meal_relation ?? "").trim();
+  const timing = (item.timing ?? "").trim();
+  return meal.length > 0 || timing.length > 0 || typeof item.as_needed === "boolean";
+}
+
+function rxRow(item: HtmlRxLine): string {
+  let meal: "before" | "after" | null;
+  let slots: string[];
+  let asNeeded: boolean;
+  let asDirected: boolean;
+  if (hasSavedStructured(item)) {
+    meal = savedMeal(item.meal_relation);
+    slots = savedPrintSlots(item.timing);
+    asNeeded = item.as_needed === true;
+    asDirected = false;
+  } else {
+    const parsed = parseRxSig({
+      instruction: item.instruction,
+      route: item.route,
+      timing: item.timing,
+      mealRelation: item.meal_relation,
+    });
+    meal = parsed.meal;
+    slots = parsed.slots;
+    asNeeded = parsed.asNeeded;
+    asDirected = parsed.asDirected;
+  }
+  const name = rxDisplayName(item.generic_name, item.dosage);
+  const qty = item.quantity;
+  const sig = sigFreeText(item);
   const sigClass = "sig-free" + (sig.length > 70 ? " sig-long" : "");
-  const indication = item ? item.indication ?? "" : "";
-  const kind = item ? item.duration_kind : "";
-  const val = item ? item.duration_value : null;
+  const indication = item.indication ?? "";
+  const kind = item.duration_kind;
+  const val = item.duration_value;
   const maintain = kind === "Maintain" ? "✓" : "";
-  const meal = item ? item.meal_relation : "";
-  const timing = item ? item.timing : "";
   return (
     '<tr class="rx-row">' +
       '<td class="rx-med">' +
@@ -722,7 +768,7 @@ function rxRow(item: HtmlRxLine | null): string {
           '<span class="' + sigClass + '">' + e(sig) + "</span>" +
           '<span class="meal">' + mealLine(meal) + "</span>" +
         "</div>" +
-        '<div class="rx-slots">' + slotLine(timing) + "</div>" +
+        '<div class="rx-slots">' + slotLine(slots, asNeeded, asDirected) + "</div>" +
       "</td>" +
       '<td class="rx-dur">' +
         '<div class="dur-m"><span class="cb">' + maintain + "</span> Maintain</div>" +
@@ -733,14 +779,16 @@ function rxRow(item: HtmlRxLine | null): string {
     "</tr>"
   );
 }
+//JJQR - END
 
 export function buildPrescriptionHtml(opts: RxHtmlOpts): string {
-  const n = Math.max(5, opts.items.length);
+  //JJQR - AI (Nov 20, 2026)
   const rows: string[] = [];
-  for (let i = 0; i < n; i++) {
-    rows.push(rxRow(i < opts.items.length ? opts.items[i] : null));
+  for (let i = 0; i < opts.items.length; i++) {
+    rows.push(rxRow(opts.items[i]));
   }
   const tall = opts.items.length > 5;
+  //JJQR - END
   const css =
     shellCss(opts.pageSize, "148mm", "210mm") +
     a5LetterheadCss("1.58in") +
@@ -871,7 +919,16 @@ export function buildPrescriptionHtml(opts: RxHtmlOpts): string {
   margin: 0 -2px;
   box-sizing: border-box;
   line-height: 1.15;
+  /* JJQR - AI (Nov 20, 2026) */
+  font-weight: 700;
 }
+.faint { color: #aaa; }
+.slot-note {
+  font-size: 6pt;
+  color: #555;
+  font-style: italic;
+}
+/* JJQR - END */
 .rx-dur { font-size: 6pt; line-height: 1.35; }
 .dur-m { margin-bottom: 1px; }
 .cb {

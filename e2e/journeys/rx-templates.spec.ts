@@ -16,17 +16,10 @@ test.describe("Consultation2 Rx templates", () => {
     return doctor;
   }
 
-  test("tapping a template adds all its medicines; before allergies are reviewed it says why instead of doing nothing", async ({ as, api }) => {
+  test("tapping a template adds all its medicines immediately", async ({ as, api }) => {
     const doctor = await openRxTemplates(as, api);
     await expect(doctor.getByText(/Prescription items \(0\)/)).toBeVisible();
 
-    // allergy gate: no silent no-op
-    await doctor.getByRole("button", { name: "Acute gastroenteritis" }).first().click();
-    await expect(doctor.getByTestId("rx-template-notice")).toContainText("Review the patient's allergies first");
-    await expect(doctor.getByText(/Prescription items \(0\)/)).toBeVisible();
-
-    // acknowledge, then the template adds every medicine and reports it
-    await doctor.getByRole("button", { name: "Acknowledge" }).click();
     await doctor.getByRole("button", { name: "Acute gastroenteritis" }).first().click();
     await expect(doctor.getByTestId("rx-template-notice")).toContainText(/Added 2 medicines from Acute gastroenteritis/);
     await expect(doctor.getByText(/Prescription items \(2\)/)).toBeVisible();

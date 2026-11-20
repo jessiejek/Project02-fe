@@ -1,6 +1,10 @@
 "use client";
 
 import { Suspense, useState } from "react";
+//JJQR Nov 20, 2026
+import { useEffect } from "react";
+import { clearLogoutPending } from "@/lib/auth/logout-intent";
+//JJQR - END
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -22,6 +26,11 @@ const ROLE_TO_SEGMENT: Record<string, string> = {
 function LoginPageForm() {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
+  //JJQR Nov 20, 2026 - logout finished; stop the resume-logout check
+  useEffect(() => {
+    clearLogoutPending(window.sessionStorage);
+  }, []);
+  //JJQR - END
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);

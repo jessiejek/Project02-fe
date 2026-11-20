@@ -5,6 +5,9 @@ import { ClinicalNoteField } from "@/components/doctor/ClinicalNoteField";
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { todayManila } from "@/lib/clock";
+//JJQR Nov 20, 2026
+import { MC_EXAMINED_AT_DEFAULT, mcHasTypedContent } from "@/lib/mc-defaults";
+//JJQR - END
 import Link from "next/link";
 import { buttonStyles } from "@/components/ui/buttonStyles";
 import { useSearchParams, notFound } from "next/navigation";
@@ -30,10 +33,7 @@ import { SOAP_KEYS, SOAP_FIELD_LABELS, hasSoapContent, mergeSoapTemplate, splitA
 import { manageTemplatesHref } from "@/lib/clinical/template-links";
 //JJQR - END
 //JJQR - AI (Oct 31, 2026)
-import {
-  ConsultPatientBanner,
-  allergiesNeedPrescriptionReview,
-} from "@/components/doctor/ConsultPatientBanner";
+import { ConsultPatientBanner } from "@/components/doctor/ConsultPatientBanner";
 import { Icd10DiagnosisField } from "@/components/doctor/Icd10DiagnosisField";
 import { GrowthChart } from "@/components/doctor/GrowthChart";
 import {
@@ -58,6 +58,9 @@ import {
 } from "@/lib/clinical/template-specialty";
 //JJQR - END
 import { cn } from "@/lib/cn";
+//JJQR Nov 20, 2026
+import { followUpModeSatisfied, initialPfDecision } from "@/lib/pf-default";
+//JJQR - END
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
 import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
@@ -103,6 +106,9 @@ import type {
   VitalFieldTemplate,
 } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
+//JJQR - AI (Nov 20, 2026)
+import { asNeededFromWire, asNeededToWire } from "@/lib/rx-structured";
+//JJQR - END
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
 
@@ -123,6 +129,9 @@ function mapRxGroup(g: RxGroupRow): PrescriptionGroup {
       isControlledSubstance: i.is_controlled_substance,
       mealRelation: (i.meal_relation as "Before" | "After" | null) ?? null,
       timing: i.timing ?? null,
+      //JJQR - AI (Nov 20, 2026)
+      asNeeded: asNeededFromWire(i.as_needed),
+      //JJQR - END
       durationKind: (i.duration_kind as "Maintain" | "Days" | "Weeks" | null) ?? null,
       durationValue: i.duration_value ?? null,
       indication: i.indication ?? null,
@@ -174,6 +183,14 @@ const SECTIONS = [
 // contradicted that explicit section).
 /** Consult2 / Grace clinic: always chart Rx + follow-up as well as SOAP/vitals/Dx. */
 const REQUIRED_SECTIONS = [0, 1, 2, 3, 6];
+//JJQR Nov 20, 2026
+/** When false, Diagnosis stays in SECTIONS/index 2 for saves but is hidden from nav and completion gates. */
+const SHOW_DIAGNOSIS_STEP = false;
+const DIAGNOSIS_SECTION_INDEX = 2;
+const effectiveRequiredSections = REQUIRED_SECTIONS.filter(
+  (i) => SHOW_DIAGNOSIS_STEP || i !== DIAGNOSIS_SECTION_INDEX,
+);
+//JJQR - END
 /** Vaccinations + PF — last in SECTION_ORDER so the first 7 tab numbers stay 1–7. */
 const OCCASIONAL_SECTIONS = [5, 8] as const;
 const SECTION_ORDER = [0, 1, 2, 3, 4, 6, 7, 5, 8] as const;
@@ -208,7 +225,9 @@ const BLANK_LAB: LabOrderDraft = { labTestId: null, testName: "", reason: "", sp
 const BLANK_VAX: VaccinationDraft = { vaccineName: "", doseNumber: "", route: "", site: "", lotNumber: "", expiry: "", manufacturer: "" };
 
 const KEYBOARD_SHORTCUTS = [
-  { keys: "Ctrl+1 – Ctrl+8", description: "Jump to that numbered section" },
+  //JJQR Nov 20, 2026 — numbers follow visible section pills (1 = first visible), not raw section index
+  { keys: "Ctrl+1 – Ctrl+9", description: "Jump to that numbered visible section" },
+  //JJQR - END
   { keys: "Ctrl+S", description: "Save Draft (complete mode) or save progress in amend (stays in amend)" },
   { keys: "Ctrl+Enter", description: "Complete Consultation (when required fields are valid)" },
   { keys: "?", description: "Show this help" },
@@ -333,14 +352,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     });
   }, [openSection]);
   //JJQR - END
-  //JJQR - AI (Oct 31, 2026)
-  const [allergyReviewed, setAllergyReviewed] = useState(false);
-  //JJQR - END
   //JJQR - AI (Nov 20, 2026) - wrap-all section pills: Vaccinations + Fee always visible
   const revealOccasionalSections = true;
-  const visibleSectionOrder = SECTION_ORDER.filter(
-    (i) => revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]),
-  );
+  const visibleSectionOrder = SECTION_ORDER.filter((i) => {
+    //JJQR Nov 20, 2026
+    if (!SHOW_DIAGNOSIS_STEP && i === DIAGNOSIS_SECTION_INDEX) return false;
+    //JJQR - END
+    return revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]);
+  });
+  //JJQR - END
+  //JJQR Nov 20, 2026
+  useEffect(() => {
+    if (!SHOW_DIAGNOSIS_STEP && openSection === DIAGNOSIS_SECTION_INDEX) {
+      setOpenSection(visibleSectionOrder[0] ?? 0);
+    }
+  }, [openSection, visibleSectionOrder]);
   //JJQR - END
   /** Explicit escape hatch when Grace would omit medicines (rare). */
   const [noMedsConfirmed, setNoMedsConfirmed] = useState(false);
@@ -659,7 +685,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const saved = await replacePatientAllergies(null as never, booking.patientId, payload);
     setPatientAllergies(saved);
     setNkda(saved.some((a) => a.is_nkda));
-    setAllergyReviewed(false);
     formDirtyRef.current = true;
   }
   //JJQR - END
@@ -810,6 +835,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           instruction: i.instruction,
           timing: i.timing,
           meal_relation: i.mealRelation,
+          //JJQR - AI (Nov 20, 2026)
+          as_needed: asNeededToWire(i.asNeeded),
+          //JJQR - END
           duration_kind: i.durationKind,
           duration_value: i.durationValue,
           indication: i.indication,
@@ -929,8 +957,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Optional for completion (see REQUIRED_SECTIONS above); the tabs' own
   // sub-fields (amount / waive reason) are what's "required" once a tab is chosen.
   // No real table backs this yet, so it stays local-only like Lab Orders/Vaccinations.
-  const [pfDecision, setPfDecision] = useState<"charge" | "waive" | null>(null);
+  //JJQR Nov 20, 2026 - charge PF default
+  const [pfDecision, setPfDecision] = useState<"charge" | "waive" | null>("charge");
+  //JJQR - END
   const [pfAmount, setPfAmount] = useState("");
+  //JJQR Nov 20, 2026 - charge PF default
+  const pfAmountTouchedRef = useRef(false);
+  //JJQR - END
   const [pfWaiveReason, setPfWaiveReason] = useState("");
   // §16.6 — doctor picks the fee line; the backend recomputes the booking total
   // on consultation save. Seeded from the booking row in the load effect.
@@ -949,7 +982,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // §16.8 Form 2 — medical certificate (its own section, index 7).
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
   const [mcAddress, setMcAddress] = useState("");
-  const [mcExaminedAt, setMcExaminedAt] = useState("");
+  //JJQR Nov 20, 2026 - pre-filled with the clinic letterhead (was an empty box with a placeholder)
+  const [mcExaminedAt, setMcExaminedAt] = useState(MC_EXAMINED_AT_DEFAULT);
+  //JJQR - END
   // Default "has been examined in ___" to the doctor's own clinic (a solo
   // practice — the printed cert reads more naturally naming the doctor than
   // a generic clinic_name), while staying an editable field either way.
@@ -1092,8 +1127,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       b.patientDob ? `${formatDob(b.patientDob)}${age !== null ? ` (${age}y)` : ""}` : null,
     ].filter(Boolean).join(" · ");
   }
-  const [mcExamFrom, setMcExamFrom] = useState("");
-  const [mcExamTo, setMcExamTo] = useState("");
+  //JJQR Nov 20, 2026 - exam dates default to today
+  const [mcExamFrom, setMcExamFrom] = useState(() => todayManila());
+  const [mcExamTo, setMcExamTo] = useState(() => todayManila());
+  //JJQR - END
   const [mcDiagnosis, setMcDiagnosis] = useState("");
   const [mcRecommendations, setMcRecommendations] = useState("");
   const [mcPurposeException, setMcPurposeException] = useState("");
@@ -1115,6 +1152,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         : feeSchedule.consultation;
     return subtotal + (medCertRequested ? feeSchedule.medCert : 0);
   })();
+
+  //JJQR Nov 20, 2026
+  useEffect(() => {
+    if (pfDecision === "charge" && !pfAmountTouchedRef.current && previewFee !== null) {
+      const next = String(previewFee);
+      setPfAmount((curr) => (curr === next ? curr : next));
+    }
+  }, [pfDecision, previewFee]);
+  //JJQR - END
 
   // Single load effect: real booking (joined), consultation + diagnoses +
   // follow_up, last-visit SOAP + its vitals, this booking's own vital
@@ -1376,8 +1422,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         }
         setVaccinations(toVaxDraft(loadedConsultation.vaccinationsAdministered));
         const fd = loadedConsultation.feeDecision;
-        setPfDecision(fd ? (fd.type === "Charge" ? "charge" : "waive") : null);
-        if (fd?.type === "Charge") setPfAmount(String(fd.amount ?? ""));
+        //JJQR Nov 20, 2026
+        setPfDecision(initialPfDecision(fd));
+        if (fd?.type === "Charge") {
+          setPfAmount(String(fd.amount ?? ""));
+          pfAmountTouchedRef.current = true;
+        } else {
+          pfAmountTouchedRef.current = false;
+        }
+        //JJQR - END
         if (fd?.type === "Waive") setPfWaiveReason(fd.waiveReason ?? "");
       }
 
@@ -1406,9 +1459,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             if (cancelled || !mc) return;
             setCertExists(true);
             setMcAddress(mc.patient_address_snapshot ?? "");
-            setMcExaminedAt(mc.examined_at ?? "");
-            setMcExamFrom(mc.examination_date_from ?? "");
-            setMcExamTo(mc.examination_date_to ?? "");
+            //JJQR Nov 20, 2026
+            setMcExaminedAt(mc.examined_at || MC_EXAMINED_AT_DEFAULT);
+            setMcExamFrom(mc.examination_date_from || todayManila());
+            setMcExamTo(mc.examination_date_to || mc.examination_date_from || todayManila());
+            //JJQR - END
             setMcDiagnosis(mc.diagnosis_text ?? "");
             setMcRecommendations(mc.recommendations ?? "");
             setMcPurposeException(mc.purpose_exception ?? "");
@@ -1447,6 +1502,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setFollowUpReason("");
       setFollowUpInstructions("");
       setFollowUpReminder(false);
+      //JJQR Nov 20, 2026
+      setNoFollowUpConfirmed(true);
+      //JJQR - END
     } else {
       setNoFollowUpConfirmed(false);
     }
@@ -1479,12 +1537,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     pfDecision !== null && (pfDecision === "charge" ? pfAmount.trim() !== "" : pfWaiveReason.trim().length >= 5),
   ];
   const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
-  const followUpSatisfied =
-    followUpMode === "dated"
-      ? followUpDate.trim() !== ""
-      : followUpMode === "prn"
-        ? true
-        : noFollowUpConfirmed;
+  //JJQR Nov 20, 2026
+  const followUpSatisfied = followUpModeSatisfied(followUpMode, followUpDate);
+  //JJQR - END
   sectionSatisfied[6] = followUpSatisfied;
 
   function isRequiredSectionDone(i: number): boolean {
@@ -1493,7 +1548,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     return sectionSatisfied[i];
   }
 
-  const missingRequiredSections = REQUIRED_SECTIONS.filter((i) => !isRequiredSectionDone(i));
+  //JJQR Nov 20, 2026
+  const missingRequiredSections = effectiveRequiredSections.filter((i) => !isRequiredSectionDone(i));
+  //JJQR - END
   //JJQR - AI (Nov 20, 2026) - B-40: say WHICH section is missing wherever Save / Review / Complete is disabled
   const missingSectionNames = missingRequiredSections.map((i) => SECTIONS[i]).join(", ");
   //JJQR - END
@@ -1508,11 +1565,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     mcDiagnosis.trim() !== "" || mcRecommendations.trim() !== "" || mcAddress.trim() !== "",
     pfDecision !== null,
   ];
-  const allergyAckRequired = allergiesNeedPrescriptionReview(nkda, patientAllergies);
   function sectionStatus(i: number): SectionStatus {
     const satisfied = i === 3 ? rxSatisfied : i === 6 ? followUpSatisfied : sectionSatisfied[i];
     //JJQR - AI (Nov 19, 2026) - empty circle until the doctor tries to complete; only then the warning
-    return stepIndicator({ satisfied, required: REQUIRED_SECTIONS.includes(i), hasDraft: sectionHasDraft[i], attemptedComplete: completeAttempted });
+    //JJQR Nov 20, 2026
+    return stepIndicator({ satisfied, required: effectiveRequiredSections.includes(i), hasDraft: sectionHasDraft[i], attemptedComplete: completeAttempted });
+    //JJQR - END
     //JJQR - END
   }
 
@@ -1528,9 +1586,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         ? [followUpDate, followUpReason, followUpInstructions]
         : followUpMode === "prn"
           ? [followUpReason, followUpInstructions]
-          : noFollowUpConfirmed
+          : //JJQR Nov 20, 2026
+            followUpMode === "none"
             ? ["confirmed"]
-            : [],
+            : //JJQR - END
+              [],
   };
 
   function renderSectionIndicator(i: number, className: string) {
@@ -1539,7 +1599,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const filled = fields.filter((f) => (f ?? "").trim() !== "").length;
       if (filled === 0) {
         //JJQR - AI (Nov 19, 2026)
-        if (completeAttempted && REQUIRED_SECTIONS.includes(i) && !isRequiredSectionDone(i)) {
+        //JJQR Nov 20, 2026
+        if (completeAttempted && effectiveRequiredSections.includes(i) && !isRequiredSectionDone(i)) {
+        //JJQR - END
           return <Icon name="warning" className={cn(className, "text-status-warning")} />;
         }
         //JJQR - END
@@ -1566,12 +1628,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // explicit: Chief Complaint, >=1 diagnosis, BP, HR — "everything else
   // (...PF decision) is optional/recommended." This previously also gated on
   // Professional Fee Decision, contradicting that section outright.
-  const canComplete =
-    sectionSatisfied[0] &&
-    sectionSatisfied[1] &&
-    sectionSatisfied[2] &&
-    rxSatisfied &&
-    followUpSatisfied;
+  //JJQR Nov 20, 2026 — completion gates follow effectiveRequiredSections (Diagnosis optional when hidden)
+  const canComplete = effectiveRequiredSections.every((i) => isRequiredSectionDone(i));
+  //JJQR - END
 
   //JJQR - AI (Oct 31, 2026)
   const assessmentDiagnosisMismatch = useMemo(
@@ -1695,7 +1754,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       })),
     );
 
-    if (followUpMode === "none" && noFollowUpConfirmed) {
+    //JJQR Nov 20, 2026
+    if (followUpMode === "none") {
+    //JJQR - END
       if (followUpExisted.current) {
         await deleteFollowUpByConsultation(supabase, savedId);
         followUpExisted.current = false;
@@ -1929,9 +1990,24 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setFollowUpReason(source?.followUpReason ?? "");
     setFollowUpInstructions(source?.followUpInstructions ?? "");
     setFollowUpReminder(source?.followUpReminder ?? true);
-    setPfDecision(source?.feeDecision ? (source.feeDecision.type === "Charge" ? "charge" : "waive") : null);
+    //JJQR Nov 20, 2026
+    const resetFuReason = source?.followUpReason ?? "";
+    const resetFuDate = source?.followUpDate ?? "";
+    if (resetFuReason.includes("PRN")) {
+      setFollowUpMode("prn");
+      setNoFollowUpConfirmed(false);
+    } else if (!resetFuDate && !resetFuReason) {
+      setFollowUpMode("none");
+      setNoFollowUpConfirmed(true);
+    } else {
+      setFollowUpMode("dated");
+      setNoFollowUpConfirmed(false);
+    }
+    setPfDecision(initialPfDecision(source?.feeDecision));
     setPfAmount(String(source?.feeDecision?.amount ?? booking?.totalFee ?? ""));
     setPfWaiveReason(source?.feeDecision?.waiveReason ?? "");
+    pfAmountTouchedRef.current = source?.feeDecision?.type === "Charge";
+    //JJQR - END
   }
 
   function finishCancelAmend() {
@@ -1960,7 +2036,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const savedId = await persistConsultation("Amended");
       if (!savedId) throw new Error("Could not save your changes. Check your connection and try again.");
       //JJQR - AI (Nov 20, 2026) - persist cert with the amendment; throw so we never toast "Amendment saved" on cert failure
-      const certHasContent = [mcAddress, mcExaminedAt, mcExamFrom, mcExamTo, mcDiagnosis, mcRecommendations, mcPurposeException, mcComeBackOn].some((v) => v.trim() !== "");
+      //JJQR Nov 20, 2026 - pre-filled clinic/today values alone don't count as a certificate
+      const certHasContent = mcHasTypedContent(
+        { examinedAt: mcExaminedAt, examFrom: mcExamFrom, examTo: mcExamTo, others: [mcAddress, mcDiagnosis, mcRecommendations, mcPurposeException, mcComeBackOn] },
+        todayManila(),
+      );
+      //JJQR - END
       if (certExists || (medCertRequested && certHasContent)) {
         await saveMedCertRow(savedId);
         setCertExists(true);
@@ -2020,7 +2101,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && /^[1-9]$/.test(e.key)) {
         e.preventDefault();
-        setOpenSection(Number(e.key) - 1);
+        //JJQR Nov 20, 2026
+        const jumpSection = visibleSectionOrder[Number(e.key) - 1];
+        if (jumpSection !== undefined) setOpenSection(jumpSection);
+        //JJQR - END
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (mode === "complete") void latestDraftSave.current();
@@ -2035,7 +2119,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [mode, canComplete]);
+    //JJQR Nov 20, 2026
+  }, [mode, canComplete, visibleSectionOrder]);
+    //JJQR - END
 
   //JJQR - AI (Oct 31, 2026) — F-010 beforeunload, F-022 autosave
   useEffect(() => {
@@ -2106,8 +2192,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const rxCount = effectiveRxItems.length;
     //JJQR - END
     const followUpSummary =
-      followUpMode === "none" && noFollowUpConfirmed
+      //JJQR Nov 20, 2026
+      followUpMode === "none"
         ? "No follow-up"
+        //JJQR - END
         : followUpMode === "prn"
           ? `PRN — ${followUpReason || "return if needed"}`
           : followUpDate
@@ -2147,7 +2235,13 @@ Return to patient queue
             <div className="flex flex-wrap gap-sm border-b border-outline-variant">
               <button
                 type="button"
-                onClick={() => setPfDecision("charge")}
+                onClick={() => {
+                  //JJQR Nov 20, 2026
+                  pfAmountTouchedRef.current = false;
+                  if (previewFee === null) setPfAmount(String(booking?.totalFee || ""));
+                  setPfDecision("charge");
+                  //JJQR - END
+                }}
                 className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
               >
                 Charge
@@ -2175,7 +2269,12 @@ Return to patient queue
               <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input
                 placeholder="Amount*"
                 value={pfAmount}
-                onChange={(e) => setPfAmount(e.target.value)}
+                onChange={(e) => {
+                  //JJQR Nov 20, 2026
+                  pfAmountTouchedRef.current = true;
+                  setPfAmount(e.target.value);
+                  //JJQR - END
+                }}
                 className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
               /></label>
             )}
@@ -2531,9 +2630,11 @@ Return to patient queue
                     <h2 className="flex flex-wrap items-center gap-sm text-headline-md font-semibold text-on-surface">
                       {renderSectionIndicator(i, "text-[18px]")}
                       {displayIdx + 1}. {section}
-                      {REQUIRED_SECTIONS.includes(i) && (
+                      {/* //JJQR Nov 20, 2026 */}
+                      {effectiveRequiredSections.includes(i) && (
                         <span className="sr-only">Required before completion</span>
                       )}
+                      {/* //JJQR - END */}
                     </h2>
 
                   </div>
@@ -2784,16 +2885,6 @@ Return to patient queue
                           </span>
                         </span>
                       </label>
-                      {allergyAckRequired && !allergyReviewed && (
-                        <div id="rx-allergy-review-banner" className="flex flex-col gap-sm rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm sm:flex-row sm:items-center sm:justify-between">
-                          <p className="text-label-md text-status-warning">
-                            Review allergies (NKDA or add) before prescribing.
-                          </p>
-                          <Button variant="secondary" className="min-h-[44px] shrink-0" onClick={() => setAllergyReviewed(true)}>
-                            Acknowledge
-                          </Button>
-                        </div>
-                      )}
                       {renalCue && (
                         <p className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-label-sm text-on-surface-variant">
                           {renalCue}
@@ -2808,12 +2899,6 @@ Return to patient queue
                         group={prescriptionGroup}
                         embedded
                         patientAllergies={patientAllergies.filter((a) => !a.is_nkda).map((a) => a.allergen)}
-                        allergyAckRequired={allergyAckRequired}
-                        allergyAcked={allergyReviewed}
-                        //JJQR - AI (Oct 31, 2026) — soft banner above; do not auto-ack or jump sections
-                        //JJQR - AI (Nov 19, 2026) - still no auto-ack; bring the banner into view so the doctor sees what to tap
-                        onNeedAllergyAck={() => document.getElementById("rx-allergy-review-banner")?.scrollIntoView({ block: "center", behavior: "smooth" })}
-                        //JJQR - END
                         priorRxItems={priorRxItems}
                         patientPregnant={!!patientDetail?.is_pregnant}
                         patientAgeYears={patientAgeYears}
@@ -3064,20 +3149,13 @@ Return to patient queue
                         </>
                       )}
                       {followUpMode === "none" && (
-                        <label className="flex min-h-[44px] items-start gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-md">
-                          <input
-                            type="checkbox"
-                            className="mt-xs"
-                            checked={noFollowUpConfirmed}
-                            onChange={(e) => setNoFollowUpConfirmed(e.target.checked)}
-                          />
-                          <span>
-                            <strong>No follow-up for this visit</strong>
-                            <span className="block text-label-md text-on-surface-variant">
-                              Required for Complete when you are not scheduling follow-up.
-                            </span>
-                          </span>
-                        </label>
+                        <>
+                          {/* //JJQR Nov 20, 2026 */}
+                          <p className="text-label-md text-on-surface-variant">
+                            No follow-up will be scheduled for this visit.
+                          </p>
+                          {/* //JJQR - END */}
+                        </>
                       )}
                     </div>
                   )}
@@ -3145,7 +3223,8 @@ Return to patient queue
                         <input
                           value={mcExaminedAt}
                           onChange={(e) => setMcExaminedAt(e.target.value)}
-                          placeholder={`Examined in… (default: ${doctorClinicLabel || clinicRow?.clinic_name || "clinic"})`}
+                          placeholder="Examined in…"
+                          aria-label="Examined in"
                           className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
                         />
                         <label className="text-label-sm text-on-surface-variant">
@@ -3228,7 +3307,9 @@ Return to patient queue
                             onChange={(e) => setMedCertRequested(e.target.checked)}
                             className="h-5 w-5"
                           />
-                          Medical certificate (+₱{feeSchedule?.medCert ?? 50}) — issue it in section 8
+                          {/* //JJQR Nov 20, 2026 */}
+                          Medical certificate (+₱{feeSchedule?.medCert ?? 50}) — issue it in the Medical Certificate section
+                          {/* //JJQR - END */}
                         </label>
                         {previewFee !== null && (
                           <p className="text-label-md text-on-surface">
@@ -3240,17 +3321,27 @@ Return to patient queue
                       <div className="flex gap-sm border-b border-outline-variant">
                         <button
                           type="button"
-                          onClick={() => setPfDecision("charge")}
+                          onClick={() => {
+                            //JJQR Nov 20, 2026
+                            pfAmountTouchedRef.current = false;
+                            if (previewFee === null) setPfAmount(String(booking?.totalFee || ""));
+                            setPfDecision("charge");
+                            //JJQR - END
+                          }}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
-                          Charge PF
+                          {/* //JJQR Nov 20, 2026 */}
+                          Charge
+                          {/* //JJQR - END */}
                         </button>
                         <button
                           type="button"
                           onClick={() => setPfDecision("waive")}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "waive" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
-                          Waive PF
+                          {/* //JJQR Nov 20, 2026 */}
+                          Waive
+                          {/* //JJQR - END */}
                         </button>
                         <button
                           type="button"
@@ -3266,7 +3357,12 @@ Return to patient queue
                       </div>
                       {pfDecision === "charge" && (
                         <div className="space-y-md">
-                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmount} onChange={(e) => setPfAmount(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmount} onChange={(e) => {
+                            //JJQR Nov 20, 2026
+                            pfAmountTouchedRef.current = true;
+                            setPfAmount(e.target.value);
+                            //JJQR - END
+                          }} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
                           <select className="w-full rounded-lg border border-outline-variant px-md py-sm">
                             <option>Pay at Clinic</option>
                             <option>Online</option>
@@ -3510,12 +3606,14 @@ Return to patient queue
         }
       >
         <ul className="space-y-sm text-body-md">
-          {SECTIONS.map((s, i) => (
-            <li key={s} className="flex items-center gap-sm">
+          {/* //JJQR Nov 20, 2026 — only visible sections in the completion checklist */}
+          {visibleSectionOrder.map((i) => (
+            <li key={SECTIONS[i]} className="flex items-center gap-sm">
               {renderSectionIndicator(i, "text-[18px]")}
-              {s}
+              {SECTIONS[i]}
             </li>
           ))}
+          {/* //JJQR - END */}
         </ul>
         {!rxSatisfied && (
           <p className="mt-md rounded-lg bg-status-warning-surface px-md py-sm text-label-md text-status-warning">
@@ -3524,7 +3622,9 @@ Return to patient queue
         )}
         {!followUpSatisfied && (
           <p className="mt-md rounded-lg bg-status-warning-surface px-md py-sm text-label-md text-status-warning">
-            Complete follow-up (schedule a date, choose PRN, or confirm no follow-up) before Complete — required for Grace clinic.
+            {/* //JJQR Nov 20, 2026 */}
+            Complete follow-up (schedule a date, choose PRN, or choose No follow-up) before Complete — required for Grace clinic.
+            {/* //JJQR - END */}
           </p>
         )}
         {saveError && (
@@ -3786,7 +3886,9 @@ Return to patient queue
                 onClick={() => {
                   //JJQR - AI (Nov 19, 2026) - jump straight to the next missing required section (and start showing warnings)
                   setCompleteAttempted(true);
-                  const next = nextMissingSection(missingRequiredSections, openSection, SECTION_ORDER);
+                  //JJQR Nov 20, 2026
+                  const next = nextMissingSection(missingRequiredSections, openSection, visibleSectionOrder);
+                  //JJQR - END
                   if (next !== null) setOpenSection(next);
                 }}
                 aria-label={`${missingRequiredSections.length} required section${missingRequiredSections.length === 1 ? "" : "s"} left: ${missingSectionNames}. Go to the next one`}

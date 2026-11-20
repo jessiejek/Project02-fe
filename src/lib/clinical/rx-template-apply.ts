@@ -9,6 +9,9 @@ export interface RxApplyItem {
   isControlledSubstance?: boolean;
   mealRelation?: "Before" | "After" | null;
   timing?: string | null;
+  //JJQR - AI (Nov 20, 2026)
+  asNeeded?: boolean | null;
+  //JJQR - END
   durationKind?: "Maintain" | "Days" | "Weeks" | null;
   durationValue?: number | null;
   indication?: string | null;
@@ -29,15 +32,6 @@ export interface RxApplyPlan {
   toAdd: RxApplyItem[];
   skipped: RxSkipped[];
   warnings: string[];
-}
-
-/** Shown (never silently) when the allergy-review gate stops a medicine from being added. */
-export const ALLERGY_REVIEW_MESSAGE =
-  "Review the patient's allergies first: tap Acknowledge in the yellow banner above (or record NKDA / allergies), then add medicines.";
-
-/** True when the gate must stop the add: allergies still need review and nothing is on the list yet. */
-export function isAllergyGateClosed(o: { required?: boolean; acked?: boolean; itemCount: number }): boolean {
-  return !!o.required && !o.acked && o.itemCount === 0;
 }
 
 /**

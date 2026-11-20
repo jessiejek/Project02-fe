@@ -136,9 +136,6 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
 
   // ── 4. Prescription — one item, then Save medications → confirm ────────
   await open(/4\. Prescription/);
-  // soft allergy gate blocks Add Item until the allergies are reviewed
-  const ackBtn = doctor.getByRole("button", { name: "Acknowledge" });
-  if (await ackBtn.isVisible()) await ackBtn.click();
   await doctor.getByRole("textbox", { name: "Medication" }).fill("Paracetamol");
   await doctor.getByRole("textbox", { name: "Dosage / strength" }).fill("500 mg");
   await doctor.getByRole("textbox", { name: "Quantity" }).fill("20 tablets");

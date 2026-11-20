@@ -60,6 +60,9 @@ function rxLinesFromGroup(g: RxGroupRow | undefined): RxLine[] {
     instruction: i.instruction ?? null,
     timing: i.timing ?? null,
     meal_relation: i.meal_relation ?? null,
+    //JJQR - AI (Nov 20, 2026)
+    as_needed: i.as_needed ?? null,
+    //JJQR - END
     duration_kind: i.duration_kind ?? null,
     duration_value: i.duration_value ?? null,
     indication: i.indication ?? null,

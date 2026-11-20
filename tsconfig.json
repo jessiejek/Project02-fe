@@ -11,6 +11,9 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    //JJQR - AI (Nov 20, 2026)
+    "allowImportingTsExtensions": true,
+    //JJQR - END
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [

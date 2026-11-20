@@ -77,6 +77,9 @@ export interface RxLine {
   instruction?: string | null;
   timing?: string | null;
   meal_relation?: string | null;
+  //JJQR - AI (Nov 20, 2026)
+  as_needed?: boolean | null;
+  //JJQR - END
   duration_kind?: string | null;
   duration_value?: number | null;
   indication?: string | null;

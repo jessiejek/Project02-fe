@@ -256,7 +256,7 @@ test("medical certificate: long purposeException wraps in-flow without overlappi
   assert.ok(!blank.includes('class="mc-purpose"'), "whitespace-only exception must not emit an exception block");
 });
 
-test("prescription: A5 page size, table labels, 5 rows, fill, 6 meds, escape", () => {
+test("prescription: A5 page size, table labels, 1 row, fill, 6 meds, escape", () => {
   const html = buildPrescriptionHtml({
     origin: ORIGIN,
     pageSize: PAGE_A5,
@@ -288,6 +288,11 @@ test("prescription: A5 page size, table labels, 5 rows, fill, 6 meds, escape", (
   assert.match(html, /pill">DINNER</);
   assert.ok(!html.includes('pill">LUNCH'));
   assert.ok(!html.includes('pill">BEDTIME'));
+  //JJQR - AI (Nov 20, 2026)
+  assert.match(html, /slot faint">LUNCH</);
+  assert.match(html, /slot faint">BEDTIME</);
+  assert.match(html, /slot faint">before\//);
+  //JJQR - END
   assert.match(html, /pill">after</);
   assert.ok(!html.includes('pill">before/'));
   assert.ok(!html.includes("circ-bf"));
@@ -308,7 +313,7 @@ test("prescription: A5 page size, table labels, 5 rows, fill, 6 meds, escape", (
   assert.ok(html.includes("LIC-99"));
   assert.ok(html.includes("PTR-88"));
   assert.ok(html.includes(`${ORIGIN}/forms/rx.png`));
-  assert.equal(countClass(html, "rx-row"), 5);
+  assert.equal(countClass(html, "rx-row"), 1);
   assert.match(html, /--pad-l:\s*0\.35in/);
   assert.match(html, /--pad-r:\s*0\.65in/);
   assert.match(html, /width:\s*4\.67in/);
@@ -331,7 +336,7 @@ test("prescription: A5 page size, table labels, 5 rows, fill, 6 meds, escape", (
   assert.match(html, /left:\s*55%/);
   assert.match(html, /font-size:\s*7\.5pt/);
   assert.match(html, /border-radius:\s*999px/);
-  assert.equal((html.match(/<span class="slot/g) || []).length, 30);
+  assert.equal((html.match(/<span class="slot/g) || []).length, 6);
 
   const six = [];
   for (let i = 1; i <= 6; i++) {
@@ -475,6 +480,218 @@ test("prescription: sig route dedupe and long-sig wrap layout", () => {
   assert.equal(dupSig[1], "PO 2 mg after each loose stool");
   assert.ok(!dupSig[1].includes("PO PO"));
 });
+
+//JJQR - AI (Nov 20, 2026)
+test("prescription: intelligent sig marks, as needed/directed notes, no padded rows", () => {
+  function rx(items) {
+    return buildPrescriptionHtml({
+      origin: ORIGIN,
+      pageSize: PAGE_A5,
+      doctor,
+      patient,
+      age: "36",
+      date: "November 20, 2026",
+      items,
+    });
+  }
+
+  function rowByName(html, name) {
+    const nameIdx = html.indexOf(`class="rx-med-name">${name}<`);
+    assert.ok(nameIdx >= 0, `missing med name: ${name}`);
+    const rowStart = html.lastIndexOf('<tr class="rx-row">', nameIdx);
+    const rowEnd = html.indexOf("</tr>", nameIdx);
+    assert.ok(rowStart >= 0 && rowEnd > rowStart, `row bounds missing for ${name}`);
+    return html.slice(rowStart, rowEnd);
+  }
+
+  const html = rx([
+    {
+      generic_name: "LOPERAMIDE 2MG CAP",
+      dosage: "2 mg cap",
+      quantity: "8",
+      instruction: "PO 2 mg after each loose stool; max 8 mg/day x 2 days (avoid if bloody stool/fever)",
+      route: "PO",
+    },
+    {
+      generic_name: "ASCORBIC ACID + MULTIVITAMINS 500MG TAB",
+      dosage: "500 mg tab",
+      quantity: "30",
+      instruction: "PO 1 tab once daily x 30 days",
+      route: "PO",
+    },
+    {
+      generic_name: "ORAL REHYDRATION SALTS",
+      dosage: "",
+      quantity: "4",
+      instruction: "dissolve in 1 L clean water; sip frequently x 2-3 days",
+    },
+    {
+      generic_name: "AMLODIPINE 5MG TAB",
+      dosage: "5 mg tab",
+      quantity: "30",
+      instruction: "once daily ongoing; take same time each day",
+    },
+  ]);
+
+  assert.equal(countClass(html, "rx-row"), 4);
+  assert.ok(!html.includes('class="rx-med-name"></div>'), "no empty 5th name cell");
+
+  const loperamide = rowByName(html, "LOPERAMIDE 2MG CAP");
+  assert.ok(loperamide.includes('class="slot-note">as needed</span>'));
+  assert.ok(!loperamide.includes("pill"), "loperamide slots/meals must not be pilled");
+  assert.ok(!loperamide.includes("BREAKFAST"));
+  const loperamideName = loperamide.match(/<div class="rx-med-name">([^<]*)<\/div>/);
+  assert.ok(loperamideName);
+  assert.equal(loperamideName[1], "LOPERAMIDE 2MG CAP");
+  assert.equal(loperamideName[1].split("2MG CAP").length - 1, 1);
+  assert.ok(!loperamideName[1].includes("2 mg cap"));
+
+  const ascorbic = rowByName(html, "ASCORBIC ACID + MULTIVITAMINS 500MG TAB");
+  assert.match(ascorbic, /pill">BREAKFAST</);
+  assert.ok(!ascorbic.includes('pill">LUNCH'));
+  assert.ok(!ascorbic.includes('pill">DINNER'));
+  assert.ok(!ascorbic.includes('pill">BEDTIME'));
+  assert.match(ascorbic, /slot faint">LUNCH</);
+
+  const ors = rowByName(html, "ORAL REHYDRATION SALTS");
+  assert.ok(ors.includes('class="slot-note">as directed</span>'));
+  assert.ok(!ors.includes("BREAKFAST"));
+
+  const amlo = rowByName(html, "AMLODIPINE 5MG TAB");
+  assert.match(amlo, /pill">BREAKFAST</);
+  assert.ok(!amlo.includes('pill">LUNCH'));
+
+  const afterMeals = rx([
+    {
+      generic_name: "Med After",
+      dosage: "1 tab",
+      quantity: "10",
+      instruction: "1 tab after meals",
+    },
+  ]);
+  const afterRow = rowByName(afterMeals, "Med After 1 tab");
+  assert.match(afterRow, /pill">after</);
+  assert.match(afterRow, /slot faint">before\//);
+  assert.match(afterRow, /pill">BREAKFAST</);
+
+  const beforeMeals = rx([
+    {
+      generic_name: "Med Before",
+      dosage: "1 tab",
+      quantity: "10",
+      instruction: "1 tab before meals",
+    },
+  ]);
+  const beforeRow = rowByName(beforeMeals, "Med Before 1 tab");
+  assert.match(beforeRow, /pill">before\//);
+  assert.match(beforeRow, /slot faint">after</);
+
+  const unknown = rx([
+    {
+      generic_name: "Med Unknown",
+      dosage: "1 tab",
+      quantity: "10",
+    },
+  ]);
+  const unknownRow = rowByName(unknown, "Med Unknown 1 tab");
+  assert.ok(!unknownRow.includes("faint"));
+  assert.ok(!unknownRow.includes("pill"));
+  assert.ok(unknownRow.includes('class="slot">BREAKFAST</span>'));
+  assert.ok(unknownRow.includes('class="slot">before/</span>'));
+  assert.ok(unknownRow.includes('class="slot">after</span>'));
+
+  const empty = rx([]);
+  assert.equal(countClass(empty, "rx-row"), 0);
+  assert.ok(empty.includes("Patient's Name:"));
+  assert.ok(empty.includes("DURATION"));
+});
+
+test("prescription: saved structured fields win over sig; as_needed notes; legacy still parsed", () => {
+  function rx(items) {
+    return buildPrescriptionHtml({
+      origin: ORIGIN,
+      pageSize: PAGE_A5,
+      doctor,
+      patient,
+      age: "36",
+      date: "November 20, 2026",
+      items,
+    });
+  }
+
+  function rowByName(html, name) {
+    const nameIdx = html.indexOf(`class="rx-med-name">${name}<`);
+    assert.ok(nameIdx >= 0, `missing med name: ${name}`);
+    const rowStart = html.lastIndexOf('<tr class="rx-row">', nameIdx);
+    const rowEnd = html.indexOf("</tr>", nameIdx);
+    assert.ok(rowStart >= 0 && rowEnd > rowStart, `row bounds missing for ${name}`);
+    return html.slice(rowStart, rowEnd);
+  }
+
+  const savedWins = rx([
+    {
+      generic_name: "Saved Wins",
+      dosage: "1 tab",
+      quantity: "10",
+      instruction: "TID after meals PRN",
+      meal_relation: "Before",
+      timing: "Bedtime",
+      as_needed: false,
+    },
+  ]);
+  const savedRow = rowByName(savedWins, "Saved Wins 1 tab");
+  assert.match(savedRow, /pill">before\//);
+  assert.match(savedRow, /slot faint">after</);
+  assert.match(savedRow, /pill">BEDTIME</);
+  assert.ok(!savedRow.includes('pill">BREAKFAST'));
+  assert.ok(!savedRow.includes('pill">LUNCH'));
+  assert.ok(!savedRow.includes('pill">DINNER'));
+  assert.ok(!savedRow.includes("as needed"));
+  assert.ok(!savedRow.includes("as directed"));
+
+  const prnNoSlots = rx([
+    {
+      generic_name: "PRN Saved",
+      dosage: "2 mg",
+      quantity: "8",
+      instruction: "once daily after meals",
+      as_needed: true,
+    },
+  ]);
+  const prnRow = rowByName(prnNoSlots, "PRN Saved 2 mg");
+  assert.ok(prnRow.includes('class="slot-note">as needed</span>'));
+  assert.ok(!prnRow.includes("BREAKFAST"));
+  assert.ok(!prnRow.includes("as directed"));
+
+  const explicitOff = rx([
+    {
+      generic_name: "Plain Saved",
+      dosage: "1 tab",
+      quantity: "4",
+      instruction: "dissolve in 1 L clean water; sip frequently x 2-3 days",
+      as_needed: false,
+    },
+  ]);
+  const plainRow = rowByName(explicitOff, "Plain Saved 1 tab");
+  assert.ok(!plainRow.includes("as directed"));
+  assert.ok(!plainRow.includes("as needed"));
+  assert.ok(!plainRow.includes("pill"));
+  assert.ok(!plainRow.includes("faint"));
+  assert.ok(plainRow.includes('class="slot">BREAKFAST</span>'));
+  assert.ok(plainRow.includes('class="slot">before/</span>'));
+
+  const legacy = rx([
+    {
+      generic_name: "Legacy ORS",
+      dosage: "",
+      quantity: "4",
+      instruction: "dissolve in 1 L clean water; sip frequently x 2-3 days",
+    },
+  ]);
+  const legacyRow = rowByName(legacy, "Legacy ORS");
+  assert.ok(legacyRow.includes('class="slot-note">as directed</span>'));
+});
+//JJQR - END
 
 test("lab request: custom page size, fixed checklist order, ticks, extras, escape", () => {
   const html = buildLabRequestHtml({

@@ -1,6 +1,6 @@
 "use client";
 //JJQR - AI (Nov 19, 2026) - new file: prescription set tab - full editor incl. route, meals, timing, duration, indication and the controlled-substance flag (preserved on edit)
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SidePanel } from "@/components/ui/SidePanel";
 import { createRxTemplate, updateRxTemplate, deleteRxTemplate, type RxItem, type RxTemplateRow } from "@/lib/data/clinical";
@@ -9,6 +9,9 @@ import { validateRxTemplate } from "@/lib/templates/validation";
 import { moveId } from "@/lib/templates/reorder";
 import { cn } from "@/lib/cn";
 import { copyTitle, isCopyTitle, rxSig, sortMineFirst } from "@/lib/templates/format";
+//JJQR - AI (Nov 20, 2026)
+import { asNeededFromWire, asNeededToWire, suggestFromSig } from "@/lib/rx-structured";
+//JJQR - END
 import type { TabCtx } from "./types";
 import { EmptyHint, Field, FilterChip, FilterGroup, IconButton, ItemCard, ItemList, LoadGate, NIL_GUID, Pill, TextAction, inputCls, truncate, useConfirmDelete, useViewMode } from "./shared";
 
@@ -31,11 +34,14 @@ interface LineDraft {
   durationKind: "Maintain" | "Days" | "Weeks" | null;
   durationValue: string;
   indication: string;
+  //JJQR - AI (Nov 20, 2026)
+  asNeeded: boolean | null;
+  //JJQR - END
 }
 
 let lineSeq = 0;
 const newKey = () => `l${++lineSeq}`;
-const blankLine = (): LineDraft => ({ key: newKey(), medicineId: "", genericName: "", dosage: "", quantity: "", instruction: "", isControlled: false, route: "PO", meal: null, timing: [], durationKind: null, durationValue: "", indication: "" });
+const blankLine = (): LineDraft => ({ key: newKey(), medicineId: "", genericName: "", dosage: "", quantity: "", instruction: "", isControlled: false, route: "PO", meal: null, timing: [], durationKind: null, durationValue: "", indication: "", asNeeded: null });
 
 function fromItem(i: RxItem): LineDraft {
   const kind = i.duration_kind === "Maintain" || i.duration_kind === "Days" || i.duration_kind === "Weeks" ? i.duration_kind : null;
@@ -53,6 +59,9 @@ function fromItem(i: RxItem): LineDraft {
     durationKind: kind,
     durationValue: i.duration_value ? String(i.duration_value) : "",
     indication: i.indication ?? "",
+    //JJQR - AI (Nov 20, 2026)
+    asNeeded: asNeededFromWire(i.as_needed),
+    //JJQR - END
   };
 }
 
@@ -71,6 +80,9 @@ export function toItem(l: LineDraft): Omit<RxItem, "id"> {
     duration_kind: l.durationKind,
     duration_value: hasNumber ? Number(l.durationValue) || null : null,
     indication: l.indication.trim() || null,
+    //JJQR - AI (Nov 20, 2026)
+    as_needed: asNeededToWire(l.asNeeded),
+    //JJQR - END
   };
 }
 
@@ -192,13 +204,35 @@ function RxEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: RxTemplateRow |
   const initialSnapshot = useMemo(() => snapshotOf(row?.title ?? "", initialLines), [row, initialLines]);
   const [title, setTitle] = useState(row?.title ?? "");
   const [lines, setLines] = useState<LineDraft[]>(initialLines);
+  //JJQR - AI (Nov 20, 2026) - fields already saved on a template line are never overwritten by the sig parser
+  const locked = useRef<Set<string>>(
+    new Set(initialLines.flatMap((l) => [l.meal != null ? l.key + ":meal" : "", l.timing.length ? l.key + ":timing" : "", l.asNeeded != null ? l.key + ":asNeeded" : ""].filter(Boolean))),
+  );
+  //JJQR - END
   const [saving, setSaving] = useState(false);
   const dirty = snapshotOf(title, lines) !== initialSnapshot;
   const reason = validateRxTemplate({ title, items: lines });
   const medicines = ctx.data.medicines.items;
 
   function patch(key: string, p: Partial<LineDraft>) {
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...p } : l)));
+    //JJQR - AI (Nov 20, 2026) - pill taps lock that field; typing Directions pre-fills the unlocked ones from the sig parser
+    if ("meal" in p) locked.current.add(key + ":meal");
+    if ("timing" in p) locked.current.add(key + ":timing");
+    if ("asNeeded" in p) locked.current.add(key + ":asNeeded");
+    setLines((prev) =>
+      prev.map((l) => {
+        if (l.key !== key) return l;
+        const next = { ...l, ...p };
+        if ("instruction" in p || "route" in p) {
+          const s = suggestFromSig({ instruction: next.instruction, route: next.route });
+          if (!locked.current.has(key + ":asNeeded")) next.asNeeded = s.asNeeded;
+          if (!locked.current.has(key + ":meal")) next.meal = s.meal;
+          if (!locked.current.has(key + ":timing")) next.timing = next.asNeeded === true ? [] : s.slots;
+        }
+        return next;
+      }),
+    );
+    //JJQR - END
   }
   function pickMedicine(key: string, name: string) {
     const m = medicines.find((x) => x.generic_name.toLowerCase() === name.trim().toLowerCase());
@@ -286,6 +320,11 @@ function RxEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: RxTemplateRow |
                   {TIMING_SLOTS.map((s) => <button key={s} type="button" aria-pressed={l.timing.includes(s)} onClick={() => patch(l.key, { timing: l.timing.includes(s) ? l.timing.filter((x) => x !== s) : [...l.timing, s] })} className={chip(l.timing.includes(s))}>{s}</button>)}
                 </div>
               </div>
+              {/* JJQR - AI (Nov 20, 2026) */}
+              <div className="flex flex-wrap gap-sm">
+                <button type="button" aria-pressed={l.asNeeded === true} onClick={() => patch(l.key, { asNeeded: l.asNeeded === true ? false : true })} className={cn(chip(l.asNeeded === true), "min-h-[44px] min-w-[44px] px-md")}>As needed</button>
+              </div>
+              {/* JJQR - END */}
               <div>
                 <span className="mb-xs block text-label-md font-medium text-on-surface">Duration</span>
                 <div className="flex flex-wrap items-center gap-sm">

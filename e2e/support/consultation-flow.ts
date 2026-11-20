@@ -138,14 +138,8 @@ export async function saveAmendViaCtrlS(page: Page) {
   await expect(page.getByText(/Amendment saved/).first()).toBeVisible({ timeout: 20_000 });
 }
 
-export async function acknowledgeRxAllergyGate(page: Page) {
-  const ack = page.getByRole("button", { name: "Acknowledge" });
-  if (await ack.isVisible().catch(() => false)) await ack.click();
-}
-
 export async function addNewRxLine(page: Page, medication: string, quantity = "10", expectCount = 1) {
   await openSectionByTitle(page, /4\. Prescription/);
-  await acknowledgeRxAllergyGate(page);
   await page.getByRole("tab", { name: "New Prescription" }).click();
   await page.getByRole("textbox", { name: "Medication" }).fill(medication);
   await page.getByRole("textbox", { name: "Quantity" }).click();
@@ -156,7 +150,6 @@ export async function addNewRxLine(page: Page, medication: string, quantity = "1
 
 export async function addRxFromTemplatesTab(page: Page) {
   await openSectionByTitle(page, /4\. Prescription/);
-  await acknowledgeRxAllergyGate(page);
   await page.getByRole("tab", { name: "Templates" }).click();
   await page.getByRole("button", { name: "Acute gastroenteritis" }).first().click();
   await expect(page.getByRole("heading", { name: /Prescription items \([1-9]/ })).toBeVisible();

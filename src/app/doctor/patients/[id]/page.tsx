@@ -26,6 +26,9 @@ import { queryDoctorById } from "@/lib/data/doctors";
 import { SkeletonCard, SkeletonTable } from "@/components/ui/Skeleton";
 import { todayManila } from "@/lib/clock";
 import type { PrescriptionGroup, VitalFieldTemplate, BookingStatus } from "@/data/types";
+//JJQR - AI (Nov 20, 2026)
+import { asNeededFromWire, asNeededToWire } from "@/lib/rx-structured";
+//JJQR - END
 
 function computeAge(dateOfBirth: string): number {
   const [ty, tm, td] = todayManila().split("-").map(Number);
@@ -203,6 +206,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
             //JJQR - AI (Oct 31, 2026)
             mealRelation: (i.meal_relation as "Before" | "After" | null) ?? null,
             timing: i.timing ?? null,
+            //JJQR - AI (Nov 20, 2026)
+            asNeeded: asNeededFromWire(i.as_needed),
+            //JJQR - END
             durationKind: (i.duration_kind as "Maintain" | "Days" | "Weeks" | null) ?? null,
             durationValue: i.duration_value ?? null,
             indication: i.indication ?? null,
@@ -763,6 +769,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                   instruction: item.instruction,
                   meal_relation: item.mealRelation ?? null,
                   timing: item.timing ?? null,
+                  //JJQR - AI (Nov 20, 2026)
+                  as_needed: asNeededToWire(item.asNeeded),
+                  //JJQR - END
                   duration_kind: item.durationKind ?? null,
                   duration_value: item.durationValue ?? null,
                   indication: item.indication ?? null,

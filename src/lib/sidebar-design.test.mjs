@@ -23,6 +23,9 @@ export function renderSidebar(role,pathname=ROLE_CONFIG[role].navGroups[0].items
   //JJQR - AI (Nov 14, 2026)
   if(name==='@/lib/pwa/clearClientCaches')return {clearClientCaches:async()=>{}};
   //JJQR - END
+  //JJQR Nov 20, 2026
+  if(name==='@/lib/auth/logout-intent')return {isLogoutPending:()=>false,markLogoutPending:()=>{}};
+  //JJQR - END
   return require(name);
  });
  return renderToStaticMarkup(React.createElement(Sidebar,{role,collapsed}));

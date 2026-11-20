@@ -28,10 +28,12 @@ import type { Database } from "@/data/supabase-types";
 import { checkDrugSafety } from "@/lib/clinical/drug-safety";
 import { mgPerKgDose, mlFromConcentration } from "@/lib/clinical/peds-dosing";
 //JJQR - AI (Nov 19, 2026) - Bug fix: applying an Rx template must add its medicines, or say clearly why not
-import { ALLERGY_REVIEW_MESSAGE, describeTemplateApply, isAllergyGateClosed, planTemplateApply } from "@/lib/clinical/rx-template-apply";
+import { describeTemplateApply, planTemplateApply } from "@/lib/clinical/rx-template-apply";
 //JJQR - END
 //JJQR - AI (Nov 20, 2026)
 import { shouldFlushPrescription } from "@/lib/amend-flush";
+import { asNeededFromWire, asNeededToWire, prefillItem, slotsToTiming, suggestFromSig, timingToSlots } from "@/lib/rx-structured";
+import { RxTimingFields } from "@/components/doctor/RxTimingFields";
 //JJQR - END
 
 type DbTemplateItem = Database["public"]["Tables"]["prescription_template_items"]["Row"];
@@ -44,6 +46,9 @@ type TemplateItemWire = DbTemplateItem & {
   duration_kind?: string | null;
   duration_value?: number | null;
   indication?: string | null;
+  //JJQR - AI (Nov 20, 2026)
+  as_needed?: boolean | null;
+  //JJQR - END
 };
 
 const NIL_MEDICINE_ID = "00000000-0000-0000-0000-000000000000";
@@ -62,6 +67,9 @@ export function lineItemToTemplatePayload(i: PrescriptionLineItem) {
     duration_kind: i.durationKind ?? null,
     duration_value: i.durationValue ?? null,
     indication: i.indication ?? null,
+    //JJQR - AI (Nov 20, 2026)
+    as_needed: asNeededToWire(i.asNeeded),
+    //JJQR - END
   };
 }
 //JJQR - END
@@ -212,19 +220,25 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
   const [dosage, setDosage] = useState(item?.dosage ?? "");
   const [quantity, setQuantity] = useState(item?.quantity ?? "");
   const [mealRelation, setMealRelation] = useState<"Before" | "After" | null>(item?.mealRelation ?? null);
-  const [timingSlots, setTimingSlots] = useState<string[]>(
-    item?.timing ? item.timing.split(",").map((s) => s.trim()).filter(Boolean) : [],
-  );
+  const [timingSlots, setTimingSlots] = useState<string[]>(timingToSlots(item?.timing));
   const [durationKind, setDurationKind] = useState<"Maintain" | "Days" | "Weeks" | null>(item?.durationKind ?? null);
   const [durationValue, setDurationValue] = useState(item?.durationValue ? String(item.durationValue) : "");
   const [indication, setIndication] = useState(item?.indication ?? "");
   const [instruction, setInstruction] = useState(item?.instruction ?? "");
+  //JJQR - AI (Nov 20, 2026)
+  const [asNeeded, setAsNeeded] = useState(item?.asNeeded === true);
+  const mealTouched = useRef(item?.mealRelation != null);
+  const timesTouched = useRef(!!(item?.timing && item.timing.trim()));
+  const asNeededTouched = useRef(typeof item?.asNeeded === "boolean");
+  function applySigSuggest(nextInstruction: string) {
+    const suggested = suggestFromSig({ instruction: nextInstruction, route: item?.route });
+    if (!mealTouched.current) setMealRelation(suggested.meal);
+    if (!timesTouched.current) setTimingSlots(suggested.slots);
+    if (!asNeededTouched.current) setAsNeeded(suggested.asNeeded);
+  }
+  //JJQR - END
 
   if (!item) return null;
-
-  function toggleSlot(slot: string) {
-    setTimingSlots((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
-  }
 
   function handleSave() {
     onSave({
@@ -233,11 +247,14 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
       dosage,
       quantity,
       mealRelation,
-      timing: timingSlots.length ? timingSlots.join(", ") : null,
+      timing: slotsToTiming(timingSlots),
       durationKind,
       durationValue: durationKind === "Days" || durationKind === "Weeks" ? Number(durationValue) || null : null,
       indication: indication.trim() || null,
       instruction,
+      //JJQR - AI (Nov 20, 2026)
+      asNeeded,
+      //JJQR - END
     });
   }
 
@@ -257,45 +274,26 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
         <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Dosage / strength</span><input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
         <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Quantity</span><input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
 
-        <div>
-          <p className="mb-xs text-label-sm text-on-surface-variant">Meals</p>
-          <div className="grid grid-cols-2 gap-sm">
-            {(["Before", "After"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setMealRelation((prev) => (prev === option ? null : option))}
-                aria-pressed={mealRelation === option}
-                className={cn(
-                  "rounded-lg border px-md py-sm text-label-md",
-                  mealRelation === option ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
-                )}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-xs text-label-sm text-on-surface-variant">Timing</p>
-          <div className="flex flex-wrap gap-sm">
-            {TIMING_SLOTS.map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                onClick={() => toggleSlot(slot)}
-                aria-pressed={timingSlots.includes(slot)}
-                className={cn(
-                  "whitespace-nowrap rounded-lg border px-md py-sm text-label-sm",
-                  timingSlots.includes(slot) ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
-                )}
-              >
-                {slot}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* JJQR - AI (Nov 20, 2026) */}
+        <RxTimingFields
+          idPrefix="edit-rx"
+          meal={mealRelation}
+          slots={timingSlots}
+          asNeeded={asNeeded}
+          onMeal={(m) => {
+            mealTouched.current = true;
+            setMealRelation(m);
+          }}
+          onSlots={(s) => {
+            timesTouched.current = true;
+            setTimingSlots(s);
+          }}
+          onAsNeeded={(b) => {
+            asNeededTouched.current = true;
+            setAsNeeded(b);
+          }}
+        />
+        {/* JJQR - END */}
 
         <div>
           <p className="mb-xs text-label-sm text-on-surface-variant">Duration</p>
@@ -336,7 +334,13 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
         <div>
           <textarea
             value={instruction}
-            onChange={(e) => setInstruction(e.target.value.slice(0, 200))}
+            onChange={(e) => {
+              //JJQR - AI (Nov 20, 2026)
+              const next = e.target.value.slice(0, 200);
+              setInstruction(next);
+              applySigSuggest(next);
+              //JJQR - END
+            }}
             placeholder="Sig. / extra instructions (optional)"
             rows={2}
             className="w-full rounded-lg border border-outline-variant p-md"
@@ -353,8 +357,6 @@ interface NewRxTabProps {
   onAdd: (item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean) => void;
 }
 
-const TIMING_SLOTS = ["Breakfast", "Lunch", "Dinner", "Bedtime"] as const;
-
 function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   const [query, setQuery] = useState("");
   const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(null);
@@ -369,6 +371,18 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   const [addToFavorites, setAddToFavorites] = useState(false);
   //JJQR - AI (Oct 31, 2026)
   const [route, setRoute] = useState("PO");
+  //JJQR - END
+  //JJQR - AI (Nov 20, 2026)
+  const [asNeeded, setAsNeeded] = useState(false);
+  const mealTouched = useRef(false);
+  const timesTouched = useRef(false);
+  const asNeededTouched = useRef(false);
+  function applySigSuggest(nextInstruction: string, nextRoute: string) {
+    const suggested = suggestFromSig({ instruction: nextInstruction, route: nextRoute });
+    if (!mealTouched.current) setMealRelation(suggested.meal);
+    if (!timesTouched.current) setTimingSlots(suggested.slots);
+    if (!asNeededTouched.current) setAsNeeded(suggested.asNeeded);
+  }
   //JJQR - END
 
   const matches = query.length >= 3 && !selectedMedicine ? medicines.filter((m) => m.genericName.toLowerCase().includes(query.toLowerCase())).slice(0, 8) : [];
@@ -391,10 +405,12 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
     setInstructions("");
     setAddToFavorites(false);
     setRoute("PO");
-  }
-
-  function toggleSlot(slot: string) {
-    setTimingSlots((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]));
+    //JJQR - AI (Nov 20, 2026)
+    setAsNeeded(false);
+    mealTouched.current = false;
+    timesTouched.current = false;
+    asNeededTouched.current = false;
+    //JJQR - END
   }
 
   function handleAdd() {
@@ -407,12 +423,15 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
         quantity,
         instruction: instructions.trim(),
         mealRelation,
-        timing: timingSlots.length ? timingSlots.join(", ") : null,
+        timing: slotsToTiming(timingSlots),
         durationKind,
         durationValue: durationKind === "Days" || durationKind === "Weeks" ? Number(durationValue) || null : null,
         indication: indication.trim() || null,
         //JJQR - AI (Oct 31, 2026)
         route: route.trim() || "PO",
+        //JJQR - END
+        //JJQR - AI (Nov 20, 2026)
+        asNeeded,
         //JJQR - END
       },
       addToFavorites,
@@ -465,50 +484,35 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
       <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Dosage / strength</span><input value={dosage} onChange={(e) => setDosage(e.target.value)} placeholder="Dosage / strength" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
       <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Quantity</span><input value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="# Quantity (e.g. 30, 1 box)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
       {/* JJQR - AI (Oct 31, 2026) — F-008 route */}
-      <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Route</span><input value={route} onChange={(e) => setRoute(e.target.value)} placeholder="Route (e.g. PO)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+      <label className="block min-w-0 space-y-xs"><span className="text-label-md font-medium text-on-surface">Route</span><input value={route} onChange={(e) => {
+        const next = e.target.value;
+        setRoute(next);
+        //JJQR - AI (Nov 20, 2026)
+        applySigSuggest(instructions, next);
+        //JJQR - END
+      }} placeholder="Route (e.g. PO)" className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
       {/* JJQR - END */}
 
-      {/* §16.8 Form 1 — before/after meals */}
-      <div>
-        <p className="mb-xs text-label-sm text-on-surface-variant">Meals</p>
-        <div className="grid grid-cols-2 gap-sm">
-          {(["Before", "After"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setMealRelation((prev) => (prev === option ? null : option))}
-              aria-pressed={mealRelation === option}
-              className={cn(
-                "rounded-lg border px-md py-sm text-label-md",
-                mealRelation === option ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
-              )}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* §16.8 Form 1 — Breakfast / Lunch / Dinner / Bedtime (multiple) */}
-      <div>
-        <p className="mb-xs text-label-sm text-on-surface-variant">Timing</p>
-        <div className="flex flex-wrap gap-sm">
-          {TIMING_SLOTS.map((slot) => (
-            <button
-              key={slot}
-              type="button"
-              onClick={() => toggleSlot(slot)}
-              aria-pressed={timingSlots.includes(slot)}
-              className={cn(
-                "whitespace-nowrap rounded-lg border px-md py-sm text-label-sm",
-                timingSlots.includes(slot) ? "border-primary bg-primary/10 text-primary" : "border-outline-variant text-on-surface-variant",
-              )}
-            >
-              {slot}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* JJQR - AI (Nov 20, 2026) */}
+      <RxTimingFields
+        idPrefix="new-rx"
+        meal={mealRelation}
+        slots={timingSlots}
+        asNeeded={asNeeded}
+        onMeal={(m) => {
+          mealTouched.current = true;
+          setMealRelation(m);
+        }}
+        onSlots={(s) => {
+          timesTouched.current = true;
+          setTimingSlots(s);
+        }}
+        onAsNeeded={(b) => {
+          asNeededTouched.current = true;
+          setAsNeeded(b);
+        }}
+      />
+      {/* JJQR - END */}
 
       {/* §16.8 Form 1 — DURATION: Maintain | ___ Days | ___ Weeks */}
       <div>
@@ -550,7 +554,13 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
       <div>
         <textarea
           value={instructions}
-          onChange={(e) => setInstructions(e.target.value.slice(0, 200))}
+          onChange={(e) => {
+            //JJQR - AI (Nov 20, 2026)
+            const next = e.target.value.slice(0, 200);
+            setInstructions(next);
+            applySigSuggest(next, route);
+            //JJQR - END
+          }}
           placeholder="Sig. / extra instructions (optional)"
           rows={2}
           className="w-full rounded-lg border border-outline-variant p-md"
@@ -793,9 +803,6 @@ export interface PrescriptionFormProps {
   //JJQR - END
   //JJQR - AI (Oct 31, 2026)
   patientAllergies?: string[];
-  allergyAckRequired?: boolean;
-  allergyAcked?: boolean;
-  onNeedAllergyAck?: () => void;
   priorRxItems?: PrescriptionLineItem[];
   patientPregnant?: boolean;
   patientAgeYears?: number | null;
@@ -807,7 +814,7 @@ export interface PrescriptionFormProps {
 // the consultation page's Prescription section (embedded) —
 // clinic-prescriptions-fe.md §2's two-column create/edit layout, following
 // the same create/edit-sharing pattern as DoctorForm.tsx.
-function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, registerFlush, onDirtyChange, onFlushed, onItemsChange, patientAllergies, allergyAckRequired, allergyAcked, onNeedAllergyAck, priorRxItems, patientPregnant, patientAgeYears, weightKg }: PrescriptionFormProps) {
+function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, registerFlush, onDirtyChange, onFlushed, onItemsChange, patientAllergies, priorRxItems, patientPregnant, patientAgeYears, weightKg }: PrescriptionFormProps) {
   const router = useRouter();
   const seedItems = group?.items ?? copyFromGroup?.items.map((i) => ({ ...i, id: newId("rxi") })) ?? [];
 
@@ -884,17 +891,6 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
     return null;
   }
 
-  function requireAllergyAckBeforeAdd(): boolean {
-    //JJQR - AI (Nov 19, 2026) - the gate used to stop silently (taps on a template / favorite did "nothing"); now it says why
-    if (isAllergyGateClosed({ required: allergyAckRequired, acked: allergyAcked, itemCount: items.length })) {
-      notify("warning", ALLERGY_REVIEW_MESSAGE);
-      onNeedAllergyAck?.();
-      return false;
-    }
-    //JJQR - END
-    return true;
-  }
-
   function reportAllergyConflict(genericName: string, allergen: string) {
     const message = `Allergy conflict: ${genericName} ↔ ${allergen}`;
     showToast("error", message);
@@ -921,6 +917,8 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
         durationKind: i.duration_kind === "Maintain" || i.duration_kind === "Days" || i.duration_kind === "Weeks" ? i.duration_kind : null,
         durationValue: i.duration_value ?? null,
         indication: i.indication ?? null,
+        //JJQR - AI (Nov 20, 2026)
+        asNeeded: asNeededFromWire(i.as_needed),
         //JJQR - END
       })),
     };
@@ -966,6 +964,9 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
       // §16.8 Form 1 structured columns.
       meal_relation: i.mealRelation ?? null,
       timing: i.timing ?? null,
+      //JJQR - AI (Nov 20, 2026)
+      as_needed: asNeededToWire(i.asNeeded),
+      //JJQR - END
       duration_kind: i.durationKind ?? null,
       duration_value: i.durationValue ?? null,
       indication: i.indication ?? null,
@@ -1016,7 +1017,6 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
   }
 
   function addLineItem(item: Omit<PrescriptionLineItem, "id">) {
-    if (!requireAllergyAckBeforeAdd()) return;
     const blocked = allergyBlockReason(item.genericName);
     if (blocked) {
       reportAllergyConflict(item.genericName, blocked);
@@ -1032,7 +1032,6 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
   }
 
   async function handleNewRxAdd(item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean) {
-    if (!requireAllergyAckBeforeAdd()) return;
     const blocked = allergyBlockReason(item.genericName);
     if (blocked) {
       reportAllergyConflict(item.genericName, blocked);
@@ -1063,7 +1062,6 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
   }
 
   function handleTemplateAddAll(template: PrescriptionTemplate) {
-    if (!requireAllergyAckBeforeAdd()) return;
     //JJQR - AI (Nov 19, 2026) - add every medicine of the template in ONE update (the old per-item loop only looked at the list as it was before the click) and report the result
     const plan = planTemplateApply(template.items, items.map((i) => i.genericName), {
       allergyConflict: allergyBlockReason,
@@ -1071,7 +1069,9 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
       newId: () => newId("rxi"),
     });
     if (plan.toAdd.length) {
-      setItems((prev) => [...prev, ...plan.toAdd]);
+      //JJQR - AI (Nov 20, 2026)
+      setItems((prev) => [...prev, ...plan.toAdd.map(prefillItem)]);
+      //JJQR - END
       setPrintSigError(false);
     }
     const result = describeTemplateApply(template.title, template.items.length, plan);
@@ -1081,7 +1081,6 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
 
   function handleRefillLastVisit() {
     if (!priorRxItems?.length) return;
-    if (!requireAllergyAckBeforeAdd()) return;
     const toAdd: PrescriptionLineItem[] = [];
     for (const item of priorRxItems) {
       const blocked = allergyBlockReason(item.genericName);
@@ -1231,6 +1230,9 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
           instruction: i.instruction,
           timing: i.timing,
           meal_relation: i.mealRelation,
+          //JJQR - AI (Nov 20, 2026)
+          as_needed: asNeededToWire(i.asNeeded),
+          //JJQR - END
           duration_kind: i.durationKind,
           duration_value: i.durationValue,
           indication: i.indication,

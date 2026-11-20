@@ -1456,6 +1456,9 @@ export type Database = {
           is_controlled_substance: boolean
           medicine_id: string
           quantity: string
+          //JJQR - AI (Nov 20, 2026)
+          as_needed: boolean | null
+          //JJQR - END
         }
         Insert: {
           created_at?: string
@@ -1467,6 +1470,9 @@ export type Database = {
           is_controlled_substance?: boolean
           medicine_id: string
           quantity: string
+          //JJQR - AI (Nov 20, 2026)
+          as_needed?: boolean | null
+          //JJQR - END
         }
         Update: {
           created_at?: string
@@ -1478,6 +1484,9 @@ export type Database = {
           is_controlled_substance?: boolean
           medicine_id?: string
           quantity?: string
+          //JJQR - AI (Nov 20, 2026)
+          as_needed?: boolean | null
+          //JJQR - END
         }
         Relationships: [
           {
@@ -1507,6 +1516,9 @@ export type Database = {
           medicine_id: string
           quantity: string
           template_id: string
+          //JJQR - AI (Nov 20, 2026)
+          as_needed: boolean | null
+          //JJQR - END
         }
         Insert: {
           created_at?: string
@@ -1518,6 +1530,9 @@ export type Database = {
           medicine_id: string
           quantity: string
           template_id: string
+          //JJQR - AI (Nov 20, 2026)
+          as_needed?: boolean | null
+          //JJQR - END
         }
         Update: {
           created_at?: string
@@ -1529,6 +1544,9 @@ export type Database = {
           medicine_id?: string
           quantity?: string
           template_id?: string
+          //JJQR - AI (Nov 20, 2026)
+          as_needed?: boolean | null
+          //JJQR - END
         }
         Relationships: [
           {

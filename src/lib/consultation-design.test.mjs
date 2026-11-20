@@ -17,7 +17,10 @@ test('clinical notes are full-width, labelled editors without pre-filled clinica
 });
 test('clinical completion, allergy and prescription review requirements are preserved',()=>{
  assert.match(page,/const REQUIRED_SECTIONS = \[0, 1, 2, 3, 6\]/);
- assert.match(page,/allergiesNeedPrescriptionReview/);assert.match(page,/noMedsConfirmed/);assert.match(page,/disabled=\{!canComplete \|\| savingDraft\}/);
+ //JJQR Nov 20, 2026
+ assert.doesNotMatch(page,/rx-allergy-review-banner/);
+ assert.match(page,/noMedsConfirmed/);assert.match(page,/disabled=\{!canComplete \|\| savingDraft\}/);
+ //JJQR - END
 });
 test('background save uses the latest callback only when changed, idle and not finalized',()=>{
  assert.match(page,/latestDraftSave\.current = handleSaveDraft/);

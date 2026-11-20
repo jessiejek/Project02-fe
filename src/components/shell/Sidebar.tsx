@@ -1,5 +1,9 @@
 "use client";
 
+//JJQR Nov 20, 2026
+import { useEffect } from "react";
+import { isLogoutPending, markLogoutPending } from "@/lib/auth/logout-intent";
+//JJQR - END
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/cn";
@@ -40,6 +44,12 @@ export interface SidebarProps {
  */
 export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed }: SidebarProps) {
   const pathname = usePathname();
+  //JJQR Nov 20, 2026 - Logout was clicked but this page loaded anyway (dev Fast Refresh full reload
+  // cancelled the /logout navigation): finish the logout without a second click.
+  useEffect(() => {
+    if (isLogoutPending(window.sessionStorage)) window.location.replace("/logout");
+  }, []);
+  //JJQR - END
   const config = ROLE_CONFIG[role];
 
   return (
@@ -116,6 +126,9 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
           //JJQR - AI (Nov 14, 2026)
           onClick={async (event) => {
             event.preventDefault();
+            //JJQR Nov 20, 2026 - remember the click so a reload that cancels /logout resumes it
+            markLogoutPending(window.sessionStorage);
+            //JJQR - END
             await Promise.race([
               clearClientCaches(),
               new Promise<void>((resolve) => {

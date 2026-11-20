@@ -11,7 +11,7 @@ function load(p) {
   return container.exports;
 }
 const plain = (x) => JSON.parse(JSON.stringify(x)); // results come from a vm realm: compare as plain data
-const { planTemplateApply, describeTemplateApply, isAllergyGateClosed, ALLERGY_REVIEW_MESSAGE } = load('lib/clinical/rx-template-apply.ts');
+const { planTemplateApply, describeTemplateApply } = load('lib/clinical/rx-template-apply.ts');
 
 const item = (genericName, extra = {}) => ({ id: 'tpl-' + genericName, rxId: 'm-' + genericName, genericName, dosage: '500 mg', quantity: '21', instruction: 'with water', ...extra });
 let n = 0;
@@ -64,21 +64,19 @@ test('message: partial add warns, all-duplicates and blocked add never stay sile
   assert.match(describeTemplateApply('Empty', 0, planTemplateApply([], [], base)).message, /has no medicines/);
 });
 
-test('allergy gate: closed only while review is required, not acknowledged and the list is empty; message tells what to tap', () => {
-  assert.equal(isAllergyGateClosed({ required: true, acked: false, itemCount: 0 }), true);
-  assert.equal(isAllergyGateClosed({ required: true, acked: true, itemCount: 0 }), false);
-  assert.equal(isAllergyGateClosed({ required: false, acked: false, itemCount: 0 }), false);
-  assert.equal(isAllergyGateClosed({ required: true, acked: false, itemCount: 2 }), false);
-  assert.match(ALLERGY_REVIEW_MESSAGE, /Acknowledge/);
-  assert.match(ALLERGY_REVIEW_MESSAGE, /allergies/);
+//JJQR Nov 20, 2026
+test('wiring: no blocking allergy acknowledge gate; Templates tab still applies inline', () => {
+  const formSrc = read('components/doctor/PrescriptionForm.tsx');
+  const pageSrc = read('app/doctor/consultation2/[bookingId]/page.tsx');
+  const gateSrc = read('lib/clinical/rx-template-apply.ts');
+  assert.equal(formSrc.includes('isAllergyGateClosed'), false);
+  assert.equal(formSrc.includes('Acknowledge'), false);
+  assert.equal(pageSrc.includes('rx-allergy-review-banner'), false);
+  assert.equal(gateSrc.includes('isAllergyGateClosed'), false);
+  assert.match(formSrc, /data-testid="rx-template-notice"/);
+  assert.match(formSrc, /planTemplateApply\(template\.items/);
 });
-
-test('wiring: the gate shows a message and the Templates tab renders the result inline', () => {
-  const src = read('components/doctor/PrescriptionForm.tsx');
-  assert.match(src, /notify\("warning", ALLERGY_REVIEW_MESSAGE\)/);
-  assert.match(src, /data-testid="rx-template-notice"/);
-  assert.match(src, /planTemplateApply\(template\.items/);
-});
+//JJQR - END
 test('wiring: every Rx row can be edited, System edits become your own copy, modal is wide', () => {
   const src = read('components/doctor/PrescriptionForm.tsx');
   assert.match(src, /isSystemCopy/);

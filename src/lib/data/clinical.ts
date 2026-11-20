@@ -295,6 +295,9 @@ export interface RxItem {
   // §16.8 Form 1 — structured Rx-pad fields (line items only; all optional).
   timing?: string | null;
   meal_relation?: string | null;
+  //JJQR - AI (Nov 20, 2026)
+  as_needed?: boolean | null;
+  //JJQR - END
   duration_kind?: string | null;
   duration_value?: number | null;
   indication?: string | null;

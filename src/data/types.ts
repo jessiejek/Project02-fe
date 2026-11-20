@@ -285,6 +285,9 @@ export interface PrescriptionLineItem {
   // §16.8 Form 1 — the clinic's real Rx pad columns.
   mealRelation?: "Before" | "After" | null;
   timing?: string | null; // comma-joined subset of Breakfast/Lunch/Dinner/Bedtime
+  //JJQR - AI (Nov 20, 2026)
+  asNeeded?: boolean | null;
+  //JJQR - END
   durationKind?: "Maintain" | "Days" | "Weeks" | null;
   durationValue?: number | null;
   indication?: string | null;

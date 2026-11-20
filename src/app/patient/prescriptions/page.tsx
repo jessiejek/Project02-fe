@@ -17,6 +17,9 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { inputStyles } from "@/components/ui/fieldStyles";
 import { formatClinicDate } from "@/lib/format";
+//JJQR - AI (Nov 20, 2026)
+import { asNeededFromWire, asNeededToWire } from "@/lib/rx-structured";
+//JJQR - END
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
 
@@ -28,6 +31,9 @@ interface PrescriptionLine {
   instruction: string;
   timing: string | null;
   mealRelation: string | null;
+  //JJQR - AI (Nov 20, 2026)
+  asNeeded: boolean | null;
+  //JJQR - END
   durationKind: string | null;
   durationValue: number | null;
   indication: string | null;
@@ -91,6 +97,9 @@ export default function PrescriptionsPage() {
           instruction: i.instruction ?? "",
           timing: i.timing ?? null,
           mealRelation: i.meal_relation ?? null,
+          //JJQR - AI (Nov 20, 2026)
+          asNeeded: asNeededFromWire(i.as_needed),
+          //JJQR - END
           durationKind: i.duration_kind ?? null,
           durationValue: i.duration_value ?? null,
           indication: i.indication ?? null,
@@ -129,6 +138,9 @@ export default function PrescriptionsPage() {
         instruction: i.instruction,
         timing: i.timing,
         meal_relation: i.mealRelation,
+        //JJQR - AI (Nov 20, 2026)
+        as_needed: asNeededToWire(i.asNeeded),
+        //JJQR - END
         duration_kind: i.durationKind,
         duration_value: i.durationValue,
         indication: i.indication,
