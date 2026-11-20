@@ -113,3 +113,20 @@ export async function sweepE2eQueueLeftovers(staff: APIRequestContext): Promise<
   return { settled, cancelled };
 }
 //JJQR - END
+
+//JJQR - AI (Nov 20, 2026) - F-1: B-06 allows one active booking per patient per day, so an E2E-tagged Pending booking left by a failed run blocks the next run
+/** Cancel the signed-in patient's own still-open bookings whose notes start with "E2E " (best effort). */
+export async function cancelOwnE2eBookings(patient: APIRequestContext): Promise<number> {
+  const r = await patient.get("/api/bookings/me");
+  if (!r.ok()) return 0;
+  const { items } = (await r.json()) as { items: { booking_id: string; status: string; notes: string | null }[] };
+  let n = 0;
+  for (const b of items) {
+    if (/^E2E /.test(b.notes ?? "") && ["Pending", "Confirmed"].includes(b.status)) {
+      await patient.put(`/api/bookings/${b.booking_id}/cancel`, { data: { reason: "E2E sweep" } }).catch(() => undefined);
+      n++;
+    }
+  }
+  return n;
+}
+//JJQR - END

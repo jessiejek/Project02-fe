@@ -1,4 +1,5 @@
 import { test, expect } from "../support/fixtures";
+import { cancelOwnE2eBookings } from "../support/visit";
 import { checkInWalkIn, createPatient, getBooking, getConsultationByBooking } from "../support/api";
 import { completeConsultFromUi, fillRequiredConsultFields, showOccasionalSections } from "../support/consultation-flow";
 
@@ -55,6 +56,7 @@ test.describe("Product decisions regression", () => {
 
   test("patient cancel pending uses in-app modal", async ({ as, api }) => {
     const patientApi = await api("patient");
+    await cancelOwnE2eBookings(patientApi); //JJQR - AI (Nov 20, 2026) - F-1: leftover E2E bookings would trip the one-per-day rule
     const bookRes = await patientApi.post("/api/bookings/book", {
       data: { visitType: "New", notes: "E2E product-decisions cancel modal" },
     });

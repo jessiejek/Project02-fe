@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { DEV_PASSWORD } from "../playwright.config";
 import { AUTH_DIR, authFile, EMAIL, ROLES } from "../support/auth";
 import { apiAs } from "../support/api";
-import { sweepE2eQueueLeftovers } from "../support/visit";
+import { cancelOwnE2eBookings, sweepE2eQueueLeftovers } from "../support/visit";
 
 for (const role of ROLES) {
   setup(`authenticate ${role}`, async ({ page }) => {
@@ -27,5 +27,8 @@ setup("sweep leftover E2E queue rows", async () => {
   const r = await sweepE2eQueueLeftovers(staff);
   console.log(`[e2e sweep] settled ${r.settled} unpaid E2E visits, cancelled ${r.cancelled} open E2E queue rows`);
   await staff.dispose();
+  const patient = await apiAs("patient");
+  console.log(`[e2e sweep] cancelled ${await cancelOwnE2eBookings(patient)} leftover E2E patient bookings`);
+  await patient.dispose();
 });
 //JJQR - END
