@@ -8,16 +8,16 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [x] P0-2: Back up local ClinicAppDb to ~/Documents/Allyn/db-backups/ (backup ~/Documents/Allyn/db-backups/ClinicAppDb-pre-finish-20261120-094229.bak)
 
 ## Phase 1 — security and money
-- [ ] B-32: Deactivated account can't log in; its tokens rejected
-- [ ] B-38: Refund bigger than amount paid rejected
-- [ ] B-02: Payment confirm validates amount (server)
-- [ ] B-03: Payment UI NaN/0/negative shows error
-- [ ] B-06: Booking respects doctor's blocked dates (server + UI)
-- [ ] B-29: Booking rejected on a day the clinic is closed
+- [x] B-32: Deactivated account can't log in; its tokens rejected (BE b63b4c1+80565a4+f761069, FE d4665b6; xUnit + e2e pass)
+- [x] B-38: Refund bigger than amount paid rejected (BE 5b1bbda, FE 029a576; xUnit + e2e pass)
+- [x] B-02: Payment confirm validates amount (server) (BE 5b1bbda, FE 029a576; xUnit + e2e pass)
+- [x] B-03: Payment UI NaN/0/negative shows error (FE 029a576; unit + e2e pass)
+- [x] B-06: Booking respects doctor's blocked dates (server + UI) (BE 9691d06+5930fb3+26d7e0b, FE d4665b6; xUnit + e2e pass)
+- [x] B-29: Booking rejected on a day the clinic is closed (BE 9691d06, FE d4665b6; xUnit + e2e pass)
 
 ## Phase 2 — workflow
 - [ ] B-40: Amend after "No follow-up" not stuck; disabled Save/Review/Complete shows which section is missing
-- [ ] B-05: Same patient can't book same date twice
+- [x] B-05: Same patient can't book same date twice (BE 9691d06, FE d4665b6; xUnit + e2e pass)
 - [ ] B-04: Reviews only for COMPLETED visit
 - [ ] B-37: Publish new consent version makes patients accept again
 
