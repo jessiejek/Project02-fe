@@ -37,40 +37,40 @@ export function Toast({ variant, message, actionLabel, onAction, actionHref, act
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
 
+  //JJQR Nov 20, 2026 - one card: icon | message (flex-1, min-w-0, wraps) | Undo | X, all inside the background
   return (
     <div
       role={variant === "error" ? "alert" : "status"}
       className={cn(
-        "animate-toast-in flex items-center justify-between gap-md rounded-lg border px-md py-sm shadow-sm",
+        "animate-toast-in flex w-full items-center gap-md rounded-lg border px-md py-sm shadow-md",
         VARIANT_CLASSES[variant],
       )}
     >
-      <div className="flex items-center gap-md">
-        <Icon name={VARIANT_ICON[variant]} />
-        <p className="text-body-md">
-          {message}
-          {actionLabel && actionHref && (
-            <Link href={actionHref} className="ml-xs font-bold underline">
-              {actionLabel}
-            </Link>
-          )}
-          {actionLabel && !actionHref && (
-            <button type="button" onClick={onAction} disabled={actionLoading} aria-busy={actionLoading || undefined} className="ml-xs font-bold underline disabled:cursor-wait">
-              {actionLoading ? "Sending…" : actionLabel}
-            </button>
-          )}
-        </p>
-      </div>
+      <span className="flex shrink-0 items-center"><Icon name={VARIANT_ICON[variant]} /></span>
+      <p className="min-w-0 flex-1 break-words text-body-md line-clamp-2" title={message}>
+        {message}
+        {actionLabel && actionHref && (
+          <Link href={actionHref} className="ml-xs font-bold underline">
+            {actionLabel}
+          </Link>
+        )}
+      </p>
+      {actionLabel && !actionHref && (
+        <button type="button" onClick={onAction} disabled={actionLoading} aria-busy={actionLoading || undefined} className="shrink-0 whitespace-nowrap rounded-md px-sm py-xs font-bold underline hover:bg-black/10 disabled:cursor-wait">
+          {actionLoading ? "Sending…" : actionLabel}
+        </button>
+      )}
       {dismissible && (
         <button
           type="button"
           onClick={() => setDismissed(true)}
           aria-label="Dismiss"
-          className="rounded-full p-xs transition-all hover:bg-black/10"
+          className="shrink-0 rounded-full p-xs transition-all hover:bg-black/10"
         >
           <Icon name="close" />
         </button>
       )}
     </div>
   );
+  //JJQR - END
 }

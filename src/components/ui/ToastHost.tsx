@@ -47,8 +47,9 @@ function Row({ item, dismiss }: { item: ToastItem; dismiss: (id: number) => void
 }
 
 export function ToastHost({ items, dismiss }: { items: ToastItem[]; dismiss: (id: number) => void }) {
+  //JJQR Nov 20, 2026 - max-w-md resolves to --spacing-md (16px) in this theme, which squeezed toasts into a narrow column; use explicit arbitrary widths
   return (
-    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-md z-[60] mx-auto flex w-full max-w-md flex-col gap-sm px-md">
+    <div aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-[80] flex w-max min-w-[min(92vw,320px)] max-w-[min(92vw,480px)] -translate-x-1/2 flex-col gap-sm">
       {items.map((t) => <Row key={t.id} item={t} dismiss={dismiss} />)}
     </div>
   );
