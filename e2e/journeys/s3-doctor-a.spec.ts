@@ -81,6 +81,24 @@ test.describe("/doctor/dashboard", () => {
     await page.goto("/doctor/dashboard");
     await expect(page.getByRole("link", { name: new RegExp(`${name} Tester — completed, unpaid ₱450 due`, "i") })).toHaveAttribute("href", `/doctor/appointments/${v.booking_id}`);
   });
+
+  //JJQR - AI (Nov 20, 2026) - batch 2: BUG-41
+  test("'Needs attention' says when it is hiding more than 5 unpaid visits", async ({ as, api, tag, cleanup }) => {
+    test.fail(true, "BUG-41: the dashboard 'Needs attention' list is cut to the first 5 unpaid completed visits (page.tsx unpaidCompleted.slice(0, 5)) with no '+N more' or 'view all' — with 6+ the doctor cannot tell some are missing");
+    const staff = await api("staff");
+    const doctor = await api("doctor");
+    for (let i = 0; i < 6; i++) {
+      const p = await createTaggedPatient(staff, tag(`dr-cap${i}`));
+      const v = await completeVisitViaApi({ staff, doctor }, p.patient_id);
+      cleanup(() => settleViaApi(staff, v.booking_id));
+    }
+    const page = await as("doctor");
+    await page.goto("/doctor/dashboard");
+    const section = page.getByText("Needs attention").locator("xpath=..");
+    await expect(section.getByRole("link", { name: /completed, unpaid/ })).toHaveCount(5);
+    await expect(section.getByText(/\+\s*\d+\s*more|view all|see all/i)).toBeVisible();
+  });
+  //JJQR - END
 });
 
 test.describe("/doctor/appointments", () => {

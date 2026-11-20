@@ -154,6 +154,15 @@ test.describe("consultation-regression-matrix — amend cluster", () => {
   });
 });
 
+//JJQR - AI (Nov 20, 2026) - batch 2: BUG-40
+test("amend: a consultation completed with 'No follow-up' can be amended straight away (Save amendment is not locked)", async ({ as, api, tag, cleanup }) => {
+  test.fail(true, "BUG-40: after completing with 'No follow-up' the amend screen re-opens with the Follow-up step unsatisfied (page.tsx ~1290 never restores mode 'none'); Save amendment and all Review buttons are disabled and nothing says why");
+  const { doctor, ticket } = await seedAndComplete(as, api, "New", tag, cleanup);
+  await openCompletedConsult(doctor, ticket.booking_id);
+  await enterAmendMode(doctor, { workaround: false });
+});
+//JJQR - END
+
 test("new-consult-complete", async ({ as, api, tag, cleanup }) => {
   const { doctorApi, ticket } = await seedAndComplete(as, api, "New", tag, cleanup);
   const booking = await getBooking(doctorApi, ticket.booking_id);
@@ -175,6 +184,9 @@ test("amend-section-save-persists", async ({ as, api, tag, cleanup }) => {
   await clickSoapToolbarSave(doctor);
   await confirmReviewSectionSave(doctor);
   await assertStillInAmendMode(doctor, "after assessment save");
+  //JJQR - AI (Nov 20, 2026) - batch 2: the save is a chain of PUTs — wait for the "Amendment saved" toast before reloading, or the reload cuts it short
+  await expect(doctor.getByText(/Amendment saved at/).first()).toBeVisible({ timeout: 15_000 });
+  //JJQR - END
   await doctor.reload();
   await openCompletedConsult(doctor, ticket.booking_id);
   await expect(doctor.getByText(/Persisted amend assessment E2E/)).toBeVisible();
@@ -196,6 +208,10 @@ test("amend-cancel-exits", async ({ as, api, tag, cleanup }) => {
   await openCompletedConsult(doctor, ticket.booking_id);
   await enterAmendMode(doctor);
   await doctor.getByRole("button", { name: "Cancel amendment" }).click();
+  //JJQR - AI (Nov 20, 2026) - batch 2: BUG-40's workaround (re-ticking "No follow-up") counts as an edit, so a discard prompt can appear; the dirty-cancel case is tested separately
+  const discard = doctor.getByRole("dialog").getByRole("button", { name: "Discard" });
+  if (await discard.isVisible().catch(() => false)) await discard.click();
+  //JJQR - END
   await expect(doctor.getByRole("button", { name: "Edit Consultation" })).toBeVisible();
 });
 
@@ -314,7 +330,9 @@ test("completed-view-banner-diagnoses", async ({ as, api, tag, cleanup }) => {
   test.setTimeout(90_000);
   const { doctor, ticket, patient } = await seedAndComplete(as, api, "New", tag, cleanup);
   await openCompletedConsult(doctor, ticket.booking_id);
-  await expect(doctor.getByRole("heading", { name: new RegExp(patient.first_name) })).toBeVisible();
+  //JJQR - AI (Nov 20, 2026) - batch 2: the patient banner prints the name as a paragraph, not a heading
+  await expect(doctor.getByText(new RegExp(patient.first_name)).first()).toBeVisible();
+  //JJQR - END
   await expect(doctor.getByRole("heading", { name: "Diagnoses" })).toBeVisible();
   await expect(doctor.getByText(/Acute pharyngitis/)).toBeVisible();
 

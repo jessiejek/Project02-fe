@@ -51,7 +51,10 @@ test.describe("doctor scope · pages and lists", () => {
     });
 
     await page.goto("/doctor/appointments");
+    //JJQR - AI (Nov 20, 2026) - batch 2: today's list is long on a shared dev DB (paged) — search for the patient first
+    await page.getByRole("searchbox", { name: /Search patients/ }).fill(`E2E ${tag}`);
     await expect(page.getByText(`E2E ${tag} Tester`).first()).toBeVisible();
+    //JJQR - END
 
     await page.goto("/doctor/schedule");
     await expect(page.locator("h1, h2").first()).toBeVisible();

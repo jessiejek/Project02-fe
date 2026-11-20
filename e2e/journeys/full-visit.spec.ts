@@ -1,6 +1,7 @@
 import { test, expect } from "../support/fixtures";
 import {
   createTaggedPatient,
+  getDoctor,
   checkInWalkIn,
   getBooking,
   getConsultationByBooking,
@@ -67,6 +68,15 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
 
   const staffApi = await api("staff");
   const doctorApi = await api("doctor");
+
+  //JJQR - AI (Nov 20, 2026) - batch 2: the dev doctor has no PRC / PTR / S2 numbers, and the print only shows them when set — give the doctor
+  // test numbers for this journey and put the originals back afterwards (same PUT the admin edit page uses).
+  const adminApi = await api("admin");
+  const docBefore = await getDoctor(adminApi);
+  cleanup(async () => void (await adminApi.put(`/api/doctors/${docBefore.doctor_id}`, { data: docBefore })));
+  const lic = await adminApi.put(`/api/doctors/${docBefore.doctor_id}`, { data: { ...docBefore, license_number: "LIC-E2E-FV", ptr_number: "PTR-E2E-FV", s2_number: "S2-E2E-FV" } });
+  expect(lic.ok(), `set doctor numbers → ${lic.status()}`).toBeTruthy();
+  //JJQR - END
 
   // ── setup: a fresh patient in today's queue ──────────────────────────────
   const patient = await createTaggedPatient(staffApi, tagFx("fv"));
@@ -164,7 +174,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await open(/Follow-up/);
   await doctor.getByRole("button", { name: "Select date" }).click();
   await doctor.getByRole("button", { name: "Next month" }).click();
-  await doctor.getByRole("button", { name: "15", exact: true }).first().click();
+  await doctor.getByRole("dialog", { name: "Choose a date" }).getByRole("button", { name: /^[A-Za-z]+ 15, \d{4}$/ }).click(); // day cells are labelled "December 15, 2026"
   // the trigger now shows the chosen date instead of the "Select date" placeholder
   await expect(doctor.getByRole("button", { name: "Select date" })).toHaveCount(0);
   await doctor.getByRole("textbox", { name: "Reason", exact: true }).fill(FOLLOWUP_REASON);

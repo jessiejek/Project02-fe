@@ -83,12 +83,28 @@ export async function openCompletedConsult(page: Page, bookingId: string) {
   await expect(page.getByRole("button", { name: "Edit Consultation" })).toBeVisible({ timeout: 30_000 });
 }
 
-export async function enterAmendMode(page: Page) {
+/**
+ * Click "Edit Consultation" and wait for the amend screen.
+ * BUG-40: a consultation completed with "No follow-up" (or with no follow-up row at all) re-opens with the Follow-up step unsatisfied, which
+ * disables "Save amendment" and every "Review section / Review notes" button without saying why. Unless `workaround: false`, this helper
+ * re-ticks "No follow-up for this visit" so the tests that are about something else can carry on; the bug itself is asserted in its own test.
+ */
+export async function enterAmendMode(page: Page, opts: { workaround?: boolean } = {}) {
   await page.getByRole("button", { name: "Edit Consultation" }).click();
   await expect(page.getByText(/Manual save only/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Amend consultation" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save amendment" })).toBeEnabled({ timeout: 15_000 });
   await expect(page.getByRole("button", { name: "Cancel amendment" })).toBeVisible();
+  const save = page.getByRole("button", { name: "Save amendment" });
+  if (opts.workaround === false) {
+    await expect(save).toBeEnabled({ timeout: 5_000 });
+    return;
+  }
+  await page.waitForTimeout(1_000);
+  if (await save.isDisabled()) {
+    await markNoFollowUp(page);
+    await expandSoapSection(page);
+  }
+  await expect(save).toBeEnabled({ timeout: 15_000 });
 }
 
 export async function assertStillInAmendMode(page: Page, contextLabel: string) {

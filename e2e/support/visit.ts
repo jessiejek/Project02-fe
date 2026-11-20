@@ -1,5 +1,5 @@
 import type { APIRequestContext } from "@playwright/test";
-import { checkInWalkIn, getDoctor, manilaDate } from "./api";
+import { cancelQueueEntry, checkInWalkIn, getDoctor, getQueue, manilaDate } from "./api";
 
 //JJQR - AI (Nov 19, 2026) - e2e-full-coverage: build a finished visit through the API so portal pages have real data to show
 export interface CompletedVisit {
@@ -92,5 +92,24 @@ export async function settleViaApi(staff: APIRequestContext, bookingId: string):
   await staff.post(`/api/payments/${p.payment_id}/confirm`, {
     data: { payment_method: "Cash", amount_received: p.amount, or_number: `E2E-CLEAN-${bookingId.slice(0, 8)}`, confirm_notes: "E2E cleanup", reference_number: null },
   }).catch(() => undefined);
+}
+//JJQR - END
+
+//JJQR - AI (Nov 20, 2026) - batch 2: leftovers from earlier/aborted runs pile up in today's queue (56 unpaid completed visits at the time of writing) and push a fresh
+// test row off paged / capped lists (e.g. the doctor dashboard "Needs attention" shows only the first 5). Sweep only rows whose patient name starts with "E2E".
+export async function sweepE2eQueueLeftovers(staff: APIRequestContext): Promise<{ settled: number; cancelled: number }> {
+  const { items } = await getQueue(staff);
+  let settled = 0;
+  let cancelled = 0;
+  for (const it of items.filter((i) => /^E2E[ -]/.test(i.patient_name))) {
+    if (it.status === "Completed" && Number(it.amount_due) > 0) {
+      await settleViaApi(staff, it.booking_id);
+      settled++;
+    } else if (!["Completed", "Cancelled", "NoShow"].includes(it.status)) {
+      await cancelQueueEntry(staff, it.booking_id, "E2E sweep");
+      cancelled++;
+    }
+  }
+  return { settled, cancelled };
 }
 //JJQR - END
