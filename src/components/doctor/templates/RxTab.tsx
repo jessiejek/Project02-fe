@@ -10,7 +10,7 @@ import { moveId } from "@/lib/templates/reorder";
 import { cn } from "@/lib/cn";
 import { copyTitle, isCopyTitle, rxSig } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, IconButton, ItemCard, ItemList, LoadGate, NIL_GUID, Pill, TextAction, inputCls, truncate, useConfirmDelete, useViewMode } from "./shared";
+import { EmptyHint, Field, IconButton, ItemCard, ItemList, LoadGate, NIL_GUID, Pill, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete, useViewMode } from "./shared";
 
 export const TIMING_SLOTS = ["Breakfast", "Lunch", "Dinner", "Bedtime"] as const;
 export const ROUTES = ["PO", "IV", "IM", "SC", "SL", "Topical", "Inhaled", "Nasal", "Ophthalmic", "Otic", "PR"] as const;
@@ -162,6 +162,8 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
         )}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <RxEditor key={panelId} ctx={ctx} row={editing} />}
+      {/*JJQR - AI (Nov 20, 2026) A4 */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="rx" onRestored={data.rx.reload} toast={toast} />
       {confirm.modal}
     </div>
   );

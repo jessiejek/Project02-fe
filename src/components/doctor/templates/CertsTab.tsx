@@ -10,7 +10,7 @@ import { validateCertTemplate } from "@/lib/templates/validation";
 import { cn } from "@/lib/cn";
 import { copyTitle, isCopyTitle } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title);
 
@@ -81,6 +81,8 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
         )}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <CertEditor key={panelId} ctx={ctx} row={editing} />}
+      {/*JJQR - AI (Nov 20, 2026) A4 */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="cert" onRestored={data.certs.reload} toast={toast} />
       {confirm.modal}
     </div>
   );

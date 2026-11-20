@@ -11,7 +11,7 @@ import { copyTitle, phraseNameFromText } from "@/lib/templates/format";
 import { PHRASE_FIELDS, phraseFieldLabel, type PhraseField } from "@/lib/templates/urlState";
 import { cn } from "@/lib/cn";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, IconButton, LoadGate, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, IconButton, LoadGate, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const sortRows = (rows: SoapPhraseRow[]) =>
   rows.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.label.localeCompare(b.label));
@@ -143,6 +143,8 @@ export function PhrasesTab({ ctx }: { ctx: TabCtx }) {
         })}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <PhraseEditor key={`${panelId}:${ctx.field ?? ""}`} ctx={ctx} row={editing} />}
+      {/*JJQR - AI (Nov 20, 2026) A4 — phrases have built-ins; favorites do not. */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="phrase" onRestored={data.phrases.reload} toast={toast} />
       {confirm.modal}
     </div>
   );

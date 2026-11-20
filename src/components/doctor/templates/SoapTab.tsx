@@ -11,7 +11,7 @@ import { SOAP_FIELD_LABELS, SOAP_KEYS, type SoapKey } from "@/lib/clinical/soap-
 import { cn } from "@/lib/cn";
 import { copyTitle, isCopyTitle } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const COLUMN: Record<SoapKey, keyof SoapTemplateRow> = {
   chiefComplaint: "chief_complaint",
@@ -102,6 +102,8 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
       {panelId && (panelId === "new" || editing) && (
         <SoapEditor key={panelId} ctx={ctx} row={editing} />
       )}
+      {/*JJQR - AI (Nov 20, 2026) A4 */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="soap" onRestored={data.soap.reload} toast={toast} />
       {confirm.modal}
     </div>
   );

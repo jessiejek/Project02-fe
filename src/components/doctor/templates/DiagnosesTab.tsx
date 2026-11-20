@@ -10,7 +10,7 @@ import { matchesQuery } from "@/lib/templates/search";
 import { validateDiagnosis } from "@/lib/templates/validation";
 import { copyTitle } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
 
@@ -67,6 +67,8 @@ export function DiagnosesTab({ ctx }: { ctx: TabCtx }) {
         )}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <DiagnosisEditor key={panelId} ctx={ctx} row={editing} />}
+      {/*JJQR - AI (Nov 20, 2026) A4 */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="diagnosis" onRestored={data.diagnoses.reload} toast={toast} />
       {confirm.modal}
     </div>
   );

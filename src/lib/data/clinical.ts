@@ -617,6 +617,21 @@ export async function reorderFavoriteMedicines(_supabase: unknown, doctorId: str
 }
 //JJQR - END
 
+//JJQR - AI (Nov 20, 2026) A4 — restore any built-in copies this doctor deleted (no-op if she already has them).
+export type RestoreBuiltInKind = "soap" | "rx" | "cert" | "diagnosis" | "phrase";
+
+export async function restoreBuiltInTemplates(
+  doctorId: string,
+  kind: RestoreBuiltInKind,
+): Promise<{ restored: number; kind: RestoreBuiltInKind }> {
+  return api.post<{ restored: number; kind: RestoreBuiltInKind }>(
+    "/api/templates/restore-built-ins",
+    undefined,
+    { query: { doctorId, kind } },
+  );
+}
+//JJQR - END
+
 //JJQR - AI (Oct 31, 2026)
 export interface PatientLabValueRow {
   test_name?: string | null;

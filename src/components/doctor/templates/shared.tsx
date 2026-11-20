@@ -7,6 +7,8 @@ import { Icon } from "@/components/ui/Icon";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/cn";
 import type { LoadStatus } from "@/lib/clinical/useTemplateLibrary";
+import { restoreBuiltInTemplates, type RestoreBuiltInKind } from "@/lib/data/clinical";
+import type { ToastApi } from "@/components/ui/ToastHost";
 
 export const inputCls =
   "min-h-11 w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-md py-sm text-body-md text-on-surface placeholder:text-on-surface-variant focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-surface-container-low disabled:text-on-surface-variant";
@@ -186,4 +188,67 @@ export const truncate = (text: string | null | undefined, max = 140) => {
 };
 
 export const NIL_GUID = "00000000-0000-0000-0000-000000000000";
+
+//JJQR - AI (Nov 20, 2026) A4 — low-emphasis restore link + in-app confirm (never window.confirm).
+export function RestoreBuiltIns({
+  doctorId,
+  kind,
+  onRestored,
+  toast,
+}: {
+  doctorId: string;
+  kind: RestoreBuiltInKind;
+  onRestored: () => void;
+  toast: ToastApi;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function restore() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const { restored } = await restoreBuiltInTemplates(doctorId, kind);
+      onRestored();
+      setOpen(false);
+      toast.push(
+        "success",
+        restored > 0
+          ? `Restored ${restored} template(s)`
+          : "Nothing to restore — you already have all built-in templates.",
+      );
+    } catch {
+      toast.push("error", "Couldn’t restore built-in templates. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="min-h-11 text-label-sm text-on-surface-variant hover:underline"
+      >
+        Restore built-in templates
+      </button>
+      <Modal
+        isOpen={open}
+        onClose={() => { if (!busy) setOpen(false); }}
+        title="Restore built-in templates?"
+        footer={
+          <>
+            <Button variant="secondary" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
+            <Button loading={busy} onClick={() => void restore()}>Restore</Button>
+          </>
+        }
+      >
+        <p className="text-body-md text-on-surface-variant">
+          This adds back any built-in templates you deleted. Your own templates and edits are not changed.
+        </p>
+      </Modal>
+    </>
+  );
+}
 //JJQR - END
