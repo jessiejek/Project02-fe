@@ -63,7 +63,9 @@ test('E3 patient address is a clean field; print builds a single residing-at sen
   assert.match(cert, />Patient address</);
   assert.doesNotMatch(cert, /residing at/);
   assert.match(printForms, /cleanMedCertAddress/);
-  assert.match(printForms, /residing at <span class="fill">\$\{e\(addr\)\}<\/span>/);
+  const printHtml = read('lib/print-forms-html.ts');
+  assert.match(printHtml, /residing at/);
+  assert.match(printForms, /address: addr/);
   assert.equal(cleanMedCertAddress('residing at 3ML Highway, '), '3ML Highway');
   assert.equal(cleanMedCertAddress('residing at residing at Cebu City,'), 'Cebu City');
   assert.equal(cleanMedCertAddress('  123 Main St,  '), '123 Main St');

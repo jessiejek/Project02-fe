@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -29,6 +29,9 @@ import { checkDrugSafety } from "@/lib/clinical/drug-safety";
 import { mgPerKgDose, mlFromConcentration } from "@/lib/clinical/peds-dosing";
 //JJQR - AI (Nov 19, 2026) - Bug fix: applying an Rx template must add its medicines, or say clearly why not
 import { ALLERGY_REVIEW_MESSAGE, describeTemplateApply, isAllergyGateClosed, planTemplateApply } from "@/lib/clinical/rx-template-apply";
+//JJQR - END
+//JJQR - AI (Nov 20, 2026)
+import { shouldFlushPrescription } from "@/lib/amend-flush";
 //JJQR - END
 
 type DbTemplateItem = Database["public"]["Tables"]["prescription_template_items"]["Row"];
@@ -768,6 +771,14 @@ export interface PrescriptionFormProps {
   patientName?: string;
   /** Called after a successful save — used in embedded mode so the parent can re-key/remount this form with the freshly-saved group. */
   onSaved?: () => void;
+  //JJQR - AI (Nov 20, 2026) - silent flush for Save amendment / Ctrl+S (no remount, no confirm dialog)
+  registerFlush?: (fn: (() => Promise<boolean>) | null) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onFlushed?: () => void | Promise<void>;
+  //JJQR - END
+  //JJQR - AI (Nov 20, 2026) - parent print/gates follow live line items, not only the last saved group
+  onItemsChange?: (items: PrescriptionLineItem[]) => void;
+  //JJQR - END
   //JJQR - AI (Oct 31, 2026)
   patientAllergies?: string[];
   allergyAckRequired?: boolean;
@@ -784,11 +795,17 @@ export interface PrescriptionFormProps {
 // the consultation page's Prescription section (embedded) —
 // clinic-prescriptions-fe.md §2's two-column create/edit layout, following
 // the same create/edit-sharing pattern as DoctorForm.tsx.
-export function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, patientAllergies, allergyAckRequired, allergyAcked, onNeedAllergyAck, priorRxItems, patientPregnant, patientAgeYears, weightKg }: PrescriptionFormProps) {
+function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, group, copyFromGroup, embedded, onSaved, registerFlush, onDirtyChange, onFlushed, onItemsChange, patientAllergies, allergyAckRequired, allergyAcked, onNeedAllergyAck, priorRxItems, patientPregnant, patientAgeYears, weightKg }: PrescriptionFormProps) {
   const router = useRouter();
   const seedItems = group?.items ?? copyFromGroup?.items.map((i) => ({ ...i, id: newId("rxi") })) ?? [];
 
   const [items, setItems] = useState<PrescriptionLineItem[]>(seedItems);
+  //JJQR - AI (Nov 20, 2026) - flush sees latest items; baseline is last loaded/saved list
+  const itemsRef = useRef(items);
+  const baselineItemsRef = useRef<PrescriptionLineItem[]>(seedItems);
+  const groupExistsRef = useRef(!!group);
+  const flushImplRef = useRef<() => Promise<boolean>>(async () => true);
+  //JJQR - END
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingItem, setEditingItem] = useState<PrescriptionLineItem | null>(null);
   const [isAddToTemplate, setIsAddToTemplate] = useState(false);
@@ -925,6 +942,43 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
 
   const effectiveBookingId = group?.bookingId ?? bookingId ?? "";
 
+  //JJQR - AI (Nov 20, 2026) - shared payload for confirm-save and silent flush
+  function rxItemsPayload(list: PrescriptionLineItem[]) {
+    return list.map((i) => ({
+      medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
+      generic_name: i.genericName,
+      dosage: i.dosage,
+      quantity: i.quantity,
+      instruction: i.instruction || null,
+      is_controlled_substance: i.isControlledSubstance ?? false,
+      // §16.8 Form 1 structured columns.
+      meal_relation: i.mealRelation ?? null,
+      timing: i.timing ?? null,
+      duration_kind: i.durationKind ?? null,
+      duration_value: i.durationValue ?? null,
+      indication: i.indication ?? null,
+      //JJQR - AI (Oct 31, 2026)
+      route: i.route ?? null,
+      //JJQR - END
+    }));
+  }
+
+  async function persistRxItems(list: PrescriptionLineItem[]) {
+    const supabase = null as never;
+    await upsertRxGroupByBooking(supabase, effectiveBookingId, {
+      patient_id: patientId,
+      doctor_id: doctorId,
+      items: rxItemsPayload(list),
+    });
+  }
+
+  function markItemsSaved(list: PrescriptionLineItem[]) {
+    baselineItemsRef.current = list;
+    groupExistsRef.current = true;
+    onDirtyChange?.(false);
+  }
+  //JJQR - END
+
   function showToast(variant: ToastVariant, message: string) {
     setToast({ key: Date.now(), variant, message });
   }
@@ -1049,27 +1103,7 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
     setSaving(true);
     try {
       const supabase = null as never;
-      await upsertRxGroupByBooking(supabase, effectiveBookingId, {
-        patient_id: patientId,
-        doctor_id: doctorId,
-        items: items.map((i) => ({
-          medicine_id: i.rxId || "00000000-0000-0000-0000-000000000000",
-          generic_name: i.genericName,
-          dosage: i.dosage,
-          quantity: i.quantity,
-          instruction: i.instruction || null,
-          is_controlled_substance: i.isControlledSubstance ?? false,
-          // §16.8 Form 1 structured columns.
-          meal_relation: i.mealRelation ?? null,
-          timing: i.timing ?? null,
-          duration_kind: i.durationKind ?? null,
-          duration_value: i.durationValue ?? null,
-          indication: i.indication ?? null,
-          //JJQR - AI (Oct 31, 2026)
-          route: i.route ?? null,
-          //JJQR - END
-        })),
-      });
+      await persistRxItems(items);
 
       // 8d: "Add to Template" writes prescription_templates + its items
       // alongside the group/line-items write — a separate, additional insert,
@@ -1082,6 +1116,9 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
         });
       }
 
+      //JJQR - AI (Nov 20, 2026)
+      markItemsSaved(items);
+      //JJQR - END
       setConfirmOpen(false);
       if (embedded) {
         onSaved?.();
@@ -1094,6 +1131,45 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
       setSaving(false);
     }
   }
+
+  //JJQR - AI (Nov 20, 2026) - silent flush: same write as Confirm & Save, no dialog, no navigate, no remount
+  useEffect(() => {
+    itemsRef.current = items;
+    if (group) groupExistsRef.current = true;
+    flushImplRef.current = async () => {
+      const current = itemsRef.current;
+      if (!shouldFlushPrescription(current, baselineItemsRef.current, groupExistsRef.current)) return true;
+      try {
+        await persistRxItems(current);
+        markItemsSaved(current);
+        await onFlushed?.();
+        return true;
+      } catch {
+        showToast("error", "Could not save the prescription. Try again.");
+        return false;
+      }
+    };
+  });
+
+  useEffect(() => {
+    onDirtyChange?.(shouldFlushPrescription(items, baselineItemsRef.current, groupExistsRef.current));
+  }, [items, onDirtyChange]);
+
+  //JJQR - AI (Nov 20, 2026) - report live items on mount and whenever the list changes
+  useEffect(() => {
+    onItemsChange?.(items);
+  }, [items, onItemsChange]);
+  //JJQR - END
+
+  useEffect(() => {
+    if (!registerFlush) return;
+    registerFlush(() => flushImplRef.current());
+    return () => {
+      registerFlush(null);
+      onDirtyChange?.(false);
+    };
+  }, [registerFlush, onDirtyChange]);
+  //JJQR - END
 
   // Same letterhead form the patient portal prints from — the doctor
   // previously had no way to hand a patient a physical Rx from inside the
@@ -1423,3 +1499,27 @@ export function PrescriptionForm({ mode, patientName, patientId, doctorId, booki
     </div>
   );
 }
+
+//JJQR - AI (Nov 20, 2026) - skip re-render when parent ticks a checkbox; callbacks are ignored (stable setters / bookingId)
+function arePrescriptionFormPropsEqual(prev: PrescriptionFormProps, next: PrescriptionFormProps): boolean {
+  const keys = new Set<keyof PrescriptionFormProps>([
+    ...(Object.keys(prev) as (keyof PrescriptionFormProps)[]),
+    ...(Object.keys(next) as (keyof PrescriptionFormProps)[]),
+  ]);
+  for (const key of keys) {
+    const a = prev[key];
+    const b = next[key];
+    if (typeof a === "function" || typeof b === "function") continue;
+    if (key === "patientAllergies") {
+      if (JSON.stringify(a) !== JSON.stringify(b)) return false;
+      continue;
+    }
+    // priorRxItems / group compared by reference, same as every other non-function prop
+    if (!Object.is(a, b)) return false;
+  }
+  return true;
+}
+
+const MemoizedPrescriptionForm = memo(PrescriptionForm, arePrescriptionFormPropsEqual);
+export { MemoizedPrescriptionForm as PrescriptionForm };
+//JJQR - END

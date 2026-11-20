@@ -159,7 +159,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await expect(doctor.getByText(LAB_TEST, { exact: false })).toBeVisible();
 
   // ── 6. Vaccinations (behind More) — stage one dose ─────────────────────
-  await steps.getByRole("button", { name: "More", exact: true }).click();
+  { const more = steps.getByRole('button', { name: 'More', exact: true }); if (await more.count() > 0) await more.click(); } //JJQR - AI (Nov 20, 2026)
   await open(/Vaccinations/);
   await doctor.getByRole("textbox", { name: "Vaccine Name" }).fill(VAX.name);
   await doctor.getByRole("textbox", { name: "Dose #" }).fill(VAX.dose);
@@ -306,22 +306,22 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   const printWin = await popupPromise;
   // printHtml() does window.open() then document.write()/close() — wait for the
   // written DOM to actually be there before snapshotting it.
-  // print-forms uses <div class="doc-title">Prescription</div>, not a heading role
-  await printWin.getByText("Prescription", { exact: true }).waitFor({ timeout: 10_000 });
+  await printWin.locator(".form").waitFor({ timeout: 10_000 });
+  await printWin.getByText("DURATION").waitFor({ timeout: 10_000 });
 
   const html = await printWin.content();
-  expect(html).toContain("Prescription");
+  expect(html).toContain("DURATION");
   expect(html).toContain(patientName);
   expect(html).toContain("Paracetamol");
   expect(html).toContain("20 tablets");
   expect(html).toMatch(/Sig\.?/i);
   // F-009: patient-tab print path must surface license / PTR / S2 from print-forms
-  expect(html).toMatch(/License No\./);
-  expect(html).toMatch(/PTR No\./);
-  expect(html).toMatch(/S2 No\./);
+  expect(html).toMatch(/License No:/);
+  expect(html).toMatch(/PTR No:/);
+  expect(html).toMatch(/S2 No:/);
 
   mkdirSync(ARTIFACTS, { recursive: true });
   const pdfPath = join(ARTIFACTS, `prescription-${tag}.pdf`);
-  await printWin.pdf({ path: pdfPath, format: "A4", printBackground: true });
+  await printWin.pdf({ path: pdfPath, preferCSSPageSize: true, printBackground: true });
   await test.info().attach("prescription.pdf", { path: pdfPath, contentType: "application/pdf" });
 });

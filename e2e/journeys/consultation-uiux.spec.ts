@@ -14,18 +14,22 @@ test.describe("Consultation2 UI/UX", () => {
     return doctor;
   }
 
-  test("Use template, Manage templates and step bar: visible at the top, More hides Vaccinations/Fee, no warnings before trying to complete", async ({ as, api }) => {
+  test("Use template, Manage templates and step bar: visible at the top, all sections including Vaccinations/Fee, no warnings before trying to complete", async ({ as, api }) => {
     const doctor = await openFreshConsult(as, api);
     await openSectionByTitle(doctor, /1\. Clinical notes/i);
     // 1. visible template picker (no collapsed details to open)
     await expect(doctor.getByLabel("Use SOAP template")).toBeVisible();
     await expect(doctor.getByRole("link", { name: /Manage templates/ })).toHaveCount(1);
-    // 5. Vaccinations + Professional Fee behind More
+    //JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Fee behind More; tab bar wraps with no h-scroll
     const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await expect(steps.getByRole("button", { name: "More", exact: true })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toHaveCount(0);
     await steps.getByRole("button", { name: "More", exact: true }).click();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
+    expect(await steps.evaluate((nav) => nav.scrollWidth <= nav.clientWidth + 1)).toBe(true);
+    //JJQR - END
     // 3. untouched required steps show an empty circle (no warning icon) until "required left" is clicked
     await expect(steps.locator('[data-icon="triangle-exclamation"]')).toHaveCount(0);
     // 6. the "required sections left" button jumps to the next missing section

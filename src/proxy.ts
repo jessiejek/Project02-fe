@@ -49,6 +49,12 @@ function gate(request: NextRequest, role: string | undefined, response: NextResp
 // happens here so every downstream RSC/route sees a fresh access token.
 // Role gating only trusts verifyJwt (HMAC + iss + aud) — never raw decode.
 export async function proxy(request: NextRequest): Promise<NextResponse> {
+  //JJQR - AI (Nov 20, 2026)
+  // /logout authenticates itself; skip silent refresh so rotated cookies cannot
+  // outlive the logout route's clearSessionCookies.
+  if (request.nextUrl.pathname === "/logout") return NextResponse.next();
+  //JJQR - END
+
   const response = NextResponse.next({ request });
 
   let token = request.cookies.get(ACCESS_COOKIE)?.value;
@@ -82,7 +88,9 @@ export const config = {
     // Exclude Next internals, static assets, and route handlers under /api
     // (e.g. /api/session/* — those authenticate the request themselves).
     //JJQR - AI (Nov 14, 2026)
-    "/((?!api|_next/static|_next/image|favicon.ico|serwist|sw\\.js|manifest\\.webmanifest|~offline|icons|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //JJQR - AI (Nov 20, 2026)
+    "/((?!api|_next/static|_next/image|favicon.ico|logout|serwist|sw\\.js|manifest\\.webmanifest|~offline|icons|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //JJQR - END
     //JJQR - END
   ],
 };

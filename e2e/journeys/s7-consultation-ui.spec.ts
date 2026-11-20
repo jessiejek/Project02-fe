@@ -35,7 +35,11 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     await page.goto(`/doctor/consultation2/${v.booking_id}`);
     await expect(page.getByText(new RegExp(`${p.first_name}.*Tester`, "i")).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Document consultation", level: 1 })).toBeVisible();
-    for (const n of [/1\. Clinical notes/, /2\. Vital Signs/, /3\. Diagnosis/, /4\. Prescription/, /5\. Lab Orders/, /6\. Follow-up/, /7\. Medical Certificate/, /More/]) await expect(nav(page, n)).toBeVisible();
+    //JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Fee sit behind More
+    for (const n of [/1\. Clinical notes/, /2\. Vital Signs/, /3\. Diagnosis/, /4\. Prescription/, /5\. Lab Orders/, /6\. Follow-up/, /7\. Medical Certificate/]) await expect(nav(page, n)).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Consultation sections" }).getByRole("button", { name: "More", exact: true })).toBeVisible();
+    await page.getByRole("navigation", { name: "Consultation sections" }).getByRole("button", { name: "More", exact: true }).click();
+    for (const n of [/Vaccinations/, /Professional Fee/]) await expect(nav(page, n)).toBeVisible();
     await expect(page.getByRole("textbox", { name: /Chief complaint/ })).toHaveValue("E2E seeded complaint");
     await expect(complete(page)).toBeDisabled();
   });

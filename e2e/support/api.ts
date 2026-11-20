@@ -160,13 +160,30 @@ export async function getMedicalCertificate(
   bookingId: string,
 ): Promise<Record<string, unknown> | null> {
   const res = await api.get(`/api/medical-certificates/by-booking/${bookingId}`);
-  return res.ok() ? res.json() : null;
+  if (!res.ok()) return null;
+  const text = await res.text();
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 export async function getVaccinations(api: APIRequestContext, patientId: string): Promise<Record<string, unknown>[]> {
   const res = await api.get(`/api/patient-vaccinations?patientId=${patientId}`);
   return res.ok() ? res.json() : [];
 }
+
+//JJQR - AI (Nov 20, 2026) - amend-persist-all: allergies are a patient resource, not on the consultation row
+export async function getPatientAllergies(
+  api: APIRequestContext,
+  patientId: string,
+): Promise<Record<string, unknown>[]> {
+  const res = await api.get(`/api/patients/${patientId}/allergies`);
+  return res.ok() ? res.json() : [];
+}
+//JJQR - END
 
 /** Best-effort teardown — delete the user's guest patient (cascades bookings/consultations). */
 export async function deletePatient(api: APIRequestContext, patientId: string): Promise<void> {

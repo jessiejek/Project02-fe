@@ -1,7 +1,7 @@
 import { test, expect } from "../support/fixtures";
 import { cancelOwnE2eBookings } from "../support/visit";
 import { checkInWalkIn, createPatient, getBooking, getConsultationByBooking } from "../support/api";
-import { completeConsultFromUi, fillRequiredConsultFields, showOccasionalSections } from "../support/consultation-flow";
+import { completeConsultFromUi, fillRequiredConsultFields } from "../support/consultation-flow";
 
 //JJQR - AI (Oct 31, 2026)
 test.describe("Product decisions regression", () => {
@@ -38,8 +38,8 @@ test.describe("Product decisions regression", () => {
     await expect(page.getByRole("listbox").getByRole("option").filter({ hasText: patient.first_name })).not.toHaveCount(0, { timeout: 15_000 });
   });
 
-  //JJQR - AI (Nov 20, 2026) - batch 2: the redesign (consult-uiux #5) deliberately moved Vaccinations + Professional Fee behind "More"; this test now asserts that
-  test("vaccinations section is behind More on the step bar and appears when More is opened", async ({ as, api }) => {
+  //JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Fee behind More; tab bar wraps with no h-scroll
+  test("vaccinations and professional fee sit behind More and the step bar does not scroll horizontally", async ({ as, api }) => {
     const staffApi = await api("staff");
     const tag = Date.now().toString(36);
     const patient = await createPatient(staffApi, tag);
@@ -48,9 +48,13 @@ test.describe("Product decisions regression", () => {
     await page.goto(`/doctor/consultation2/${ticket.booking_id}?mode=complete`);
     const steps = page.getByRole("navigation", { name: "Consultation sections" });
     await expect(steps.getByRole("button", { name: /1\. Clinical notes/ })).toBeVisible({ timeout: 15_000 });
+    await expect(steps.getByRole("button", { name: "More", exact: true })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
-    await showOccasionalSections(page);
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toHaveCount(0);
+    await steps.getByRole("button", { name: "More", exact: true }).click();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
+    expect(await steps.evaluate((nav) => nav.scrollWidth <= nav.clientWidth + 1)).toBe(true);
   });
   //JJQR - END
 

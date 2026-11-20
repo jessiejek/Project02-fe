@@ -6,7 +6,8 @@ const read = (p) => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const page = read('app/doctor/consultation2/[bookingId]/page.tsx');
 const combo = read('components/doctor/DiagnosisCombobox.tsx');
 const nav = page.slice(page.indexOf('aria-label="Consultation sections"'), page.indexOf('min-w-0 space-y-md pb-[max(16rem'));
-const dx = page.slice(page.indexOf('{isOpen && i === 2 &&'), page.indexOf('{isOpen && i === 3 &&'));
+//JJQR - AI (Nov 20, 2026) - Vital Signs (1) and Prescription (3) stay mounted, so slice diagnosis to Lab Orders (4)
+const dx = page.slice(page.indexOf('{isOpen && i === 2 &&'), page.indexOf('{isOpen && i === 4 &&'));
 
 test('C1 diagnosis combobox: one input, saved then ICD-10, keyboard + a11y', () => {
   assert.doesNotMatch(dx, /Insert saved diagnosis/);
@@ -44,7 +45,7 @@ test('C3 one Manage link per section (diagnosis keeps Manage deep link, drops Ma
   assert.match(dx, />\s*Manage\s*</);
   assert.doesNotMatch(dx, /Manage templates/);
   assert.equal((dx.match(/manageTemplatesHref/g) ?? []).length, 1);
-  const soap = page.slice(page.indexOf('{isOpen && i === 0 &&'), page.indexOf('{isOpen && i === 1 &&'));
+  const soap = page.slice(page.indexOf('{isOpen && i === 0 &&'), page.indexOf('{isOpen && i === 2 &&'));
   assert.equal((soap.match(/>\s*Manage templates\s*</g) ?? []).length, 1);
   const cert = page.slice(page.indexOf('{isOpen && i === 7 &&'), page.indexOf('{isOpen && i === 8 &&'));
   assert.equal((cert.match(/>\s*Manage\s*</g) ?? []).length, 1);
