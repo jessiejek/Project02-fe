@@ -95,6 +95,7 @@ import {
 } from "@/lib/consult-print";
 import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
 import { formatPeso } from "@/lib/format";
+import { computeClinicFee, type ClinicFeeSchedule } from "@/lib/clinical/preview-fee";
 import type {
   Consultation,
   Diagnosis,
@@ -922,12 +923,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [staffVisitType, setStaffVisitType] = useState<"New" | "FollowUp" | null>(null);
   const [discountCategory, setDiscountCategory] = useState<"Senior" | "PWD" | "">("");
   const [medCertRequested, setMedCertRequested] = useState(false);
-  const [feeSchedule, setFeeSchedule] = useState<{
-    consultation: number;
-    followUp: number;
-    seniorPwd: number;
-    medCert: number;
-  } | null>(null);
+  const [feeSchedule, setFeeSchedule] = useState<ClinicFeeSchedule | null>(null);
   // §16.8 Form 2 — medical certificate (its own section, index 7).
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
   const [mcAddress, setMcAddress] = useState("");
@@ -1087,16 +1083,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [saveMcTplOpen, setSaveMcTplOpen] = useState(false);
   const [saveMcTplTitle, setSaveMcTplTitle] = useState("");
 
-  // §16.6 preview of the flat-line fee the backend will compute on save.
-  const previewFee = (() => {
-    if (!feeSchedule) return null;
-    const subtotal = discountCategory
-      ? feeSchedule.seniorPwd
-      : visitType === "FollowUp"
-        ? feeSchedule.followUp
-        : feeSchedule.consultation;
-    return subtotal + (medCertRequested ? feeSchedule.medCert : 0);
-  })();
+  //JJQR - AI (Nov 20, 2026) F3 — one total line; same math as the former inline previewFee
+  const feePreview = feeSchedule
+    ? computeClinicFee(feeSchedule, visitType, discountCategory, medCertRequested)
+    : null;
+  const previewFee = feePreview?.total ?? null;
+  //JJQR - END
 
   // Single load effect: real booking (joined), consultation + diagnoses +
   // follow_up, last-visit SOAP + its vitals, this booking's own vital
@@ -1316,6 +1308,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               followUp: s.fee_follow_up,
               seniorPwd: s.fee_senior_pwd,
               medCert: s.fee_med_cert,
+              discountPct: s.discount_pct,
             });
           }
         })
@@ -3075,17 +3068,22 @@ Return to patient queue
                           />
                           Medical certificate (+₱{feeSchedule?.medCert ?? 50}) — issue it in section 8
                         </label>
-                        {previewFee !== null && (
+                        {/*JJQR - AI (Nov 20, 2026) F3 — one Total line from computeClinicFee */}
+                        {feePreview && (
                           <p className="text-label-md text-on-surface">
-                            Computed clinic fee: <strong>₱{previewFee}</strong>
-                            <span className="text-on-surface-variant"> — applied to the booking on save.</span>
+                            {feePreview.summary}
                           </p>
                         )}
+                        {/*JJQR - END */}
                       </div>
                       <div className="flex gap-sm border-b border-outline-variant">
                         <button
                           type="button"
-                          onClick={() => setPfDecision("charge")}
+                          onClick={() => {
+                            setPfDecision("charge");
+                            //JJQR - AI (Nov 20, 2026) F3 — prefill Amount with the clinic total when empty
+                            if (!pfAmount.trim() && previewFee !== null) setPfAmount(String(previewFee));
+                          }}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
                           {/*JJQR - AI (Nov 20, 2026) F2 — same labels as the completed-visit line */}

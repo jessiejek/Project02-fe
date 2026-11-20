@@ -118,5 +118,16 @@ test.describe("Consultation2 simplify F1–F4 professional fee", () => {
     await expect(doctor.getByRole("button", { name: "Charge PF" })).toHaveCount(0);
     await expect(doctor.getByRole("button", { name: "Waive PF" })).toHaveCount(0);
   });
+
+  test("F3 follow-up with med cert shows Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    await doctor.getByRole("button", { name: "Follow-up visit" }).click();
+    const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await steps.getByRole("button", { name: "More", exact: true }).click();
+    await openSectionByTitle(doctor, /Professional Fee/i);
+    await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
+    await expect(doctor.getByText("Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)")).toBeVisible();
+    await expect(doctor.getByText("Computed clinic fee")).toHaveCount(0);
+  });
 });
 //JJQR - END
