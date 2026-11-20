@@ -57,8 +57,30 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [ ] F-3: docs/FINISH-REPORT.md written and returned
 
 ## Assumptions
+- PV-4 (30-minute idle auto-logout) is excluded by Jessie. No code for it exists.
+- The consent "last updated" date on the patient consent page uses the settings `updated_at`.
+- Registering no longer auto-consents. The "I have read the Privacy Notice" checkbox is optional and unticked; real consent is given on the consent screen.
+- "Diagnoses amended" audit rows still show old → new on purpose: a test requires it and the original diagnosis must stay recoverable. Every other change log lists field names only (PV-9).
+- The public Privacy Notice lives at `/api/public/privacy-notice` because `src/proxy.ts` (your uncommitted file) gates public paths and skips `/api/*`. `/privacy` is the in-app copy.
+- My e2e test stack (BE :5155, FE :3100) raises the rate limits through environment variables set in my own script only. Nothing in the repo changed.
+- The upload magic-byte check (PV-6) made the e2e and xUnit fixtures use real file headers.
+- Doctors and staff can open any patient record. I treated that as a product decision, not a bug.
+- Account lockout stays at 5 failures / 15 minutes.
+- Retention is 7 years from the last booking. Nothing deletes data automatically; an admin has to complete a deletion request.
 
 ## Needs Jessie
+- Commit ed1257b (BE, local only) accidentally includes your uncommitted CORS edit in `appsettings.Development.json`. It has no secrets. Check it before pushing.
+- Your PWA files are still uncommitted (`public/`, `src/app/sw.ts`, `serwist/`, `manifest.ts`, `~offline/`, `components/pwa/`, `lib/pwa/`, plus `next.config.ts`, `package.json`, etc.). PV-10 (no patient data in caches) depends on them. Commit them yourself and review.
+- Add HSTS and security headers in `next.config.ts` `headers()`. I did not touch that file. Snippet: `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`. The BE already sends HSTS outside Development.
+- To make the in-app `/privacy` URL public, add `/privacy` to `isPublicPath` in `src/proxy.ts`.
+- The dev SQL login and dev JWT secret are in committed files (`appsettings.Development.json`, `docker-compose.yml`, `INTEGRATION_ROADMAP.md`). I did not print them. Move them to env/user-secrets and rotate them if they were ever reused anywhere. Production now refuses to start with a short or placeholder `Jwt:Secret`.
+- Patient search sends `?q=<name>` in the URL, so web-server access logs may contain names. Switch to POST or turn off query-string logging.
+- Decide whether doctors should only see their own patients.
+- Fill the DPO name/contact placeholders in the Privacy Notice and in `docs/privacy/*`. A legal adviser should review the DRAFT notice, consent text and handling guide.
+- Nothing deletes data after the 7-year retention period. Decide who runs that.
+- `package.json` has no e2e script (it is your uncommitted file). The two-pass run commands are in `e2e/README.md`.
+- The e2e login tests use `patient@clinic.test` with wrong passwords (about 3 per run). Several runs within 15 minutes could lock that account. Wait out the lock or run the unlock script.
+- Rate limits: a default test run with 4 workers can hit the auth rate limit on the dev server. Raise `RateLimiting__AuthPermitPerMinute` when you run the full suite on :5055.
 
 ## Log
 - Jessie's uncommitted-file checksums before start: /tmp/finish-jessie-files-before.txt (also copy in ~/Documents/Allyn/db-backups/finish-jessie-files-before.txt)
