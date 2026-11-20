@@ -109,7 +109,7 @@ test.describe("PV-13 / PV-14 · my data", () => {
     await expect(ap.getByText("My contact number is out of date.")).toBeVisible();
   });
 
-  test("a deletion request is scheduled for after the 7-year retention when there is a visit on file, and the admin can't complete it early", async ({ api, tag, cleanup }) => {
+  test("a deletion request from a patient with no visit on file is logged as Pending (the 7-year Scheduled/early-completion rules are in the API tests)", async ({ api, tag, cleanup }) => {
     const me = await registerFreshPatient(tag("pv14d"));
     cleanup(() => me.dispose());
     // no visit yet → Pending (nothing to retain); the early-completion rule is covered by the API tests

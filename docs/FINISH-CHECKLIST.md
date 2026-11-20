@@ -44,10 +44,10 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [ ] PV-8: Secrets out of code/config into env vars
 - [ ] PV-9: No patient names/health details in URLs, errors, logs, console
 - [ ] PV-10: PWA never stores patient data; clear on logout
-- [ ] PV-11: Public privacy notice page (English + Filipino)
-- [ ] PV-12: Consent screen (nothing pre-ticked, decline = accept ease, versioned+dated, withdraw)
-- [ ] PV-13: Patient downloads own data
-- [ ] PV-14: Patient requests correction/deletion (logged, scheduled)
+- [x] PV-11: Public privacy notice page (English + Filipino) (FE d8b37fe: /api/public/privacy-notice (public; EN+FIL) + in-app /privacy; e2e pass)
+- [x] PV-12: Consent screen (nothing pre-ticked, decline = accept ease, versioned+dated, withdraw) (BE dc53c75 + FE d8b37fe; equal-weight Agree/Decline, versioned+dated, withdraw on Profile>Privacy; xUnit+e2e pass)
+- [x] PV-13: Patient downloads own data (BE dc53c75 export + FE d8b37fe 'Download my data'; xUnit+e2e pass)
+- [x] PV-14: Patient requests correction/deletion (logged, scheduled) (BE dc53c75 data-requests (7-yr RetainUntil) + FE d8b37fe patient form + admin queue; xUnit+e2e pass)
 - [ ] PV-15: docs/privacy/PRIVACY-NOTICE.md (DRAFT)
 - [ ] PV-16: docs/privacy/HOW-DATA-IS-HANDLED.md (DRAFT)
 
