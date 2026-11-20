@@ -44,7 +44,11 @@ test('consultation2 UI/UX wiring: visible Use template bar, More toggle, jump bu
   const banner = read('components/doctor/ConsultPatientBanner.tsx');
   assert.ok(page.indexOf('aria-label="Use SOAP template"') < page.indexOf('Previous note and specialty filter'));
   assert.doesNotMatch(page, /Templates and previous notes/);
-  assert.match(page, /\{showOccasional \? "Less" : "More"\}/);
+  //JJQR - AI (Nov 20, 2026) - wrap-all pills: every section visible; no More toggle
+  assert.match(page, /const revealOccasionalSections = true/);
+  assert.match(page, /flex flex-wrap gap-sm/);
+  assert.doesNotMatch(page, /\{showOccasional \? "Less" : "More"\}/);
+  //JJQR - END
   assert.match(page, /nextMissingSection\(missingRequiredSections/);
   assert.match(page, /data-added="true"/);
   assert.match(banner, /Record allergies \/ NKDA/);

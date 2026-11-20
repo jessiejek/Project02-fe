@@ -3,7 +3,7 @@
 import "./consultation.css";
 import { ClinicalNoteField } from "@/components/doctor/ClinicalNoteField";
 
-import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { todayManila } from "@/lib/clock";
 import Link from "next/link";
 import { buttonStyles } from "@/components/ui/buttonStyles";
@@ -174,7 +174,7 @@ const SECTIONS = [
 // contradicted that explicit section).
 /** Consult2 / Grace clinic: always chart Rx + follow-up as well as SOAP/vitals/Dx. */
 const REQUIRED_SECTIONS = [0, 1, 2, 3, 6];
-/** Vaccinations + PF — hidden until "Show more" (Labs + Med cert in default stack). */
+/** Vaccinations + PF — last in SECTION_ORDER so the first 7 tab numbers stay 1–7. */
 const OCCASIONAL_SECTIONS = [5, 8] as const;
 const SECTION_ORDER = [0, 1, 2, 3, 4, 6, 7, 5, 8] as const;
 
@@ -297,6 +297,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [vitalReadings, setVitalReadings] = useState<{ templateId: string; value: string }[]>([]);
 
   const [mode, setMode] = useState(initialMode);
+  //JJQR - AI (Nov 20, 2026) - PrescriptionForm memo ignores function props; flush must read latest mode
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  //JJQR - END
   const [checklistOpen, setChecklistOpen] = useState(false);
   //JJQR - AI (Oct 31, 2026)
   //JJQR - AI (Nov 19, 2026) - warnings on required steps only after the doctor tries to complete
@@ -318,15 +322,22 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [justCompleted, setJustCompleted] = useState(false);
   const [savingPostCompletePf, setSavingPostCompletePf] = useState(false);
   const [openSection, setOpenSection] = useState(0);
+  //JJQR - AI (Nov 20, 2026) - keep Vital Signs / Prescription mounted after first open so local edits are not lost
+  const [visited, setVisited] = useState(() => new Set<number>([0]));
+  useEffect(() => {
+    setVisited((prev) => {
+      if (prev.has(openSection)) return prev;
+      const next = new Set(prev);
+      next.add(openSection);
+      return next;
+    });
+  }, [openSection]);
+  //JJQR - END
   //JJQR - AI (Oct 31, 2026)
   const [allergyReviewed, setAllergyReviewed] = useState(false);
   //JJQR - END
-  //JJQR - AI (Oct 31, 2026) — complete mode shows all sections; no occasional toggle
-  /** Consult2: occasional sections hidden until the doctor asks for them (not in complete mode). */
-  const [showOccasional, setShowOccasional] = useState(false);
-  //JJQR - AI (Nov 19, 2026) - Vaccinations + Fee sit behind "More" in every mode (the open one always stays visible)
-  const revealOccasionalSections = showOccasional || OCCASIONAL_SECTIONS.includes(openSection as (typeof OCCASIONAL_SECTIONS)[number]);
-  //JJQR - END
+  //JJQR - AI (Nov 20, 2026) - wrap-all section pills: Vaccinations + Fee always visible
+  const revealOccasionalSections = true;
   const visibleSectionOrder = SECTION_ORDER.filter(
     (i) => revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]),
   );
@@ -339,6 +350,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // navigating anywhere).
   const [rxVersion, setRxVersion] = useState(0);
   const [rxSavedAt, setRxSavedAt] = useState<string | null>(null);
+  //JJQR - AI (Nov 20, 2026) - embedded Rx/vitals flush so Save amendment persists their local edits
+  const rxFlushRef = useRef<(() => Promise<boolean>) | null>(null);
+  const vitalsFlushRef = useRef<(() => Promise<boolean>) | null>(null);
+  const [rxDirty, setRxDirty] = useState(false);
+  const [vitalsDirty, setVitalsDirty] = useState(false);
+  const registerRxFlush = useCallback((fn: (() => Promise<boolean>) | null) => {
+    rxFlushRef.current = fn;
+  }, []);
+  const registerVitalsFlush = useCallback((fn: (() => Promise<boolean>) | null) => {
+    vitalsFlushRef.current = fn;
+  }, []);
+  async function flushEmbeddedEditors() {
+    const flushRx = rxFlushRef.current;
+    const flushVitals = vitalsFlushRef.current;
+    const rxOk = flushRx ? await flushRx() : true;
+    const vitalsOk = flushVitals ? await flushVitals() : true;
+    if (!rxOk || !vitalsOk) {
+      throw new Error("Could not save the prescription/vital signs. Your changes are still on screen, try again.");
+    }
+  }
+  //JJQR - END
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
   //JJQR - AI (Oct 31, 2026)
   const [amendSavedAt, setAmendSavedAt] = useState<string | null>(null);
@@ -662,6 +694,31 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // bookingId), edited on the standalone Prescription Builder page. Real
   // fetch lives in the main load effect below (Phase 8).
   const [prescriptionGroup, setPrescriptionGroup] = useState<PrescriptionGroup | undefined>(undefined);
+  //JJQR - AI (Nov 20, 2026) - live Rx lines from the embedded form (print/gates before Save)
+  const [rxLiveItems, setRxLiveItems] = useState<PrescriptionLineItem[] | null>(null);
+  const effectiveRxItems = rxLiveItems ?? prescriptionGroup?.items ?? [];
+  useEffect(() => {
+    if (effectiveRxItems.length > 0 && noMedsConfirmed) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- auto-uncheck "No medicines" when live Rx lines exist
+      setNoMedsConfirmed(false);
+    }
+  }, [effectiveRxItems.length, noMedsConfirmed]);
+  //JJQR - AI (Nov 20, 2026) - amend: emptying a completed consult's Rx list means no medicines this visit
+  useEffect(() => {
+    if (mode !== "amend" || rxLiveItems === null || rxLiveItems.length !== 0 || noMedsConfirmed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- amend empty live Rx implies no-meds; skips complete mode; length===0 so it cannot fight the uncheck-when-items-exist effect
+    setNoMedsConfirmed(true);
+  }, [mode, rxLiveItems, noMedsConfirmed]);
+  //JJQR - END
+  //JJQR - AI (Nov 20, 2026) - refresh after silent Rx flush without bumping rxVersion; empty group in amend still satisfies no-meds
+  async function refreshPrescriptionGroup() {
+    const supabase = null as never;
+    const rows = await queryRxGroups(supabase, { bookingId });
+    const mapped = rows[0] ? mapRxGroup(rows[0]) : undefined;
+    setPrescriptionGroup(mapped);
+    if (modeRef.current === "amend" && (mapped?.items.length ?? 0) === 0) setNoMedsConfirmed(true);
+  }
+  //JJQR - END
 
   // Section 5: Lab Orders — seeded from the existing record. Lab orders have
   // no real table yet (Implementation-Phases/09-lab-orders-vaccinations-documents.md),
@@ -740,13 +797,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
 
   async function runPrintPrescription() {
-    const group = prescriptionGroup;
-    if (!booking || !group?.items.length) return;
+    //JJQR - AI (Nov 20, 2026) - print live form items, not only the last saved group
+    if (!booking || effectiveRxItems.length === 0) return;
     setPrintingRx(true);
     try {
       await printPrescriptionForBooking(bookingId, {
         date: booking.appointmentDate,
-        items: group.items.map((i) => ({
+        items: effectiveRxItems.map((i) => ({
           generic_name: i.genericName,
           dosage: i.dosage,
           quantity: i.quantity,
@@ -763,10 +820,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     } finally {
       setPrintingRx(false);
     }
+    //JJQR - END
   }
 
   function consultPrintButtons(className?: string) {
-    const showRx = (prescriptionGroup?.items.length ?? 0) > 0;
+    //JJQR - AI (Nov 20, 2026) - Print Prescription follows live items
+    const showRx = effectiveRxItems.length > 0;
+    //JJQR - END
     const showLabs = labOrders.some((l) => l.testName.trim());
     //JJQR - AI (Oct 31, 2026)
     return (
@@ -1131,7 +1191,16 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
       //JJQR - AI (Nov 19, 2026) - SOAP / diagnosis / certificate template lists now load via useTemplateLibrary (independent of this load)
       if (rxRes.data) {
-        setPrescriptionGroup(mapRxGroup(rxRes.data));
+        const mapped = mapRxGroup(rxRes.data);
+        setPrescriptionGroup(mapped);
+        //JJQR - AI (Nov 20, 2026) - completed/amended visits with a zero-item Rx group already passed the no-meds gate
+        if (
+          (consultRes.data?.status === "Completed" || consultRes.data?.status === "Amended") &&
+          mapped.items.length === 0
+        ) {
+          setNoMedsConfirmed(true);
+        }
+        //JJQR - END
       } else if (
         consultRes.data &&
         (consultRes.data.status === "Completed" || consultRes.data.status === "Amended")
@@ -1400,7 +1469,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     chiefComplaint.trim() !== "",
     vitalsSatisfied,
     diagnoses.length > 0,
-    (prescriptionGroup?.items.length ?? 0) > 0,
+    //JJQR - AI (Nov 20, 2026) - Rx step follows live items so unsaved lines satisfy the gate
+    effectiveRxItems.length > 0,
+    //JJQR - END
     labOrders.length > 0,
     vaccinations.length > 0,
     false,
@@ -1698,6 +1769,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setSaveError("");
     setSavingDraft(true);
     try {
+      //JJQR - AI (Nov 20, 2026)
+      await flushEmbeddedEditors();
+      //JJQR - END
       const savedId = await persistConsultation("Draft");
       if (!savedId) throw new Error("Could not save the draft. Check your connection and try again.");
       completeBaselineRef.current = snapshotBeingSaved;
@@ -1714,6 +1788,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   async function handleComplete() {
     setSaveError("");
     try {
+      //JJQR - AI (Nov 20, 2026)
+      await flushEmbeddedEditors();
+      //JJQR - END
       const savedId = await persistConsultation("Completed");
       if (!savedId) throw new Error("Could not complete the consultation. Check your connection and try again.");
       // The consultation row and the booking/queue row track status
@@ -1749,6 +1826,30 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   // §16.8 Form 2 — save the certificate row (upsert on consultation) then print
   // it on the shared clinic letterhead. Requires a saved consultation.
+  //JJQR - AI (Nov 20, 2026) - shared cert upsert so Save amendment / Ctrl+S persist the same row as Issue
+  async function saveMedCertRow(consultId: string) {
+    if (!booking || !clinicRow) {
+      throw new Error("Could not save the medical certificate. Check your connection and try again.");
+    }
+    const supabase = null as never;
+    const today = todayManila();
+    const cert = {
+      patient_id: booking.patientId,
+      doctor_id: booking.doctorId,
+      issue_date: today,
+      patient_address_snapshot: mcAddress || null,
+      examined_at: mcExaminedAt || doctorClinicLabel || clinicRow.clinic_name,
+      examination_date_from: mcExamFrom || today,
+      examination_date_to: mcExamTo || mcExamFrom || today,
+      diagnosis_text: mcDiagnosis || assessment || null,
+      recommendations: mcRecommendations || plan || null,
+      purpose_exception: mcPurposeException || null,
+      come_back_on: mcComeBackOn || followUpDate || null,
+    };
+    await upsertMedicalCertificateByConsultation(supabase, consultId, cert);
+    return cert;
+  }
+  //JJQR - END
   async function handleIssueMedCert(printAfter: boolean) {
     if (!booking || !clinicRow) return;
     setIssuingCert(true);
@@ -1758,21 +1859,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const consultId =
         consultationId ?? (await persistConsultation(mode === "amend" ? "Amended" : "Draft"));
       if (!consultId) return;
-      const today = todayManila();
-      const cert = {
-        patient_id: booking.patientId,
-        doctor_id: booking.doctorId,
-        issue_date: today,
-        patient_address_snapshot: mcAddress || null,
-        examined_at: mcExaminedAt || doctorClinicLabel || clinicRow.clinic_name,
-        examination_date_from: mcExamFrom || today,
-        examination_date_to: mcExamTo || mcExamFrom || today,
-        diagnosis_text: mcDiagnosis || assessment || null,
-        recommendations: mcRecommendations || plan || null,
-        purpose_exception: mcPurposeException || null,
-        come_back_on: mcComeBackOn || followUpDate || null,
-      };
-      await upsertMedicalCertificateByConsultation(supabase, consultId, cert);
+      const cert = await saveMedCertRow(consultId);
       setCertExists(true);
       setMedCertRequested(true);
       setCertSavedAt(new Date().toLocaleTimeString());
@@ -1814,10 +1901,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       diagnoses, labOrders, vaccinations,
       followUpDate, followUpReason, followUpInstructions, followUpReminder,
       pfDecision, pfAmount, pfWaiveReason,
+      //JJQR - AI (Nov 20, 2026) - cert edits dirty amend Save; complete-mode uses this same snapshot
+      mcAddress, mcExaminedAt, mcExamFrom, mcExamTo, mcDiagnosis, mcRecommendations, mcPurposeException, mcComeBackOn,
+      //JJQR - END
     });
   }
   const [amendSnapshot, setAmendSnapshot] = useState<string | null>(null);
-  const isDirty = mode === "amend" && amendSnapshot !== null && currentFormSnapshot() !== amendSnapshot;
+  //JJQR - AI (Nov 20, 2026) - child Rx/vitals dirty must warn on Cancel and keep Save amendment honest
+  const isDirty = mode === "amend" && amendSnapshot !== null && (currentFormSnapshot() !== amendSnapshot || rxDirty || vitalsDirty);
+  //JJQR - END
 
   function enterAmendMode() {
     setAmendSnapshot(currentFormSnapshot());
@@ -1846,6 +1938,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     resetFormFields(savedConsultation);
     setAmendSnapshot(null);
     setMode("view");
+    //JJQR - AI (Nov 20, 2026) - view-mode print falls back to the saved group
+    setRxLiveItems(null);
+    //JJQR - END
   }
 
   function requestCancelAmend() {
@@ -1859,8 +1954,18 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setSaveError("");
     setSavingChanges(true);
     try {
+      //JJQR - AI (Nov 20, 2026) - flush Rx/vitals first; never show "Amendment saved" if they fail
+      await flushEmbeddedEditors();
+      //JJQR - END
       const savedId = await persistConsultation("Amended");
       if (!savedId) throw new Error("Could not save your changes. Check your connection and try again.");
+      //JJQR - AI (Nov 20, 2026) - persist cert with the amendment; throw so we never toast "Amendment saved" on cert failure
+      const certHasContent = [mcAddress, mcExaminedAt, mcExamFrom, mcExamTo, mcDiagnosis, mcRecommendations, mcPurposeException, mcComeBackOn].some((v) => v.trim() !== "");
+      if (certExists || (medCertRequested && certHasContent)) {
+        await saveMedCertRow(savedId);
+        setCertExists(true);
+      }
+      //JJQR - END
       setSavedConsultation(buildConsultationRecord());
       setAmendmentHistory((prev) => [
         { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: "Consultation amended" },
@@ -1950,7 +2055,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const dirty =
       mode === "amend"
         ? isDirty
-        : completeBaselineRef.current !== null && currentFormSnapshot() !== completeBaselineRef.current;
+        : completeBaselineRef.current !== null && (currentFormSnapshot() !== completeBaselineRef.current || rxDirty || vitalsDirty);
     formDirtyRef.current = dirty;
     function onBeforeUnload(e: BeforeUnloadEvent) {
       if (formDirtyRef.current) {
@@ -1997,7 +2102,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   if (justCompleted) {
     const labCount = labOrders.filter((l) => l.testName.trim()).length;
-    const rxCount = prescriptionGroup?.items.length ?? 0;
+    //JJQR - AI (Nov 20, 2026) - summary count follows live items
+    const rxCount = effectiveRxItems.length;
+    //JJQR - END
     const followUpSummary =
       followUpMode === "none" && noFollowUpConfirmed
         ? "No follow-up"
@@ -2370,16 +2477,18 @@ Return to patient queue
             <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
               View Patient History
             </Button>
-            {((prescriptionGroup?.items.length ?? 0) > 0 || labOrders.length > 0) && consultPrintButtons()}
+            {/*JJQR - AI (Nov 20, 2026) - print bar follows live Rx items */}
+            {(effectiveRxItems.length > 0 || labOrders.length > 0) && consultPrintButtons()}
+            {/*JJQR - END */}
             {mode === "amend" && <Button variant="secondary" onClick={requestCancelAmend}>Cancel amendment</Button>}
           </div>
         </div>
 
-        {/* JJQR - AI (Oct 31, 2026) — in-flow sections rail (no viewport-fixed overlap with AppShell sidebar) */}
+        {/*JJQR - AI (Nov 20, 2026) - wrap-all section pills (no h-scroll, no More) */}
         <div className="space-y-lg">
           <nav
             aria-label="Consultation sections"
-            className="flex gap-xs overflow-x-auto border-b border-outline-variant pb-md"
+            className="flex flex-wrap gap-sm border-b border-outline-variant pb-md"
           >
             {visibleSectionOrder.map((i, displayIdx) => (
               <button
@@ -2389,8 +2498,9 @@ Return to patient queue
                 aria-pressed={openSection === i}
                 aria-controls={openSection === i ? `consultation-section-${i}` : undefined}
                 className={cn(
-                  "flex min-h-11 shrink-0 items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
-                  openSection === i ? "border-primary bg-primary/10 font-semibold text-primary" : "border-transparent text-on-surface-variant hover:bg-surface-container-low",
+                  //JJQR - AI (Nov 20, 2026)
+                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
+                  openSection === i ? "border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/30" : "border-outline-variant text-on-surface-variant hover:bg-surface-container-low",
                 )}
               >
                 {renderSectionIndicator(i, "mt-0.5 shrink-0 text-[16px]")}
@@ -2399,18 +2509,8 @@ Return to patient queue
                 </span>
               </button>
             ))}
-            {/*JJQR - AI (Nov 19, 2026) - Vaccinations + Professional Fee live behind "More" so the steps fit one row */}
-            <button
-              type="button"
-              onClick={() => setShowOccasional((v) => !v)}
-              aria-expanded={showOccasional}
-              className="flex min-h-11 shrink-0 items-center gap-xs rounded-nav border border-dashed border-outline-variant px-sm py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
-            >
-              {showOccasional ? "Less" : "More"}
-              <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
-            </button>
-            {/*JJQR - END */}
           </nav>
+          {/*JJQR - END */}
 
         <div className="min-w-0 space-y-md pb-[max(16rem,env(safe-area-inset-bottom))] lg:pb-28 lg:pb-[max(7rem,env(safe-area-inset-bottom))]">
             {/* JJQR - AI (Oct 31, 2026) — F-011 mobile section progress */}
@@ -2419,9 +2519,12 @@ Return to patient queue
             {visibleSectionOrder.map((i, displayIdx) => {
               const section = SECTIONS[i];
               const isOpen = openSection === i;
-              if (!isOpen) return null;
+              //JJQR - AI (Nov 20, 2026) - Vital Signs (1) + Prescription (3) stay mounted (hidden) once visited
+              const keepMounted = (i === 1 || i === 3) && visited.has(i);
+              if (!isOpen && !keepMounted) return null;
+              //JJQR - END
               return (
-                <Card key={section} id={`consultation-section-${i}`} className="consultation-panel">
+                <Card key={section} id={`consultation-section-${i}`} className={cn("consultation-panel", !isOpen && "hidden")} aria-hidden={!isOpen}>
                   <div
                     className="flex min-h-11 w-full items-center justify-between gap-md border-b border-outline-variant pb-md text-left"
                   >
@@ -2540,7 +2643,7 @@ Return to patient queue
                     </div>
                   )}
 
-                  {isOpen && i === 1 && (
+                  {(isOpen || visited.has(i)) && i === 1 && (
                     <div className="mt-md space-y-md">
                       {lastVisitVitalReadings.length > 0 && (
                         <p className="rounded-lg bg-surface-container-low px-md py-sm text-label-sm text-on-surface-variant">
@@ -2559,7 +2662,17 @@ Return to patient queue
                       {patientAgeYears != null && patientAgeYears < 18 && patientAgeMo != null && booking && (
                         <GrowthChart sex={booking.patientSex} ageMonths={patientAgeMo} points={growthChartPoint} />
                       )}
-                      <VitalsEditor embedded bookingId={bookingId} patientId={booking.patientId} onSaved={reloadVitalReadings} />
+                      <VitalsEditor
+                        embedded
+                        bookingId={bookingId}
+                        patientId={booking.patientId}
+                        onSaved={reloadVitalReadings}
+                        //JJQR - AI (Nov 20, 2026)
+                        registerFlush={registerVitalsFlush}
+                        onDirtyChange={setVitalsDirty}
+                        onFlushed={reloadVitalReadings}
+                        //JJQR - END
+                      />
                     </div>
                   )}
 
@@ -2650,7 +2763,7 @@ Return to patient queue
                     </div>
                   )}
 
-                  {isOpen && i === 3 && (
+                  {(isOpen || visited.has(i)) && i === 3 && (
                     <div className="mt-md space-y-md">
                       {rxSavedAt && <Toast key={rxSavedAt} variant="success" message={`Prescription saved at ${rxSavedAt}.`} />}
                       <label className="flex min-h-[44px] items-start gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-md text-on-surface">
@@ -2658,12 +2771,16 @@ Return to patient queue
                           type="checkbox"
                           className="mt-xs"
                           checked={noMedsConfirmed}
+                          disabled={effectiveRxItems.length > 0}
                           onChange={(e) => setNoMedsConfirmed(e.target.checked)}
                         />
                         <span>
                           <strong>No medicines this visit</strong>
                           <span className="block text-label-md text-on-surface-variant">
                             Only check if you are intentionally not prescribing. Required for Complete when the Rx list is empty.
+                            {/*JJQR - AI (Nov 20, 2026) */}
+                            {effectiveRxItems.length > 0 ? " Uncheck is automatic when medicines are listed." : ""}
+                            {/*JJQR - END */}
                           </span>
                         </span>
                       </label>
@@ -2709,6 +2826,12 @@ Return to patient queue
                           setRxVersion((v) => v + 1);
                           setRxSavedAt(new Date().toLocaleTimeString());
                         }}
+                        //JJQR - AI (Nov 20, 2026) - flush refreshes the group without remounting mid-edit
+                        registerFlush={registerRxFlush}
+                        onDirtyChange={setRxDirty}
+                        onFlushed={refreshPrescriptionGroup}
+                        onItemsChange={setRxLiveItems}
+                        //JJQR - END
                       />
                     </div>
                   )}

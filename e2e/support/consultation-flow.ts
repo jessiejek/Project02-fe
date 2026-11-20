@@ -119,3 +119,83 @@ export async function showOccasionalSections(page: Page) {
   if (await toggle.isVisible().catch(() => false)) await toggle.click();
 }
 //JJQR - END
+
+//JJQR - AI (Nov 20, 2026) - amend-persist-all: footer Save amendment exits to view; Ctrl+S stays in amend; Rx helpers never click "Save medications" unless asked
+export async function clickSaveAmendment(page: Page) {
+  await page.getByRole("button", { name: "Save amendment" }).last().click();
+  await expect(page.getByRole("button", { name: "Edit Consultation" })).toBeVisible({ timeout: 20_000 });
+}
+
+export async function gotoAmendMode(page: Page, bookingId: string) {
+  await page.goto(`/doctor/consultation2/${bookingId}?mode=amend`);
+  await expect(page.getByRole("heading", { name: "Amend consultation" })).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Manual save only/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save amendment" })).toBeEnabled({ timeout: 15_000 });
+}
+
+export async function saveAmendViaCtrlS(page: Page) {
+  await page.keyboard.press("Control+s");
+  await expect(page.getByText(/Amendment saved/).first()).toBeVisible({ timeout: 20_000 });
+}
+
+export async function acknowledgeRxAllergyGate(page: Page) {
+  const ack = page.getByRole("button", { name: "Acknowledge" });
+  if (await ack.isVisible().catch(() => false)) await ack.click();
+}
+
+export async function addNewRxLine(page: Page, medication: string, quantity = "10", expectCount = 1) {
+  await openSectionByTitle(page, /4\. Prescription/);
+  await acknowledgeRxAllergyGate(page);
+  await page.getByRole("tab", { name: "New Prescription" }).click();
+  await page.getByRole("textbox", { name: "Medication" }).fill(medication);
+  await page.getByRole("textbox", { name: "Quantity" }).click();
+  await page.getByRole("textbox", { name: "Quantity" }).fill(quantity);
+  await page.getByRole("button", { name: "Add Item" }).click();
+  await expect(page.getByRole("heading", { name: new RegExp(`Prescription items \\(${expectCount}\\)`) })).toBeVisible();
+}
+
+export async function addRxFromTemplatesTab(page: Page) {
+  await openSectionByTitle(page, /4\. Prescription/);
+  await acknowledgeRxAllergyGate(page);
+  await page.getByRole("tab", { name: "Templates" }).click();
+  await page.getByRole("button", { name: "Acute gastroenteritis" }).first().click();
+  await expect(page.getByRole("heading", { name: /Prescription items \([1-9]/ })).toBeVisible();
+}
+
+export async function saveMedications(page: Page) {
+  await page.getByRole("button", { name: "Save medications" }).click();
+  await page.getByRole("dialog", { name: /Confirm Prescription/ }).getByRole("button", { name: /Confirm & Save/ }).click();
+  await expect(page.getByRole("dialog", { name: /Confirm Prescription/ })).toHaveCount(0, { timeout: 15_000 });
+}
+
+export async function removeAllRxItems(page: Page) {
+  await openSectionByTitle(page, /4\. Prescription/);
+  const selectAll = page.getByRole("checkbox", { name: /Select All/ });
+  await expect(selectAll).toBeVisible();
+  await selectAll.check();
+  await page.getByRole("button", { name: "Delete selected" }).click();
+  await expect(page.getByRole("heading", { name: /Prescription items \(0\)/ })).toBeVisible();
+}
+
+export async function addAllergyViaBanner(page: Page, allergen: string) {
+  const record = page.getByRole("button", { name: "Record allergies / NKDA" });
+  if (await record.isVisible().catch(() => false)) await record.click();
+  else await page.locator("button[aria-controls='consult-allergy-editor-panel']").click();
+  await expect(page.locator("#consult-allergy-editor-panel")).toBeVisible();
+  await page.getByRole("textbox", { name: "Allergies" }).fill(allergen);
+  await page.getByRole("button", { name: "Add allergy" }).click();
+}
+
+export async function pickFollowUpDate(page: Page): Promise<string> {
+  await openSectionByTitle(page, /6\. Follow-up/);
+  //JJQR - AI (Nov 20, 2026)
+  await page.getByText("Schedule date", { exact: true }).click();
+  await page.getByRole("button", { name: "Select date" }).click();
+  await page.getByRole("button", { name: "Next month" }).click();
+  const day = page.getByRole("dialog", { name: "Choose a date" }).getByRole("button", { name: /^[A-Za-z]+ 15, \d{4}$/ });
+  const label = (await day.getAttribute("aria-label")) ?? "";
+  await day.click();
+  await expect(page.getByRole("button", { name: "Select date" })).toHaveCount(0);
+  return label;
+}
+//JJQR - END

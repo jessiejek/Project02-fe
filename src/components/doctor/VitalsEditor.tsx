@@ -2,7 +2,10 @@
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 
-import { useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+//JJQR - AI (Nov 20, 2026)
+import { shouldFlush } from "@/lib/amend-flush";
+//JJQR - END
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -116,13 +119,18 @@ export interface VitalsEditorProps {
   /** Called after a successful save — e.g. to close the drawer/modal it's embedded in. */
   onSaved?: () => void;
   embedded?: boolean;
+  //JJQR - AI (Nov 20, 2026) - silent flush for Save amendment / Ctrl+S (no confirm dialog)
+  registerFlush?: (fn: (() => Promise<boolean>) | null) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+  onFlushed?: () => void | Promise<void>;
+  //JJQR - END
 }
 
 // The actual vitals-entry UI (grid of cards + "Others" + Save), extracted so
 // it can render both as its own page (patient-chart history use case) and
 // inline in a Drawer from the consultation page — navigating away to a whole
 // new route just to log vitals mid-consultation was the UX problem this fixes.
-export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }: VitalsEditorProps) {
+function VitalsEditor({ bookingId, patientId, onSaved, embedded = false, registerFlush, onDirtyChange, onFlushed }: VitalsEditorProps) {
   // vital_field_templates rarely changes — fetch once per mount rather than
   // re-querying on every keystroke (Implementation-Phases/03-reference-clinic-data.md
   // §3d).
@@ -133,6 +141,13 @@ export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }
   const [templates, setTemplates] = useState<VitalFieldTemplate[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [visibleOtherIds, setVisibleOtherIds] = useState<string[]>([]);
+  //JJQR - AI (Nov 20, 2026) - flush sees latest values; baseline is last loaded/saved set
+  const valuesRef = useRef(values);
+  const visibleOtherIdsRef = useRef(visibleOtherIds);
+  const templatesRef = useRef(templates);
+  const baselineRef = useRef({ values, visibleOtherIds });
+  const flushImplRef = useRef<() => Promise<boolean>>(async () => true);
+  //JJQR - END
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -154,13 +169,20 @@ export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }
       setTemplates(fetchedTemplates);
       const existingReadings = readings.map((r) => ({ templateId: r.template_id, value: r.value }));
       const otherTemplateIds = new Set(fetchedTemplates.filter((t) => !t.isDefault).map((t) => t.id));
-      setValues(Object.fromEntries(existingReadings.map((r) => [r.templateId, r.value])));
-      setVisibleOtherIds(existingReadings.filter((r) => otherTemplateIds.has(r.templateId)).map((r) => r.templateId));
+      const nextValues = Object.fromEntries(existingReadings.map((r) => [r.templateId, r.value]));
+      const nextVisibleOtherIds = existingReadings.filter((r) => otherTemplateIds.has(r.templateId)).map((r) => r.templateId);
+      setValues(nextValues);
+      setVisibleOtherIds(nextVisibleOtherIds);
+      //JJQR - AI (Nov 20, 2026)
+      baselineRef.current = { values: nextValues, visibleOtherIds: nextVisibleOtherIds };
+      onDirtyChange?.(false);
+      //JJQR - END
       } catch { if (!cancelled) setLoadError(true); }
       finally { if (!cancelled) setLoading(false); }
     }
     load();
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- onDirtyChange is setState (stable)
   }, [bookingId, loadAttempt]);
   const defaultTemplates = templates.filter((t) => t.isDefault);
   const otherTemplates = templates.filter((t) => !t.isDefault);
@@ -188,20 +210,39 @@ export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }
     });
   }
 
+  //JJQR - AI (Nov 20, 2026) - shared write for confirm-save and silent flush
+  function vitalsSnapshot(nextValues = values, nextVisible = visibleOtherIds) {
+    return { values: nextValues, visibleOtherIds: nextVisible };
+  }
+
+  async function persistCurrentVitals(nextValues: Record<string, string>, nextVisible: string[], nextTemplates: VitalFieldTemplate[]) {
+    const defaultIds = nextTemplates.filter((t) => t.isDefault).map((t) => t.id);
+    const relevantTemplateIds = [...defaultIds, ...nextVisible];
+    const supabase = null as never;
+    await upsertVitalsByBooking(
+      supabase,
+      bookingId,
+      patientId,
+      relevantTemplateIds.map((templateId) => ({ template_id: templateId, value: (nextValues[templateId] ?? "").trim() })),
+    );
+  }
+
+  function markVitalsSaved(nextValues: Record<string, string>, nextVisible: string[]) {
+    baselineRef.current = vitalsSnapshot(nextValues, nextVisible);
+    onDirtyChange?.(false);
+  }
+  //JJQR - END
+
   async function confirmSave() {
     setSaving(true);
     setSaveError(null);
     try {
       // One row per template with a non-empty value; blank fields delete the
       // row (Implementation-Phases/07-consultations-vitals.md §7c).
-      const supabase = null as never;
-      const relevantTemplateIds = [...defaultTemplates.map((t) => t.id), ...visibleOtherIds];
-      await upsertVitalsByBooking(
-        supabase,
-        bookingId,
-        patientId,
-        relevantTemplateIds.map((templateId) => ({ template_id: templateId, value: (values[templateId] ?? "").trim() })),
-      );
+      await persistCurrentVitals(values, visibleOtherIds, templates);
+      //JJQR - AI (Nov 20, 2026)
+      markVitalsSaved(values, visibleOtherIds);
+      //JJQR - END
       setSavedAt(new Date().toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }) + " PHT");
       onSaved?.();
       setConfirmOpen(false);
@@ -212,6 +253,43 @@ export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }
     }
   }
 
+  //JJQR - AI (Nov 20, 2026) - silent flush: same write as Save vital signs, no dialog
+  useEffect(() => {
+    valuesRef.current = values;
+    visibleOtherIdsRef.current = visibleOtherIds;
+    templatesRef.current = templates;
+    flushImplRef.current = async () => {
+      const currentValues = valuesRef.current;
+      const currentVisible = visibleOtherIdsRef.current;
+      const currentTemplates = templatesRef.current;
+      if (!shouldFlush(vitalsSnapshot(currentValues, currentVisible), baselineRef.current)) return true;
+      try {
+        await persistCurrentVitals(currentValues, currentVisible, currentTemplates);
+        setSaveError(null);
+        markVitalsSaved(currentValues, currentVisible);
+        await onFlushed?.();
+        return true;
+      } catch {
+        setSaveError("The readings were not saved. Your entries are still here; please try again.");
+        return false;
+      }
+    };
+  });
+
+  useEffect(() => {
+    onDirtyChange?.(shouldFlush({ values, visibleOtherIds }, baselineRef.current));
+  }, [values, visibleOtherIds, onDirtyChange]);
+
+  useEffect(() => {
+    if (!registerFlush) return;
+    registerFlush(() => flushImplRef.current());
+    return () => {
+      registerFlush(null);
+      onDirtyChange?.(false);
+    };
+  }, [registerFlush, onDirtyChange]);
+  //JJQR - END
+
   const addableOthers = otherTemplates.filter((t) => !visibleOtherIds.includes(t.id));
   if (loading) return <div role="status" aria-label="Loading vital signs"><SkeletonCard lines={4} /><SkeletonCard lines={4} /></div>;
   if (loadError) return <ErrorState title="Vital signs unavailable" message="We could not load the current readings. Try again before entering or saving measurements." onRetry={() => { setLoading(true); setLoadError(false); setLoadAttempt(n => n + 1); }} />;
@@ -219,6 +297,9 @@ export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }
   return (
     <div className="space-y-lg">
       {savedAt && <Toast key={savedAt} variant="success" message={`Vitals saved at ${savedAt}.`} />}
+      {/*JJQR - AI (Nov 20, 2026) - flush errors must be visible without the confirm dialog*/}
+      {saveError && !confirmOpen && <Toast key={saveError} variant="error" message={saveError} />}
+      {/*JJQR - END*/}
 
       {/* Top-right, same slot as every other section's Save (SOAP's
           "Use Template…"/"Save as Template" row, etc.) — visible only while
@@ -289,3 +370,22 @@ export function VitalsEditor({ bookingId, patientId, onSaved, embedded = false }
     </div>
   );
 }
+
+//JJQR - AI (Nov 20, 2026) - skip re-render when parent ticks a checkbox; callbacks are ignored (stable setters / bookingId)
+function areVitalsEditorPropsEqual(prev: VitalsEditorProps, next: VitalsEditorProps): boolean {
+  const keys = new Set<keyof VitalsEditorProps>([
+    ...(Object.keys(prev) as (keyof VitalsEditorProps)[]),
+    ...(Object.keys(next) as (keyof VitalsEditorProps)[]),
+  ]);
+  for (const key of keys) {
+    const a = prev[key];
+    const b = next[key];
+    if (typeof a === "function" || typeof b === "function") continue;
+    if (!Object.is(a, b)) return false;
+  }
+  return true;
+}
+
+const MemoizedVitalsEditor = memo(VitalsEditor, areVitalsEditorPropsEqual);
+export { MemoizedVitalsEditor as VitalsEditor };
+//JJQR - END
