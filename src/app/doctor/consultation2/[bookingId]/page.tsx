@@ -94,6 +94,7 @@ import {
   printPrescriptionForBooking,
 } from "@/lib/consult-print";
 import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
+import { formatPeso } from "@/lib/format";
 import type {
   Consultation,
   Diagnosis,
@@ -185,6 +186,25 @@ function parseConsultSectionParam(raw: string | null | undefined): number | null
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 1 || n > SECTIONS.length) return null;
   return n - 1;
+}
+
+//JJQR - AI (Nov 20, 2026) F1 — completed-visit summary: read-only PF line (section 9 is the only editor)
+function formatProfessionalFeeLine(opts: {
+  decision: "charge" | "waive" | null;
+  amount: string;
+  waiveReason: string;
+}): string {
+  if (opts.decision === "waive") {
+    const reason = opts.waiveReason.trim();
+    return reason ? `Professional fee: Waive — ${reason}` : "Professional fee: Waive";
+  }
+  if (opts.decision === "charge") {
+    const raw = opts.amount.trim();
+    const n = Number(raw);
+    if (raw !== "" && Number.isFinite(n)) return `Professional fee: Charge ${formatPeso(n)}`;
+    return "Professional fee: Charge";
+  }
+  return "Professional fee: Decide at desk";
 }
 //JJQR - END
 
@@ -326,7 +346,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [labsConfirmPrint, setLabsConfirmPrint] = useState<boolean | null>(null);
   const [certConfirmPrint, setCertConfirmPrint] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
-  const [savingPostCompletePf, setSavingPostCompletePf] = useState(false);
   const [openSection, setOpenSection] = useState(() => {
     const fromQuery = parseConsultSectionParam(searchParams.get("section"));
     if (fromQuery !== null) return fromQuery;
@@ -1760,17 +1779,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
   }
 
-  async function handleSavePostCompletePf() {
-    setSavingPostCompletePf(true);
-    try {
-      await persistConsultation("Completed");
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "Could not save fee decision.");
-    } finally {
-      setSavingPostCompletePf(false);
-    }
-  }
-
   // §16.8 Form 2 — save the certificate row (upsert on consultation) then print
   // it on the shared clinic letterhead. Requires a saved consultation.
   async function handleIssueMedCert(printAfter: boolean) {
@@ -1849,6 +1857,14 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     lastSavedPayloadRef.current = snap;
     setMode("amend");
   }
+
+  //JJQR - AI (Nov 20, 2026) F1 — completed summary Edit opens section 9 in amend (even if behind More)
+  function openProfessionalFeeForEdit() {
+    setJustCompleted(false);
+    enterAmendMode();
+    goToSection(8);
+  }
+  //JJQR - END
 
   function resetFormFields(source: Consultation | undefined) {
     setChiefComplaint(source?.chiefComplaint ?? "");
@@ -2077,64 +2093,18 @@ Return to patient queue
             <p><strong>Lab orders:</strong> {labCount}</p>
             <p><strong>Follow-up:</strong> {followUpSummary}</p>
           </Card>
-          <Card className="space-y-md">
-            <h4 className="text-headline-sm text-on-surface">Professional fee</h4>
-            <div className="flex flex-wrap gap-sm border-b border-outline-variant">
-              <button
-                type="button"
-                onClick={() => setPfDecision("charge")}
-                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
-              >
-                Charge
-              </button>
-              <button
-                type="button"
-                onClick={() => setPfDecision("waive")}
-                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === "waive" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
-              >
-                Waive
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPfDecision(null);
-                  setPfAmount("");
-                  setPfWaiveReason("");
-                }}
-                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === null ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
-              >
-                Decide at desk
-              </button>
-            </div>
-            {pfDecision === "charge" && (
-              <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input
-                placeholder="Amount*"
-                value={pfAmount}
-                onChange={(e) => setPfAmount(e.target.value)}
-                className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
-              /></label>
-            )}
-            {pfDecision === "waive" && (
-              <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Reason (minimum 5 characters)</span><textarea
-                placeholder="Reason (minimum 5 characters)*"
-                value={pfWaiveReason}
-                onChange={(e) => setPfWaiveReason(e.target.value)}
-                className="w-full rounded-lg border border-outline-variant p-md"
-                rows={3}
-              /></label>
-            )}
-            {pfDecision === null && (
-              <p className="text-label-md text-on-surface-variant">Front desk can collect or waive later.</p>
-            )}
-            <Button
-              className="min-h-[44px]"
-              loading={savingPostCompletePf}
-              disabled={pfDecision === "charge" ? !pfAmount.trim() : pfDecision === "waive" ? pfWaiveReason.trim().length < 5 : false}
-              onClick={() => void handleSavePostCompletePf()}
+          {/*JJQR - AI (Nov 20, 2026) F1 — read-only PF line; Edit opens section 9 */}
+          <p className="text-body-md text-on-surface">
+            {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason })}{" "}
+            <button
+              type="button"
+              onClick={openProfessionalFeeForEdit}
+              className="text-label-md text-primary underline-offset-2 hover:underline"
             >
-              Save fee decision
-            </Button>
-          </Card>
+              Edit
+            </button>
+          </p>
+          {/*JJQR - END */}
         </div>
       </AppShell>
     );
@@ -2276,16 +2246,18 @@ Return to patient queue
                   {sc.followUpDate ? `${sc.followUpDate} — ${sc.followUpReason ?? ""}${sc.followUpInstructions ? ` (${sc.followUpInstructions})` : ""}${sc.followUpReminder ? " · reminder on" : ""}` : "No follow-up recorded."}
                 </p>
               </Card>
-              <Card>
-                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Professional Fee</h2>
-                <p className="text-body-md text-on-surface-variant">
-                  {sc.feeDecision?.type === "Waive"
-                    ? `Waived — ${sc.feeDecision.waiveReason ?? ""}`
-                    : sc.feeDecision?.type === "Charge"
-                      ? `₱${sc.feeDecision.amount}`
-                      : "Not recorded."}
-                </p>
-              </Card>
+              {/*JJQR - AI (Nov 20, 2026) F1 — same read-only PF line on the completed record; Edit opens section 9 */}
+              <p className="text-body-md text-on-surface">
+                {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason })}{" "}
+                <button
+                  type="button"
+                  onClick={openProfessionalFeeForEdit}
+                  className="text-label-md text-primary underline-offset-2 hover:underline"
+                >
+                  Edit
+                </button>
+              </p>
+              {/*JJQR - END */}
             </>
           )}
         </div>

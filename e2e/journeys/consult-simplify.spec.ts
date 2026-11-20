@@ -1,7 +1,7 @@
 import type { APIRequestContext } from "@playwright/test";
 import { test, expect, type Page } from "../support/fixtures";
 import { checkInWalkIn, createPatient, type Role } from "../support/api";
-import { openSectionByTitle } from "../support/consultation-flow";
+import { completeConsultFromUi, fillRequiredConsultFields, openSectionByTitle } from "../support/consultation-flow";
 
 //JJQR - AI (Nov 20, 2026) C1–C6
 test.describe("Consultation2 simplify C1–C6", () => {
@@ -78,6 +78,33 @@ test.describe("Consultation2 simplify C1–C6", () => {
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
     const box = await steps.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
     expect(box.sw).toBeLessThanOrEqual(box.cw);
+  });
+});
+//JJQR - END
+
+//JJQR - AI (Nov 20, 2026) F1–F4
+test.describe("Consultation2 simplify F1–F4 professional fee", () => {
+  async function openFreshConsult(as: (role: Role) => Promise<Page>, api: (role: Role) => Promise<APIRequestContext>) {
+    const staffApi = await api("staff");
+    const patient = await createPatient(staffApi, Date.now().toString(36));
+    const ticket = await checkInWalkIn(staffApi, patient.patient_id);
+    const doctor = await as("doctor");
+    await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
+    return doctor;
+  }
+
+  test("F1 completed view has a read-only Professional fee line; Edit opens section 9; no Save fee decision", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    await fillRequiredConsultFields(doctor);
+    await completeConsultFromUi(doctor);
+    await expect(doctor.getByText("Professional fee: Decide at desk")).toBeVisible();
+    await expect(doctor.getByRole("button", { name: "Save fee decision" })).toHaveCount(0);
+    await doctor.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(doctor.getByRole("heading", { name: "Amend consultation" })).toBeVisible();
+    const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
+    await expect(doctor.getByText("Appointment type")).toBeVisible();
+    await expect(doctor.getByRole("button", { name: "Decide at desk" })).toBeVisible();
   });
 });
 //JJQR - END
