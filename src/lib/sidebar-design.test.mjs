@@ -20,6 +20,9 @@ export function renderSidebar(role,pathname=ROLE_CONFIG[role].navGroups[0].items
   if(name==='@/lib/cn')return {cn:(...values)=>values.filter(Boolean).join(' ')};
   if(name==='@/lib/nav-config')return {ROLE_CONFIG};
   if(name==='@/components/ui/Icon')return {Icon:()=>React.createElement('span',{'data-icon':true})};
+  //JJQR - AI (Nov 14, 2026)
+  if(name==='@/lib/pwa/clearClientCaches')return {clearClientCaches:async()=>{}};
+  //JJQR - END
   return require(name);
  });
  return renderToStaticMarkup(React.createElement(Sidebar,{role,collapsed}));

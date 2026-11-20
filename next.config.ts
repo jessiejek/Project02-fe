@@ -1,6 +1,9 @@
 import path from "node:path";
 import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+//JJQR - AI (Nov 14, 2026)
+import { withSerwist } from "@serwist/turbopack";
+//JJQR - END
 
 // An auto-incrementing "version number" (total commit count) instead of a
 // hash — goes up by one every commit, no manual bumping, no meaning to
@@ -36,6 +39,28 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: commitCount(),
     NEXT_PUBLIC_BUILD_TIME: commitTimeIso(),
   },
+  //JJQR - AI (Nov 14, 2026)
+  async rewrites() {
+    return [
+      { source: "/sw.js", destination: "/serwist/sw.js" },
+      { source: "/sw.js.map", destination: "/serwist/sw.js.map" },
+    ];
+  },
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+      {
+        source: "/serwist/:path*",
+        headers: [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
+      },
+    ];
+  },
+  //JJQR - END
 };
 
-export default nextConfig;
+//JJQR - AI (Nov 14, 2026)
+export default withSerwist(nextConfig);
+//JJQR - END

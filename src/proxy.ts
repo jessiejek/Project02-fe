@@ -80,6 +80,8 @@ export const config = {
   matcher: [
     // Exclude Next internals, static assets, and route handlers under /api
     // (e.g. /api/session/* — those authenticate the request themselves).
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //JJQR - AI (Nov 14, 2026)
+    "/((?!api|_next/static|_next/image|favicon.ico|serwist|sw\\.js|manifest\\.webmanifest|~offline|icons|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    //JJQR - END
   ],
 };

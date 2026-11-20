@@ -5,6 +5,9 @@ import Link from "next/link";
 import { cn } from "@/lib/cn";
 import { Icon } from "@/components/ui/Icon";
 import { ROLE_CONFIG, type Role } from "@/lib/nav-config";
+//JJQR - AI (Nov 14, 2026)
+import { clearClientCaches } from "@/lib/pwa/clearClientCaches";
+//JJQR - END
 
 const ACCENT_BACKGROUND: Record<string, string> = {
   primary: "bg-primary",
@@ -110,6 +113,18 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
             viewport/hover and silently log the user out. */}
         <a
           href="/logout"
+          //JJQR - AI (Nov 14, 2026)
+          onClick={async (event) => {
+            event.preventDefault();
+            await Promise.race([
+              clearClientCaches(),
+              new Promise<void>((resolve) => {
+                window.setTimeout(resolve, 1500);
+              }),
+            ]);
+            window.location.assign("/logout");
+          }}
+          //JJQR - END
           title={collapsed ? "Logout" : undefined}
           className={cn(
             role === "doctor" ? "flex min-h-11 items-center gap-md rounded-nav py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low" : "flex items-center gap-md rounded-nav py-sm text-label-md text-outline-variant transition-all hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
