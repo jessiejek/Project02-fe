@@ -72,14 +72,13 @@ test.describe("consultation-regression-matrix — amend cluster", () => {
     await openCompletedConsult(page, ticket.booking_id);
     await enterAmendMode(page);
 
-    //JJQR - AI (Nov 20, 2026) - batch 2: section cases rewritten for the redesigned screen (Review section / Review notes → Confirm & Save)
+    //JJQR - AI (Nov 20, 2026) C5 - section saves use footer Save draft / Ctrl+S (Review section removed)
     const sectionCases: { name: string; skip?: string; run: () => Promise<void> }[] = [
       {
         name: "Clinical notes",
         run: async () => {
           await expandSoapSection(page);
           await clickSoapToolbarSave(page);
-          await confirmReviewSectionSave(page);
         },
       },
       {
@@ -182,10 +181,9 @@ test("amend-section-save-persists", async ({ as, api, tag, cleanup }) => {
   await expandSoapSection(doctor);
   await doctor.getByRole("textbox", { name: "Assessment" }).fill("Persisted amend assessment E2E");
   await clickSoapToolbarSave(doctor);
-  await confirmReviewSectionSave(doctor);
   await assertStillInAmendMode(doctor, "after assessment save");
-  //JJQR - AI (Nov 20, 2026) - batch 2: the save is a chain of PUTs — wait for the "Amendment saved" toast before reloading, or the reload cuts it short
-  await expect(doctor.getByText(/Amendment saved at/).first()).toBeVisible({ timeout: 15_000 });
+  //JJQR - AI (Nov 20, 2026) C4 C5 — wait for the footer save status (no green Saved at banner)
+  await expect(doctor.getByText(/Amendment saved/).first()).toBeVisible({ timeout: 15_000 });
   //JJQR - END
   await doctor.reload();
   await openCompletedConsult(doctor, ticket.booking_id);
@@ -374,7 +372,6 @@ test("new-mode-section-save-stays", async ({ as, api, tag, cleanup }) => {
   await expandSoapSection(doctor);
   await chiefComplaintBox(doctor).fill("In progress save test");
   await clickSoapToolbarSave(doctor);
-  await confirmReviewSectionSave(doctor);
   await expect(doctor.getByRole("button", { name: "Complete Consultation", exact: true }).first()).toBeVisible();
   await expect(doctor.getByRole("button", { name: "Edit Consultation" })).toHaveCount(0);
 });

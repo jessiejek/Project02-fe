@@ -34,7 +34,7 @@ import {
   ConsultPatientBanner,
   allergiesNeedPrescriptionReview,
 } from "@/components/doctor/ConsultPatientBanner";
-import { Icd10DiagnosisField } from "@/components/doctor/Icd10DiagnosisField";
+import { DiagnosisCombobox } from "@/components/doctor/DiagnosisCombobox";
 import { GrowthChart } from "@/components/doctor/GrowthChart";
 import {
   queryPatientAllergies,
@@ -178,6 +178,16 @@ const REQUIRED_SECTIONS = [0, 1, 2, 3, 6];
 const OCCASIONAL_SECTIONS = [5, 8] as const;
 const SECTION_ORDER = [0, 1, 2, 3, 4, 6, 7, 5, 8] as const;
 
+//JJQR - AI (Nov 20, 2026) C6
+/** 1-based section index from ?section=9 or #section-9 (Clinical notes = 1). */
+function parseConsultSectionParam(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > SECTIONS.length) return null;
+  return n - 1;
+}
+//JJQR - END
+
 type SectionStatus = "complete" | "warning" | "partial" | "empty";
 
 const STATUS_ICON: Record<SectionStatus, { icon: string; cls: string }> = {
@@ -275,6 +285,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [patientAllergies, setPatientAllergies] = useState<PatientAllergyRow[]>([]);
   const [nkda, setNkda] = useState(false);
   const formDirtyRef = useRef(false);
+  //JJQR - AI (Nov 20, 2026) C4
+  const lastSavedPayloadRef = useRef<string | null>(null);
+  const [inlineSaved, setInlineSaved] = useState(false);
+  //JJQR - END
   //JJQR - AI (Oct 31, 2026) — F-010 beforeunload baseline
   const completeBaselineRef = useRef<string | null>(null);
   const consultationFinalizedRef = useRef(false);
@@ -308,28 +322,48 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [lastVisitOpen, setLastVisitOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
-  // Which section's Save opened the review modal — the modal only shows
-  // that section's own fields (Doctor asked: SOAP's Save should review just
-  // SOAP, Diagnosis's Save should review just Diagnosis), even though the
-  // write underneath always persists the whole consultation record.
-  const [reviewSection, setReviewSection] = useState<number | null>(null);
+  //JJQR - AI (Nov 20, 2026) C5 — Review section modal removed; footer Save draft / Save amendment / Ctrl+S persist.
   const [labsConfirmPrint, setLabsConfirmPrint] = useState<boolean | null>(null);
   const [certConfirmPrint, setCertConfirmPrint] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
   const [savingPostCompletePf, setSavingPostCompletePf] = useState(false);
-  const [openSection, setOpenSection] = useState(0);
+  const [openSection, setOpenSection] = useState(() => {
+    const fromQuery = parseConsultSectionParam(searchParams.get("section"));
+    if (fromQuery !== null) return fromQuery;
+    if (typeof window === "undefined") return 0;
+    const m = window.location.hash.match(/^#section-(\d+)$/i);
+    return parseConsultSectionParam(m?.[1]) ?? 0;
+  });
   //JJQR - AI (Oct 31, 2026)
   const [allergyReviewed, setAllergyReviewed] = useState(false);
   //JJQR - END
   //JJQR - AI (Oct 31, 2026) — complete mode shows all sections; no occasional toggle
   /** Consult2: occasional sections hidden until the doctor asks for them (not in complete mode). */
   const [showOccasional, setShowOccasional] = useState(false);
+  //JJQR - AI (Nov 20, 2026) C6
+  const [seenSectionQuery, setSeenSectionQuery] = useState(() => searchParams.get("section"));
+  const sectionQuery = searchParams.get("section");
+  if (sectionQuery !== seenSectionQuery) {
+    setSeenSectionQuery(sectionQuery);
+    const idx = parseConsultSectionParam(sectionQuery);
+    if (idx !== null) {
+      setInlineSaved(false);
+      if (OCCASIONAL_SECTIONS.includes(idx as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
+      setOpenSection(idx);
+    }
+  }
   //JJQR - AI (Nov 19, 2026) - Vaccinations + Fee sit behind "More" in every mode (the open one always stays visible)
   const revealOccasionalSections = showOccasional || OCCASIONAL_SECTIONS.includes(openSection as (typeof OCCASIONAL_SECTIONS)[number]);
   //JJQR - END
   const visibleSectionOrder = SECTION_ORDER.filter(
     (i) => revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]),
   );
+  function goToSection(i: number) {
+    if (i !== openSection) setInlineSaved(false);
+    if (OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
+    setOpenSection(i);
+  }
+  //JJQR - END
   //JJQR - END
   /** Explicit escape hatch when Grace would omit medicines (rare). */
   const [noMedsConfirmed, setNoMedsConfirmed] = useState(false);
@@ -582,13 +616,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   // Section 3: Diagnosis
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
-  const [newDiagnosisText, setNewDiagnosisText] = useState("");
-  //JJQR - AI (Oct 31, 2026)
-  const [newDiagnosisIcd, setNewDiagnosisIcd] = useState<string | null>(null);
-  //JJQR - END
-  // Doctor's reusable diagnoses (managed in Settings).
-  const [saveTplOpen, setSaveTplOpen] = useState(false);
-  const [saveTplLabel, setSaveTplLabel] = useState("");
 
   function addDiagnosisLine(text: string, icd10Code: string | null = null) {
     const t = text.trim();
@@ -606,12 +633,24 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     ]);
     formDirtyRef.current = true;
   }
-  function addDiagnosis() {
-    if (!newDiagnosisText.trim()) return;
-    addDiagnosisLine(newDiagnosisText, newDiagnosisIcd);
-    setNewDiagnosisText("");
-    setNewDiagnosisIcd(null);
+  //JJQR - AI (Nov 20, 2026) C1 C2
+  function addSavedDiagnosisTemplate(t: { body: string; icd10_code?: string | null }) {
+    addDiagnosisLine(t.body, t.icd10_code ?? null);
   }
+  async function saveTypedDiagnosisToMyDiagnoses(text: string) {
+    const label = text.trim();
+    const body = label;
+    if (!label) return;
+    try {
+      const created = await createDiagnosisTemplate(null as never, { label, body, icd10_code: null });
+      templateLib.diagnoses.add(created);
+      notifyTpl("success", `Diagnosis “${created.label}” saved.`);
+      addDiagnosisLine(created.body, created.icd10_code ?? null);
+    } catch {
+      notifyTpl("error", "Diagnosis was not saved. The diagnosis text is unchanged — please try again.");
+    }
+  }
+  //JJQR - END
 
   //JJQR - AI (Oct 31, 2026)
   async function persistAllergies(nextRows: PatientAllergyRow[], nextNkda: boolean) {
@@ -632,22 +671,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
   //JJQR - END
 
-  async function saveDiagnosisTemplate() {
-    const label = saveTplLabel.trim();
-    const body = newDiagnosisText.trim();
-    if (!label || !body) return;
-    //JJQR - AI (Nov 19, 2026) - success/error toast instead of a silent failure
-    try {
-      const created = await createDiagnosisTemplate(null as never, { label, body, icd10_code: newDiagnosisIcd });
-      templateLib.diagnoses.add(created);
-      notifyTpl("success", `Diagnosis “${created.label}” saved.`);
-      setSaveTplOpen(false);
-      setSaveTplLabel("");
-    } catch {
-      notifyTpl("error", "Diagnosis was not saved. The diagnosis text is unchanged — please try again.");
-    }
-    //JJQR - END
-  }
   function removeDiagnosis(index: number) {
     setDiagnoses((prev) => prev.filter((_, i) => i !== index));
   }
@@ -1519,33 +1542,23 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // the review modal scoped to *this* section — the write underneath always
   // persists the whole record, but the doctor only sees the fields for the
   // section they clicked Save on.
-  function renderSectionSaveHeader(sectionIndex: number) {
+  //JJQR - AI (Nov 20, 2026) C4 C5
+  function renderSectionSaveHeader() {
+    if (!inlineSaved && !(mode === "amend" && !canComplete && missingSectionNames)) return null;
     return (
-      <div className="space-y-sm">
-        {draftSavedAt && mode === "complete" && (
-          <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
+      <div className="flex items-center justify-end gap-sm">
+        {inlineSaved && (
+          <p className="text-label-sm text-on-surface-variant" data-testid="consult-inline-saved">Saved</p>
         )}
-        {amendSavedAt && mode === "amend" && (
-          <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
+        {/* JJQR - AI (Nov 20, 2026) - B-40: the button is locked until every required section is done; name what is missing */}
+        {mode === "amend" && !canComplete && missingSectionNames && (
+          <p role="status" className="text-label-md text-status-warning">Finish {missingSectionNames} to save changes.</p>
         )}
-        <div className="flex items-center justify-end gap-sm">
-          <Button
-            variant="secondary"
-            disabled={mode === "amend" && !canComplete}
-            loading={mode === "complete" ? savingDraft : savingChanges}
-            onClick={() => setReviewSection(sectionIndex)}
-          >
-            Review section
-          </Button>
-          {/* JJQR - AI (Nov 20, 2026) - B-40: the button is locked until every required section is done; name what is missing */}
-          {mode === "amend" && !canComplete && missingSectionNames && (
-            <p role="status" className="text-label-md text-status-warning">Finish {missingSectionNames} to save changes.</p>
-          )}
-          {/* JJQR - END */}
-        </div>
+        {/* JJQR - END */}
       </div>
     );
   }
+  //JJQR - END
 
   function buildConsultationRecord(): Consultation {
     return {
@@ -1695,14 +1708,25 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (draftSaveInFlight.current || consultationFinalizedRef.current) return;
     draftSaveInFlight.current = true;
     const snapshotBeingSaved = currentFormSnapshot();
+    //JJQR - AI (Nov 20, 2026) C4
+    const previousPayload = lastSavedPayloadRef.current ?? completeBaselineRef.current;
+    if (previousPayload !== null && snapshotBeingSaved === previousPayload) {
+      draftSaveInFlight.current = false;
+      setSavingDraft(false);
+      setInlineSaved(false);
+      return;
+    }
+    //JJQR - END
     setSaveError("");
     setSavingDraft(true);
     try {
       const savedId = await persistConsultation("Draft");
       if (!savedId) throw new Error("Could not save the draft. Check your connection and try again.");
       completeBaselineRef.current = snapshotBeingSaved;
+      lastSavedPayloadRef.current = snapshotBeingSaved;
       setSavedDraftSnapshot(snapshotBeingSaved);
       setDraftSavedAt(new Date().toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit", second: "2-digit" }) + " PHT");
+      setInlineSaved(true);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save the draft. Try again.");
     } finally {
@@ -1820,7 +1844,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const isDirty = mode === "amend" && amendSnapshot !== null && currentFormSnapshot() !== amendSnapshot;
 
   function enterAmendMode() {
-    setAmendSnapshot(currentFormSnapshot());
+    const snap = currentFormSnapshot();
+    setAmendSnapshot(snap);
+    lastSavedPayloadRef.current = snap;
     setMode("amend");
   }
 
@@ -1856,6 +1882,14 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Oct 31, 2026) — section/Ctrl+S saves persist without leaving amend
   async function persistAmendProgress(): Promise<boolean> {
     if (!canComplete || !booking) return false;
+    //JJQR - AI (Nov 20, 2026) C4
+    const snapshotBeingSaved = currentFormSnapshot();
+    const previousPayload = lastSavedPayloadRef.current ?? amendSnapshot;
+    if (previousPayload !== null && snapshotBeingSaved === previousPayload) {
+      setInlineSaved(false);
+      return true;
+    }
+    //JJQR - END
     setSaveError("");
     setSavingChanges(true);
     try {
@@ -1866,8 +1900,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: "Consultation amended" },
         ...prev,
       ]);
-      setAmendSnapshot(currentFormSnapshot());
+      lastSavedPayloadRef.current = snapshotBeingSaved;
+      setAmendSnapshot(snapshotBeingSaved);
       setAmendSavedAt(new Date().toLocaleTimeString());
+      setInlineSaved(true);
       return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save your changes. Try again.");
@@ -1886,19 +1922,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
   //JJQR - END
 
-  // Per-section "Save" button (Diagnosis, Vaccinations, Follow-up, PF Decision,
-  // SOAP & Chief Complaint) — every section's data already travels together in
-  // one persistConsultation() write (it's not split per-section server-side),
-  // so "save this section" really means "save current progress" the same way
-  // Ctrl+S already does: Draft in complete mode, Amended in amend mode. This
-  // just gives that same action a visible home inside each section, matching
-  // the Vitals/Prescription/Lab Orders/Medical Certificate sections, which
-  // already have their own local Save.
-  function saveCurrentProgress() {
-    if (mode === "complete") handleSaveDraft();
-    else void persistAmendProgress();
-  }
-
   const latestDraftSave = useRef(handleSaveDraft);
   const latestAmendSave = useRef(persistAmendProgress);
   useEffect(() => {
@@ -1915,7 +1938,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const mod = e.ctrlKey || e.metaKey;
       if (mod && /^[1-9]$/.test(e.key)) {
         e.preventDefault();
-        setOpenSection(Number(e.key) - 1);
+        const idx = Number(e.key) - 1;
+        setInlineSaved(false);
+        if (OCCASIONAL_SECTIONS.includes(idx as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
+        setOpenSection(idx);
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (mode === "complete") void latestDraftSave.current();
@@ -1932,11 +1958,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [mode, canComplete]);
 
+  //JJQR - AI (Nov 20, 2026) C6
+  useEffect(() => {
+    function onHash() {
+      const m = window.location.hash.match(/^#section-(\d+)$/i);
+      const idx = parseConsultSectionParam(m?.[1]);
+      if (idx === null) return;
+      setInlineSaved(false);
+      if (OCCASIONAL_SECTIONS.includes(idx as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
+      setOpenSection(idx);
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  //JJQR - END
+
   //JJQR - AI (Oct 31, 2026) — F-010 beforeunload, F-022 autosave
   useEffect(() => {
     if (loaded && mode === "complete" && completeBaselineRef.current === null) {
       const baseline = currentFormSnapshot();
       completeBaselineRef.current = baseline;
+      lastSavedPayloadRef.current = baseline;
       queueMicrotask(() => setSavedDraftSnapshot(baseline));
     }
   });
@@ -2325,9 +2367,7 @@ Return to patient queue
         )}
         {/*JJQR - END */}
 
-        {amendSavedAt && mode === "amend" && (
-          <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
-        )}
+        {/* JJQR - AI (Nov 20, 2026) C4 — no green Saved banner; footer + inline Saved after a real change */}
 
         <div className="flex flex-wrap items-center justify-between gap-md">
           <div>
@@ -2379,18 +2419,19 @@ Return to patient queue
         <div className="space-y-lg">
           <nav
             aria-label="Consultation sections"
-            className="flex gap-xs overflow-x-auto border-b border-outline-variant pb-md"
+            data-testid="consult-section-nav"
+            className="flex flex-wrap gap-sm border-b border-outline-variant pb-md"
           >
             {visibleSectionOrder.map((i, displayIdx) => (
               <button
                 key={SECTIONS[i]}
                 type="button"
-                onClick={() => setOpenSection(i)}
+                onClick={() => goToSection(i)}
                 aria-pressed={openSection === i}
                 aria-controls={openSection === i ? `consultation-section-${i}` : undefined}
                 className={cn(
-                  "flex min-h-11 shrink-0 items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
-                  openSection === i ? "border-primary bg-primary/10 font-semibold text-primary" : "border-transparent text-on-surface-variant hover:bg-surface-container-low",
+                  "flex min-h-11 cursor-pointer items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
+                  openSection === i ? "border-primary bg-primary/10 font-semibold text-primary" : "border-outline-variant text-on-surface-variant hover:bg-surface-container-low",
                 )}
               >
                 {renderSectionIndicator(i, "mt-0.5 shrink-0 text-[16px]")}
@@ -2399,12 +2440,12 @@ Return to patient queue
                 </span>
               </button>
             ))}
-            {/*JJQR - AI (Nov 19, 2026) - Vaccinations + Professional Fee live behind "More" so the steps fit one row */}
+            {/*JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Professional Fee live behind "More" in every mode */}
             <button
               type="button"
               onClick={() => setShowOccasional((v) => !v)}
               aria-expanded={showOccasional}
-              className="flex min-h-11 shrink-0 items-center gap-xs rounded-nav border border-dashed border-outline-variant px-sm py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
+              className="flex min-h-11 cursor-pointer items-center gap-xs rounded-nav border border-dashed border-outline-variant px-sm py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
             >
               {showOccasional ? "Less" : "More"}
               <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
@@ -2438,7 +2479,7 @@ Return to patient queue
                   {isOpen && i === 0 && (
                     <div className="mt-md space-y-md">
 
-                      {/*JJQR - AI (Nov 19, 2026) - the template picker, Save as Template, Manage and Review notes are always visible at the top of Clinical notes (not inside a collapsed section) */}
+                      {/*JJQR - AI (Nov 20, 2026) C3 C5 - the template picker, Save as Template and Manage are always visible at the top of Clinical notes */}
                       <div className="flex flex-wrap items-center gap-sm border-b border-outline-variant pb-md">
                         <select
                             value=""
@@ -2490,15 +2531,6 @@ Return to patient queue
                         >
                           Manage templates
                         </Link>
-                        <Button
-                          variant="secondary"
-                          className="min-h-[44px] sm:ml-auto"
-                          disabled={mode === "amend" && !canComplete}
-                          loading={mode === "complete" ? savingDraft : savingChanges}
-                          onClick={() => setReviewSection(0)}
-                        >
-                          Review notes
-                        </Button>
                       </div>
                       {/*JJQR - END */}
                       <details className="border-b border-outline-variant pb-sm"><summary className="text-label-md font-medium text-on-surface">Previous note and specialty filter</summary><div className="mt-md flex w-full flex-col gap-md">
@@ -2565,7 +2597,7 @@ Return to patient queue
 
                   {isOpen && i === 2 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(2)}
+                      {renderSectionSaveHeader()}
                       {assessmentDiagnosisMismatch && (
                         <p className="rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm text-label-sm text-status-warning">
                           Assessment text doesn&apos;t mention the primary diagnosis — update Diagnosis if the visit reason changed.
@@ -2592,61 +2624,25 @@ Return to patient queue
                         {diagnoses.length === 0 && <p className="text-label-md text-on-surface-variant">No diagnoses added yet — at least 1 required.</p>}
                       </div>
 
-                      {/*JJQR - AI (Nov 19, 2026) - Manage saved diagnoses (new tab, deep link) */}
-                      <div className="flex items-center gap-sm">
-                      {diagnosisTemplates.length > 0 && (
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            const t = diagnosisTemplates.find((x) => x.id === e.target.value);
-                            if (t) addDiagnosisLine(t.body, t.icd10_code ?? null);
-                          }}
-                          aria-label="Insert a saved diagnosis"
-                          className="w-full rounded-lg border border-outline-variant bg-transparent px-md py-sm text-body-md text-on-surface-variant"
+                      {/*JJQR - AI (Nov 20, 2026) C1 C2 C3 — one combobox + one Manage deep link */}
+                      <div className="flex items-center justify-end">
+                        <Link
+                          href={manageTemplatesHref("diagnoses")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Manage saved diagnoses (opens in a new tab)"
+                          className="inline-flex min-h-[44px] shrink-0 items-center text-label-sm text-on-surface-variant hover:underline"
                         >
-                          <option value="">+ Insert saved diagnosis…</option>
-                          {diagnosisTemplates.map((t) => (
-                            <option key={t.id} value={t.id}>{t.label}{t.icd10_code ? ` (${t.icd10_code})` : ""} — {t.body}</option>
-                          ))}
-                        </select>
-                      )}
-                      <Link
-                        href={manageTemplatesHref("diagnoses")}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Manage saved diagnoses (opens in a new tab)"
-                        className="inline-flex min-h-[44px] shrink-0 items-center text-label-sm text-on-surface-variant hover:underline"
-                      >
-                        Manage
-                      </Link>
+                          Manage
+                        </Link>
                       </div>
+                      <DiagnosisCombobox
+                        saved={diagnosisTemplates}
+                        onAdd={addDiagnosisLine}
+                        onPickSaved={addSavedDiagnosisTemplate}
+                        onSaveToMyDiagnoses={saveTypedDiagnosisToMyDiagnoses}
+                      />
                       {/*JJQR - END */}
-
-                      <div className="flex flex-col gap-sm sm:flex-row sm:items-end">
-                        <Icd10DiagnosisField
-                          className="flex-1"
-                          description={newDiagnosisText}
-                          icd10Code={newDiagnosisIcd}
-                          onChange={({ description, icd10Code }) => {
-                            setNewDiagnosisText(description);
-                            setNewDiagnosisIcd(icd10Code);
-                          }}
-                          onEnterSubmit={addDiagnosis}
-                        />
-                        <Button variant="secondary" className="min-h-[44px]" onClick={addDiagnosis}>Add</Button>
-                      </div>
-                      {/* JJQR - END — replaced free-text-only diagnosis input (F-007) */}
-                      <div className="flex items-center justify-between text-label-sm">
-                        <button
-                          type="button"
-                          onClick={() => { setSaveTplLabel(""); setSaveTplOpen(true); }}
-                          disabled={!newDiagnosisText.trim()}
-                          className="text-primary hover:underline disabled:text-on-surface-variant/50 disabled:no-underline"
-                        >
-                          Save typed text as a template
-                        </button>
-                        <Link href="/doctor/templates" className="text-on-surface-variant hover:underline">Manage templates</Link>
-                      </div>
                     </div>
                   )}
 
@@ -2811,7 +2807,7 @@ Return to patient queue
 
                   {isOpen && i === 5 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(5)}
+                      {renderSectionSaveHeader()}
                       {nipStatusRows.length > 0 && (
                         <div className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm">
                           <p className="mb-sm text-label-md font-medium text-on-surface">NIP / EPI schedule</p>
@@ -2889,7 +2885,7 @@ Return to patient queue
 
                   {isOpen && i === 6 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(6)}
+                      {renderSectionSaveHeader()}
                       <div className="flex flex-col gap-sm sm:flex-row">
                         {(
                           [
@@ -3065,7 +3061,7 @@ Return to patient queue
 
                   {isOpen && i === 8 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(8)}
+                      {renderSectionSaveHeader()}
                       {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
                       <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
                         <div className="flex flex-wrap items-center gap-sm">
@@ -3230,30 +3226,6 @@ Return to patient queue
         </div>
       </Modal>
 
-      <Modal
-        isOpen={saveTplOpen}
-        onClose={() => setSaveTplOpen(false)}
-        title="Save Diagnosis Template"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setSaveTplOpen(false)}>Cancel</Button>
-            <Button onClick={saveDiagnosisTemplate} disabled={!saveTplLabel.trim() || !newDiagnosisText.trim()}>Save</Button>
-          </>
-        }
-      >
-        <div className="space-y-sm">
-          <p className="text-body-sm text-on-surface-variant">
-            Diagnosis text: <span className="text-on-surface">{newDiagnosisText.trim() || "—"}</span>
-          </p>
-          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Short label (e.g. URTI)</span><input
-            value={saveTplLabel}
-            onChange={(e) => setSaveTplLabel(e.target.value)}
-            placeholder="Short label (e.g. URTI)"
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          /></label>
-        </div>
-      </Modal>
-
       {/*JJQR - AI (Nov 19, 2026) - SOAP template apply: Replace / Append + 5-field preview. Blank template fields never wipe your text. */}
       <Modal
         isOpen={pendingTemplate !== null}
@@ -3412,105 +3384,6 @@ Return to patient queue
       </Modal>
 
       <Modal
-        isOpen={reviewSection !== null}
-        onClose={() => setReviewSection(null)}
-        title={reviewSection !== null ? SECTIONS[reviewSection] : ""}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setReviewSection(null)}>
-              Go Back
-            </Button>
-            <Button
-              loading={mode === "complete" ? savingDraft : savingChanges}
-              onClick={() => {
-                setReviewSection(null);
-                saveCurrentProgress();
-              }}
-            >
-              Confirm &amp; Save
-            </Button>
-          </>
-        }
-      >
-        {(() => {
-          const entry = buildConsultationRecord();
-          return (
-            <div className="space-y-md text-body-md">
-              {reviewSection === 0 && (
-                <>
-                  <div>
-                    <p className="text-label-sm text-on-surface-variant">Chief Complaint</p>
-                    <p className="text-on-surface">{entry.chiefComplaint || "—"}</p>
-                  </div>
-                  {(entry.subjective || entry.objective || entry.assessment || entry.plan) && (
-                    <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                      {([
-                        ["Subjective", entry.subjective],
-                        ["Objective", entry.objective],
-                        ["Assessment", entry.assessment],
-                        ["Plan", entry.plan],
-                      ] as const).map(([label, value]) => (
-                        <div key={label}>
-                          <p className="text-label-sm text-on-surface-variant">{label}</p>
-                          <p className="text-on-surface">{value || "—"}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-              {reviewSection === 2 &&
-                (entry.diagnoses.length === 0 ? (
-                  <p className="text-on-surface-variant">No diagnoses entered.</p>
-                ) : (
-                  <ul className="space-y-xs">
-                    {entry.diagnoses.map((d, i) => (
-                      <li key={i} className="text-on-surface">
-                        {d.description} <span className="text-label-sm text-on-surface-variant">({d.type})</span>
-                      </li>
-                    ))}
-                  </ul>
-                ))}
-              {reviewSection === 5 &&
-                (!entry.vaccinationsAdministered?.length ? (
-                  <p className="text-on-surface-variant">No vaccinations staged.</p>
-                ) : (
-                  <ul className="space-y-xs">
-                    {entry.vaccinationsAdministered.map((v, i) => (
-                      <li key={i} className="text-on-surface">{v.vaccineName}</li>
-                    ))}
-                  </ul>
-                ))}
-              {reviewSection === 6 && (
-                <div>
-                  <p className="text-label-sm text-on-surface-variant">Follow-up</p>
-                  <p className="text-on-surface">
-                    {entry.followUpDate ? `${entry.followUpDate}${entry.followUpReason ? ` — ${entry.followUpReason}` : ""}` : "None set"}
-                  </p>
-                  {entry.followUpInstructions && (
-                    <p className="mt-xs text-on-surface-variant">{entry.followUpInstructions}</p>
-                  )}
-                </div>
-              )}
-              {reviewSection === 8 &&
-                (entry.feeDecision ? (
-                  <p className="text-on-surface">
-                    {entry.feeDecision.type === "Charge"
-                      ? `Charge — ₱${entry.feeDecision.amount ?? 0}`
-                      : `Waived — ${entry.feeDecision.waiveReason || "no reason given"}`}
-                  </p>
-                ) : (
-                  <p className="text-on-surface-variant">No decision made yet.</p>
-                ))}
-              {saveError && (
-                <p className="rounded-lg bg-error-container px-md py-sm text-label-md text-on-error-container">{saveError}</p>
-              )}
-            </div>
-          );
-        })()}
-      </Modal>
-
-      <Modal
         isOpen={labsConfirmPrint !== null}
         onClose={() => setLabsConfirmPrint(null)}
         title="Confirm Lab Orders"
@@ -3664,7 +3537,7 @@ Return to patient queue
                   //JJQR - AI (Nov 19, 2026) - jump straight to the next missing required section (and start showing warnings)
                   setCompleteAttempted(true);
                   const next = nextMissingSection(missingRequiredSections, openSection, SECTION_ORDER);
-                  if (next !== null) setOpenSection(next);
+                  if (next !== null) goToSection(next);
                 }}
                 aria-label={`${missingRequiredSections.length} required section${missingRequiredSections.length === 1 ? "" : "s"} left: ${missingSectionNames}. Go to the next one`}
               >

@@ -125,7 +125,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
 
   // ── 3. Diagnosis — a primary + a secondary line ────────────────────────
   await open(/3\. Diagnosis/);
-  const dx = doctor.getByRole("textbox", { name: /Diagnosis \(search ICD-10/ });
+  const dx = doctor.getByRole("combobox", { name: /Diagnosis \(search ICD-10/ });
   await expect(dx).toBeVisible();
   await dx.fill(DX_PRIMARY);
   await doctor.getByRole("button", { name: "Add", exact: true }).click();
