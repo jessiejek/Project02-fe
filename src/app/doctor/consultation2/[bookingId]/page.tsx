@@ -25,7 +25,7 @@ import { PatientHistoryModal } from "@/components/doctor/PatientHistoryModal";
 import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
 //JJQR - AI (Nov 19, 2026)
-import { stepIndicator, nextMissingSection } from "@/lib/clinical/consult-steps";
+import { stepIndicator, nextMissingSection, adjacentSection } from "@/lib/clinical/consult-steps";
 //JJQR - END
 //JJQR - AI (Nov 19, 2026) - template-library hook, SOAP merge helpers, Manage deep links
 import { useTemplateLibrary } from "@/lib/clinical/useTemplateLibrary";
@@ -207,6 +207,10 @@ const REQUIRED_SECTIONS = [0, 1, 2, 3, 6];
 /** When false, Diagnosis stays in SECTIONS/index 2 for saves but is hidden from nav and completion gates. */
 const SHOW_DIAGNOSIS_STEP = false;
 const DIAGNOSIS_SECTION_INDEX = 2;
+//JJQR Nov 20, 2026
+/** UI only: the yellow "{n} required sections left … Go to next" banner is hidden. Completion gating (canComplete, missingRequiredSections) is unchanged. */
+const SHOW_REQUIRED_LEFT_BANNER = false;
+//JJQR - END
 const effectiveRequiredSections = REQUIRED_SECTIONS.filter(
   (i) => SHOW_DIAGNOSIS_STEP || i !== DIAGNOSIS_SECTION_INDEX,
 );
@@ -448,6 +452,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (i !== openSection) setInlineSaved(false);
     if (OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
     setOpenSection(i);
+  }
+  //JJQR - END
+  //JJQR Nov 20, 2026 - Prev/Next next to Save draft: navigate only (no save, no validation), same goToSection the side rail uses
+  const prevSection = adjacentSection(visibleSectionOrder, openSection, "prev");
+  const nextSection = adjacentSection(visibleSectionOrder, openSection, "next");
+  function stepSection(target: number | null) {
+    if (target === null) return;
+    goToSection(target);
+    requestAnimationFrame(() => document.querySelector('[data-testid="consult-section-nav"]')?.scrollIntoView({ block: "start" }));
   }
   //JJQR - END
   //JJQR - END
@@ -1649,11 +1662,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     mcDiagnosis.trim() !== "" || mcRecommendations.trim() !== "" || mcAddress.trim() !== "",
     pfDecision !== null,
   ];
+  //JJQR Nov 20, 2026 - warnings no longer depend on the (hidden) "required sections left" banner: empty required sections warn on page load (editable modes) and after Review & complete
+  const WARN_EMPTY_REQUIRED_ON_LOAD = true;
+  const showRequiredWarnings = (WARN_EMPTY_REQUIRED_ON_LOAD && mode !== "view") || completeAttempted;
+  //JJQR - END
   function sectionStatus(i: number): SectionStatus {
     const satisfied = i === 3 ? rxSatisfied : i === 6 ? followUpSatisfied : sectionSatisfied[i];
     //JJQR - AI (Nov 19, 2026) - empty circle until the doctor tries to complete; only then the warning
     //JJQR Nov 20, 2026
-    return stepIndicator({ satisfied, required: effectiveRequiredSections.includes(i), hasDraft: sectionHasDraft[i], attemptedComplete: completeAttempted });
+    return stepIndicator({ satisfied, required: effectiveRequiredSections.includes(i), hasDraft: sectionHasDraft[i], attemptedComplete: showRequiredWarnings });
     //JJQR - END
     //JJQR - END
   }
@@ -1684,7 +1701,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       if (filled === 0) {
         //JJQR - AI (Nov 19, 2026)
         //JJQR Nov 20, 2026
-        if (completeAttempted && effectiveRequiredSections.includes(i) && !isRequiredSectionDone(i)) {
+        if (showRequiredWarnings && effectiveRequiredSections.includes(i) && !isRequiredSectionDone(i)) {
         //JJQR - END
           return <Icon name="warning" className={cn(className, "text-status-warning")} />;
         }
@@ -3846,7 +3863,8 @@ Return to patient queue
       >
         <div className="mx-auto flex w-full max-w-content flex-col gap-sm px-md py-sm lg:flex-row lg:items-center lg:justify-between lg:gap-md">
           {/* JJQR - AI (Nov 20, 2026) - B-40: also in amend mode, where Save amendment / Review section are locked by the same rule */}
-          {!canComplete && missingRequiredSections.length > 0 && (
+          {/* JJQR Nov 20, 2026 */}
+          {SHOW_REQUIRED_LEFT_BANNER && !canComplete && missingRequiredSections.length > 0 && (
             <div className="shrink-0">
               <button
                 type="button"
@@ -3874,7 +3892,17 @@ Return to patient queue
           <div className="flex w-full flex-wrap items-center justify-between gap-md lg:w-auto lg:flex-1">
             <p role="status" aria-live="polite" aria-atomic="true" className="consultation-save-status text-label-md tabular-nums text-on-surface-variant">{savingDraft || savingChanges ? "Saving your changes…" : saveError ? "Not saved — your entries are still here." : mode === "amend" ? (amendSavedAt ? `Amendment saved ${amendSavedAt}` : "Amendment · manual save") : savedDraftSnapshot && currentFormSnapshot() !== savedDraftSnapshot ? "Unsaved changes · auto-save every 30 seconds" : draftSavedAt ? `Draft saved ${draftSavedAt}` : consultationId ? "Draft loaded · no new changes" : "Draft not saved · changes auto-save every 30 seconds"}</p>
             <div className="flex items-center gap-sm">
-              {mode === "complete" && <Button variant={canComplete ? "primary" : "secondary"} disabled={!canComplete || savingDraft} onClick={() => setChecklistOpen(true)} aria-label="Complete Consultation">Review &amp; complete</Button>}
+              {/* //JJQR Nov 20, 2026 - compact Prev / Next: navigation only, never saves or validates */}
+              <div className="flex items-center gap-xs" role="group" aria-label="Previous or next section">
+                <Button type="button" variant="secondary" className="!min-h-11 !gap-xs !px-sm !py-xs" disabled={prevSection === null} onClick={() => stepSection(prevSection)} aria-label="Previous section" data-testid="consult-prev-section">
+                  <Icon name="chevron_left" className="h-4 w-4" aria-hidden />Prev
+                </Button>
+                <Button type="button" variant="secondary" className="!min-h-11 !gap-xs !px-sm !py-xs" disabled={nextSection === null} onClick={() => stepSection(nextSection)} aria-label="Next section" data-testid="consult-next-section">
+                  Next<Icon name="chevron_right" className="h-4 w-4" aria-hidden />
+                </Button>
+              </div>
+              {/* //JJQR - END */}
+              {mode === "complete" && <Button variant={canComplete ? "primary" : "secondary"} disabled={!canComplete || savingDraft} onClick={() => { setCompleteAttempted(true); setChecklistOpen(true); }} aria-label="Complete Consultation">Review &amp; complete</Button>}
               <Button variant={mode === "complete" && canComplete ? "secondary" : "primary"} loading={mode === "complete" ? savingDraft : savingChanges} disabled={mode === "amend" && !canComplete} onClick={mode === "complete" ? handleSaveDraft : handleSaveChanges}>{mode === "complete" ? "Save draft" : "Save amendment"}</Button>
             </div>
           </div>

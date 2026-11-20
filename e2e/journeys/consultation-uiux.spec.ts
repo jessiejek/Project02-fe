@@ -30,13 +30,13 @@ test.describe("Consultation2 UI/UX", () => {
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
     expect(await steps.evaluate((nav) => nav.scrollWidth <= nav.clientWidth + 1)).toBe(true);
     //JJQR - END
-    // 3. untouched required steps show an empty circle (no warning icon) until "required left" is clicked
-    await expect(steps.locator('[data-icon="triangle-exclamation"]')).toHaveCount(0);
-    // 6. the "required sections left" button jumps to the next missing section
-    const left = doctor.getByRole("button", { name: /required sections? left/ });
-    await expect(left).toBeVisible();
-    await left.click();
+    //JJQR Nov 20, 2026 - 3. empty required steps show the warning icon on load (no banner click needed)
     await expect(steps.locator('[data-icon="triangle-exclamation"]').first()).toBeVisible();
+    //JJQR - END
+    //JJQR Nov 20, 2026 - 6. the "required sections left" banner is hidden (SHOW_REQUIRED_LEFT_BANNER = false); gating still applies
+    await expect(doctor.getByRole("button", { name: /required sections? left/ })).toHaveCount(0);
+    await expect(doctor.getByRole("button", { name: "Complete Consultation" })).toBeDisabled();
+    //JJQR - END
   });
 
   test("allergy badge has a one-tap Record allergies / NKDA action", async ({ as, api }) => {

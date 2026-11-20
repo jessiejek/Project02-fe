@@ -18,3 +18,12 @@ export function nextMissingSection(missing: readonly number[], current: number, 
   return missing[0];
 }
 //JJQR - END
+//JJQR Nov 20, 2026 - Prev/Next buttons beside Save draft: pure neighbour lookup over the visible section order (no wrap)
+/** Section before/after `current` in `order`, or null at the ends (or when `current` is not in `order`). */
+export function adjacentSection(order: readonly number[], current: number, direction: "prev" | "next"): number | null {
+  const pos = order.indexOf(current);
+  if (pos === -1) return null;
+  const target = pos + (direction === "next" ? 1 : -1);
+  return target >= 0 && target < order.length ? order[target] : null;
+}
+//JJQR - END
