@@ -37,7 +37,7 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [ ] PV-1: docs/privacy/AUDIT.md (OK/GAP with file:line)
 - [ ] PV-2: Role AND ownership checks on every endpoint
 - [ ] PV-3: Password min 12 + common-password block + lockout after failed logins
-- [ ] PV-4: Auto-logout 30 min idle (staff/doctor/admin)
+- [~] PV-4: EXCLUDED by Jessie (Nov 20)
 - [ ] PV-5: Audit log of record views, logins, failed logins; admin "who looked at this patient"
 - [ ] PV-6: HTTPS only in production; secure httpOnly cookies
 - [ ] PV-7: Uploaded files never public; auth + type/size checks
