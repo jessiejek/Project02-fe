@@ -16,18 +16,18 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [x] B-29: Booking rejected on a day the clinic is closed (BE 9691d06, FE d4665b6; xUnit + e2e pass)
 
 ## Phase 2 — workflow
-- [ ] B-40: Amend after "No follow-up" not stuck; disabled Save/Review/Complete shows which section is missing
+- [x] B-40: Amend after "No follow-up" not stuck; disabled Save/Review/Complete shows which section is missing (FE 94678a6; e2e verified at F-1)
 - [x] B-05: Same patient can't book same date twice (BE 9691d06, FE d4665b6; xUnit + e2e pass)
-- [ ] B-04: Reviews only for COMPLETED visit
-- [ ] B-37: Publish new consent version makes patients accept again
+- [x] B-04: Reviews only for COMPLETED visit (BE 2d2a948, FE a19081d; xUnit pass, e2e at F-1)
+- [x] B-37: Publish new consent version makes patients accept again (BE 4f48521+; FE 9dbf69c; xUnit pass, e2e at F-1)
 
 ## Phase 3 — validation and display
-- [ ] B-01: Server validation (patients, announcements, settings, staff, vitals, vaccinations, lab orders)
-- [ ] B-36: Clinic name/address can't be blank
-- [ ] B-31: No negative fee (doctor edit page)
-- [ ] B-34: No negative fee (Fees tab)
-- [ ] B-33: No future date of birth
-- [ ] B-35: Same min cancel-reason length admin/staff (5)
+- [x] B-01: Server validation (patients, announcements, settings, staff, vitals, vaccinations, lab orders) (BE fd57c1b + Check/Rules helpers; FE 05e8deb; xUnit 18 pass, e2e at F-1)
+- [x] B-36: Clinic name/address can't be blank (BE 4f48521, FE 9dbf69c)
+- [x] B-31: No negative fee (doctor edit page) (BE c525c90, FE cf78e91)
+- [x] B-34: No negative fee (Fees tab) (BE 4f48521, FE 9dbf69c)
+- [x] B-33: No future date of birth (BE fd57c1b, FE 05e8deb+cf78e91)
+- [x] B-35: Same min cancel-reason length admin/staff (5) (FE cf78e91 (UI only; server cancel has no min length so internal cleanup helpers keep working))
 - [ ] B-30: Announcements shown to staff and patients
 - [ ] B-39: /patient/doctors fits phone/iPad
 - [ ] B-41: Doctor dashboard "+N more"
