@@ -48,7 +48,7 @@ test.describe("B1 · server-side validation", () => {
     }
   });
 
-  test("Settings PUT rejects blank clinic name, negative fee, discount > 100%, 5000-char address", async ({ api, guard, cleanup }) => {
+  test("Settings PUT rejects blank clinic name, negative fee, discount > 100%, 5000-char address @global", async ({ api, guard, cleanup }) => {
     //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const admin = await api("admin");

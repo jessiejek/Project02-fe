@@ -38,7 +38,7 @@ test.describe("/admin/doctors", () => {
     await expect(page).toHaveURL(new RegExp(`/admin/doctors/${d.doctor_id}/edit`));
   });
 
-  test("Deactivate: 'Keep active' changes nothing; confirming marks the doctor Inactive (and Reactivate puts it back)", async ({ as, api, cleanup }) => {
+  test("Deactivate: 'Keep active' changes nothing; confirming marks the doctor Inactive (and Reactivate puts it back) @global", async ({ as, api, cleanup }) => {
     const admin = await api("admin");
     const s = await doctorSnapshot(admin);
     cleanup(() => restoreDoctor(admin, s));

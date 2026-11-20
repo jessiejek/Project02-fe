@@ -88,3 +88,16 @@ cd ../Project02-fe && npm run build && npx next start -p 3100
 # 3. run the suite
 E2E_FE_URL=http://localhost:3100 E2E_BE_URL=http://127.0.0.1:5155 npx playwright test -c e2e/playwright.config.ts
 ```
+
+## Running the whole suite in parallel (finish/all)
+
+Most specs make their own data and can run side by side. A few change **clinic-wide state** (settings, the consent version, operating hours, deactivating the demo doctor); they carry `@global` in their title and must run alone.
+
+```bash
+# 1) parallel pass — everything except @global
+npx playwright test -c e2e/playwright.config.ts --workers=4 --grep-invert @global
+# 2) serial pass — only the @global tests
+npx playwright test -c e2e/playwright.config.ts --workers=1 --grep @global
+```
+
+The config still defaults to one worker, so a plain `npx playwright test` is unchanged. Wrong-password logins lock an account for 15 minutes after 5 failures (PV-3): keep failed-login tests to a throw-away account or ≤ 3 attempts per run on the shared dev users.

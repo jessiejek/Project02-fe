@@ -30,7 +30,7 @@ test.describe("§4 journeys", () => {
     expect(status).toBeGreaterThanOrEqual(400);
   });
 
-  test("J3 · admin changes the standard fee → the next online booking's amount due uses it", async ({ api, tag, cleanup }) => {
+  test("J3 · admin changes the standard fee → the next online booking's amount due uses it @global", async ({ api, tag, cleanup }) => {
     const admin = await api("admin");
     const staff = await api("staff");
     const orig = await getSettings(admin);
@@ -45,7 +45,7 @@ test.describe("§4 journeys", () => {
     expect(Number(pay.amount)).toBe(463);
   });
 
-  test("J4 · admin publishes a new consent version → a patient who consented before is asked to consent again", async ({ as, loginAs, api, tag, cleanup }) => {
+  test("J4 · admin publishes a new consent version → a patient who consented before is asked to consent again @global", async ({ as, loginAs, api, tag, cleanup }) => {
     //JJQR - AI (Nov 20, 2026) - BUG-37 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const orig = await getSettings(admin);

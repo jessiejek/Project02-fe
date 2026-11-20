@@ -292,7 +292,7 @@ test.describe("/admin/bookings/[id] · actions", () => {
   });
 });
 
-test.describe("/admin/settings", () => {
+test.describe("/admin/settings @global", () => { // JJQR - AI (Nov 20, 2026) - F-1: these edit clinic-wide settings, so they run in the serial @global pass // JJQR - END
   async function snapshot(admin: APIRequestContext) {
     const settings = await getSettings(admin);
     const hours = await (await admin.get("/api/admin/operating-hours")).json();
