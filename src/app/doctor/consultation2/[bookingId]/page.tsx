@@ -3052,7 +3052,8 @@ Return to patient queue
                         </Button>
                       </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                        <label className="block min-w-0 flex-1 space-y-xs sm:col-span-2"><span className="text-label-md font-medium text-on-surface">Patient address (&ldquo;residing at …&rdquo;)</span><input
+                        {/*JJQR - AI (Nov 20, 2026) E3 */}
+                        <label className="block min-w-0 flex-1 space-y-xs sm:col-span-2"><span className="text-label-md font-medium text-on-surface">Patient address</span><input
                           value={mcAddress}
                           onChange={(e) => setMcAddress(e.target.value)}
                           placeholder={mcAddress.trim() ? undefined : "No address on file"}

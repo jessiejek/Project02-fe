@@ -20,7 +20,9 @@ const {
   examinedAtFromClinic,
   diagnosisTextFromConsult,
   shouldApplyTemplateDiagnosis,
+  cleanMedCertAddress,
 } = load('lib/clinical/med-cert-fields.ts');
+const printForms = read('lib/print-forms.ts');
 
 test('E1 auto-fills known medical-certificate fields; doctor only types recs / except / come-back', () => {
   assert.match(cert, /patientAgeYears != null \? `, \$\{patientAgeYears\}y`/);
@@ -54,5 +56,16 @@ test('E2 applying a certificate template only fills recs / except / come-back, n
   assert.equal(shouldApplyTemplateDiagnosis(['Asthma'], ''), false);
   assert.equal(shouldApplyTemplateDiagnosis([], 'Assessment'), false);
   assert.equal(shouldApplyTemplateDiagnosis([], ''), true);
+});
+
+test('E3 patient address is a clean field; print builds a single residing-at sentence', () => {
+  assert.match(cert, />Patient address</);
+  assert.doesNotMatch(cert, /residing at/);
+  assert.match(printForms, /cleanMedCertAddress/);
+  assert.match(printForms, /residing at <span class="fill">\$\{e\(addr\)\}<\/span>/);
+  assert.equal(cleanMedCertAddress('residing at 3ML Highway, '), '3ML Highway');
+  assert.equal(cleanMedCertAddress('residing at residing at Cebu City,'), 'Cebu City');
+  assert.equal(cleanMedCertAddress('  123 Main St,  '), '123 Main St');
+  assert.equal(cleanMedCertAddress(''), '');
 });
 //JJQR - END

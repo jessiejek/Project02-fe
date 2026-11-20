@@ -7,6 +7,9 @@
  */
 import { printHtml, escapeHtml } from "@/lib/print";
 import { todayManila } from "@/lib/clock";
+//JJQR - AI (Nov 20, 2026) E3
+import { cleanMedCertAddress } from "@/lib/clinical/med-cert-fields";
+//JJQR - END
 
 export interface PrintClinic {
   clinic_name: string;
@@ -190,7 +193,7 @@ export function printMedicalCertificate(opts: {
   cert: MedCertData;
 }): boolean {
   const { clinic, doctor, patient, cert } = opts;
-  const addr = cert.patient_address_snapshot ?? patient.address ?? "";
+  const addr = cleanMedCertAddress(cert.patient_address_snapshot ?? patient.address ?? "");
   const salutation = patient.sex === "Male" ? "Mr." : patient.sex === "Female" ? "Ms." : "Mr./Ms.";
   const inner = `<div class="doc-title">Medical Certificate</div>
     <div class="mc-date">Date: <span class="fill">${e(fmtDate(cert.issue_date ?? new Date().toISOString()))}</span></div>

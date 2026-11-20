@@ -20,4 +20,13 @@ export function diagnosisTextFromConsult(descriptions: string[], assessment?: st
 export function shouldApplyTemplateDiagnosis(descriptions: string[], assessment?: string | null): boolean {
   return diagnosisTextFromConsult(descriptions, assessment) === "";
 }
+
+//JJQR - AI (Nov 20, 2026) E3 — print sentence is "residing at <address>"; strip a duplicated prefix and dangling commas
+export function cleanMedCertAddress(addr: string | null | undefined): string {
+  let s = (addr ?? "").trim();
+  s = s.replace(/^(residing at\s+)+/i, "").trim();
+  s = s.replace(/[,\s]+$/g, "").trim();
+  s = s.replace(/,\s*,+/g, ", ");
+  return s;
+}
 //JJQR - END
