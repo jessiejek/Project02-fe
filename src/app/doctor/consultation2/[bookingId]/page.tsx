@@ -6,7 +6,7 @@ import { ClinicalNoteField } from "@/components/doctor/ClinicalNoteField";
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { todayManila } from "@/lib/clock";
 //JJQR Nov 20, 2026
-import { MC_EXAMINED_AT_DEFAULT, mcHasTypedContent } from "@/lib/mc-defaults";
+import { MC_EXAMINED_AT_DEFAULT } from "@/lib/mc-defaults";
 //JJQR - END
 import Link from "next/link";
 import { buttonStyles } from "@/components/ui/buttonStyles";
@@ -34,11 +34,13 @@ import { manageTemplatesHref } from "@/lib/clinical/template-links";
 //JJQR - END
 //JJQR - AI (Oct 31, 2026)
 import { ConsultPatientBanner } from "@/components/doctor/ConsultPatientBanner";
-import { Icd10DiagnosisField } from "@/components/doctor/Icd10DiagnosisField";
+import { DiagnosisCombobox } from "@/components/doctor/DiagnosisCombobox";
 import { GrowthChart } from "@/components/doctor/GrowthChart";
 import {
   queryPatientAllergies,
   replacePatientAllergies,
+  queryPatientById,
+  updatePatient,
   type PatientAllergyRow,
   type PatientRow,
 } from "@/lib/data/patients";
@@ -59,7 +61,7 @@ import {
 //JJQR - END
 import { cn } from "@/lib/cn";
 //JJQR Nov 20, 2026
-import { followUpModeSatisfied, initialPfDecision } from "@/lib/pf-default";
+import { followUpModeSatisfied } from "@/lib/pf-default";
 //JJQR - END
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
@@ -82,21 +84,39 @@ import {
   deleteFollowUpByConsultation,
   upsertMedicalCertificateByConsultation,
   queryMedicalCertificateByConsultation,
+  deleteMedicalCertificateByConsultation,
   queryRxGroups,
   queryVitalReadings,
   type RxGroupRow,
   createMedicalCertificateTemplate,
   type MedicalCertificateTemplateRow,
 } from "@/lib/data/clinical";
-import { queryDoctorById } from "@/lib/data/doctors";
+import { queryDoctorById, type DoctorRow } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
-import { queryPatientById } from "@/lib/data/patients";
 import { printMedicalCertificate } from "@/lib/print-forms";
+//JJQR - AI (Nov 20, 2026) E1
+import {
+  diagnosisTextFromConsult,
+  examinedAtFromClinic,
+  patientAddressFromProfile,
+  shouldApplyTemplateDiagnosis,
+  medCertFeeAddOn,
+} from "@/lib/clinical/med-cert-fields";
+//JJQR - END
 import {
   printLabOrdersForBooking,
   printPrescriptionForBooking,
 } from "@/lib/consult-print";
 import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
+import { formatPeso } from "@/lib/format";
+import {
+  computeClinicFee,
+  pfEditorAmountFromStored,
+  pfEditorDecisionFromStored,
+  pfViewDecisionFromStored,
+  shouldPrefillChargeAmount,
+  type ClinicFeeSchedule,
+} from "@/lib/clinical/preview-fee";
 import type {
   Consultation,
   Diagnosis,
@@ -194,6 +214,41 @@ const effectiveRequiredSections = REQUIRED_SECTIONS.filter(
 /** Vaccinations + PF — last in SECTION_ORDER so the first 7 tab numbers stay 1–7. */
 const OCCASIONAL_SECTIONS = [5, 8] as const;
 const SECTION_ORDER = [0, 1, 2, 3, 4, 6, 7, 5, 8] as const;
+
+//JJQR - AI (Nov 20, 2026) C6
+/** 1-based section index from ?section=9 or #section-9 (Clinical notes = 1). */
+function parseConsultSectionParam(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > SECTIONS.length) return null;
+  return n - 1;
+}
+
+//JJQR - AI (Nov 20, 2026) F1 — completed-visit summary: read-only PF line (section 9 is the only editor)
+function formatProfessionalFeeLine(opts: {
+  decision: "charge" | "waive" | null;
+  amount: string;
+  waiveReason: string;
+  computedTotal?: number | null;
+}): string {
+  if (opts.decision === "waive") {
+    const reason = opts.waiveReason.trim();
+    return reason ? `Professional fee: Waive — ${reason}` : "Professional fee: Waive";
+  }
+  if (opts.decision === "charge") {
+    const raw = opts.amount.trim();
+    const n = Number(raw);
+    if (raw !== "" && Number.isFinite(n)) return `Professional fee: Charge ${formatPeso(n)}`;
+    //JJQR - AI (Nov 20, 2026) F4 — Charge with a null amount keeps the label and hints the clinic total
+    const hint =
+      opts.computedTotal != null && Number.isFinite(opts.computedTotal)
+        ? ` (Total: ${formatPeso(opts.computedTotal)})`
+        : "";
+    return `Professional fee: Charge${hint}`;
+  }
+  return "Professional fee: Decide at desk";
+}
+//JJQR - END
 
 type SectionStatus = "complete" | "warning" | "partial" | "empty";
 
@@ -294,6 +349,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [patientAllergies, setPatientAllergies] = useState<PatientAllergyRow[]>([]);
   const [nkda, setNkda] = useState(false);
   const formDirtyRef = useRef(false);
+  //JJQR - AI (Nov 20, 2026) C4
+  const lastSavedPayloadRef = useRef<string | null>(null);
+  const [inlineSaved, setInlineSaved] = useState(false);
+  //JJQR - END
   //JJQR - AI (Oct 31, 2026) — F-010 beforeunload baseline
   const completeBaselineRef = useRef<string | null>(null);
   const consultationFinalizedRef = useRef(false);
@@ -308,6 +367,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Oct 31, 2026) — prior visit Rx lines for PrescriptionForm
   const [priorRxItems, setPriorRxItems] = useState<PrescriptionLineItem[]>([]);
   const [patientDetail, setPatientDetail] = useState<PatientRow | null>(null);
+  //JJQR - AI (Nov 20, 2026) E1
+  const [doctorProfile, setDoctorProfile] = useState<DoctorRow | null>(null);
+  const patientAddressMissingRef = useRef(false);
+  //JJQR - END
   const [patientLabValues, setPatientLabValues] = useState<PatientLabValueRow[]>([]);
   const [patientVaxHistory, setPatientVaxHistory] = useState<VaccinationRow[]>([]);
   const [soapSpecialtyFilter, setSoapSpecialtyFilter] = useState<Specialty | "All">("All");
@@ -318,7 +381,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [mode, setMode] = useState(initialMode);
   //JJQR - AI (Nov 20, 2026) - PrescriptionForm memo ignores function props; flush must read latest mode
   const modeRef = useRef(mode);
-  modeRef.current = mode;
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
   //JJQR - END
   const [checklistOpen, setChecklistOpen] = useState(false);
   //JJQR - AI (Oct 31, 2026)
@@ -331,42 +396,60 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [lastVisitOpen, setLastVisitOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
-  // Which section's Save opened the review modal — the modal only shows
-  // that section's own fields (Doctor asked: SOAP's Save should review just
-  // SOAP, Diagnosis's Save should review just Diagnosis), even though the
-  // write underneath always persists the whole consultation record.
-  const [reviewSection, setReviewSection] = useState<number | null>(null);
+  //JJQR - AI (Nov 20, 2026) C5 — Review section modal removed; footer Save draft / Save amendment / Ctrl+S persist.
   const [labsConfirmPrint, setLabsConfirmPrint] = useState<boolean | null>(null);
   const [certConfirmPrint, setCertConfirmPrint] = useState<boolean | null>(null);
   const [justCompleted, setJustCompleted] = useState(false);
-  const [savingPostCompletePf, setSavingPostCompletePf] = useState(false);
-  const [openSection, setOpenSection] = useState(0);
+  const [openSection, setOpenSection] = useState(() => {
+    const fromQuery = parseConsultSectionParam(searchParams.get("section"));
+    if (fromQuery !== null) return fromQuery;
+    if (typeof window === "undefined") return 0;
+    const m = window.location.hash.match(/^#section-(\d+)$/i);
+    return parseConsultSectionParam(m?.[1]) ?? 0;
+  });
   //JJQR - AI (Nov 20, 2026) - keep Vital Signs / Prescription mounted after first open so local edits are not lost
   const [visited, setVisited] = useState(() => new Set<number>([0]));
-  useEffect(() => {
-    setVisited((prev) => {
-      if (prev.has(openSection)) return prev;
-      const next = new Set(prev);
-      next.add(openSection);
-      return next;
-    });
-  }, [openSection]);
+  if (!visited.has(openSection)) {
+    const next = new Set(visited);
+    next.add(openSection);
+    setVisited(next);
+  }
   //JJQR - END
-  //JJQR - AI (Nov 20, 2026) - wrap-all section pills: Vaccinations + Fee always visible
-  const revealOccasionalSections = true;
-  const visibleSectionOrder = SECTION_ORDER.filter((i) => {
-    //JJQR Nov 20, 2026
-    if (!SHOW_DIAGNOSIS_STEP && i === DIAGNOSIS_SECTION_INDEX) return false;
-    //JJQR - END
-    return revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]);
-  });
+  //JJQR - AI (Oct 31, 2026) — complete mode shows all sections; no occasional toggle
+  /** Consult2: occasional sections hidden until the doctor asks for them (not in complete mode). */
+  const [showOccasional, setShowOccasional] = useState(false);
+  //JJQR - AI (Nov 20, 2026) C6
+  const [seenSectionQuery, setSeenSectionQuery] = useState(() => searchParams.get("section"));
+  const sectionQuery = searchParams.get("section");
+  if (sectionQuery !== seenSectionQuery) {
+    setSeenSectionQuery(sectionQuery);
+    const idx = parseConsultSectionParam(sectionQuery);
+    if (idx !== null && (SHOW_DIAGNOSIS_STEP || idx !== DIAGNOSIS_SECTION_INDEX)) {
+      setInlineSaved(false);
+      if (OCCASIONAL_SECTIONS.includes(idx as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
+      setOpenSection(idx);
+    }
+  }
+  //JJQR - AI (Nov 19, 2026) - Vaccinations + Fee sit behind "More" in every mode (the open one always stays visible)
+  const revealOccasionalSections = showOccasional || OCCASIONAL_SECTIONS.includes(openSection as (typeof OCCASIONAL_SECTIONS)[number]);
   //JJQR - END
-  //JJQR Nov 20, 2026
+  //JJQR Nov 20, 2026 - Diagnosis step hidden (not required); navigation skips it
+  const navSectionOrder = SECTION_ORDER.filter((i) => SHOW_DIAGNOSIS_STEP || i !== DIAGNOSIS_SECTION_INDEX);
+  const visibleSectionOrder = navSectionOrder.filter(
+    (i) => revealOccasionalSections || !OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number]),
+  );
   useEffect(() => {
     if (!SHOW_DIAGNOSIS_STEP && openSection === DIAGNOSIS_SECTION_INDEX) {
-      setOpenSection(visibleSectionOrder[0] ?? 0);
+      setOpenSection(navSectionOrder[0] ?? 0);
     }
-  }, [openSection, visibleSectionOrder]);
+  }, [openSection, navSectionOrder]);
+  //JJQR - END
+  function goToSection(i: number) {
+    if (i !== openSection) setInlineSaved(false);
+    if (OCCASIONAL_SECTIONS.includes(i as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
+    setOpenSection(i);
+  }
+  //JJQR - END
   //JJQR - END
   /** Explicit escape hatch when Grace would omit medicines (rare). */
   const [noMedsConfirmed, setNoMedsConfirmed] = useState(false);
@@ -576,23 +659,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Nov 19, 2026) - certificate templates: confirm before replacing filled fields; blank template fields keep your text
   const [pendingMcTemplate, setPendingMcTemplate] = useState<MedicalCertificateTemplateRow | null>(null);
   const [savingMcTemplate, setSavingMcTemplate] = useState(false);
-  function mcTemplateFieldPlan(template: MedicalCertificateTemplateRow) {
-    const rows = [
-      { label: "Diagnosis / Impressions", current: mcDiagnosis, next: template.diagnosis_text ?? "", set: setMcDiagnosis },
-      { label: "Recommendations", current: mcRecommendations, next: template.recommendations ?? "", set: setMcRecommendations },
-      { label: "Purpose exception", current: mcPurposeException, next: template.purpose_exception ?? "", set: setMcPurposeException },
-    ];
-    return rows.filter((r) => r.next.trim() !== "");
-  }
-  function doApplyMcTemplate(template: MedicalCertificateTemplateRow) {
-    mcTemplateFieldPlan(template).forEach((r) => r.set(r.next));
-    setPendingMcTemplate(null);
-  }
-  function applyMcTemplate(template: MedicalCertificateTemplateRow) {
-    const overwriting = mcTemplateFieldPlan(template).filter((r) => r.current.trim() !== "" && r.current.trim() !== r.next.trim());
-    if (overwriting.length > 0) setPendingMcTemplate(template);
-    else doApplyMcTemplate(template);
-  }
 
   async function saveMcAsTemplate() {
     if (!saveMcTplTitle.trim() || !booking || savingMcTemplate) return;
@@ -640,13 +706,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   // Section 3: Diagnosis
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
-  const [newDiagnosisText, setNewDiagnosisText] = useState("");
-  //JJQR - AI (Oct 31, 2026)
-  const [newDiagnosisIcd, setNewDiagnosisIcd] = useState<string | null>(null);
-  //JJQR - END
-  // Doctor's reusable diagnoses (managed in Settings).
-  const [saveTplOpen, setSaveTplOpen] = useState(false);
-  const [saveTplLabel, setSaveTplLabel] = useState("");
 
   function addDiagnosisLine(text: string, icd10Code: string | null = null) {
     const t = text.trim();
@@ -664,12 +723,24 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     ]);
     formDirtyRef.current = true;
   }
-  function addDiagnosis() {
-    if (!newDiagnosisText.trim()) return;
-    addDiagnosisLine(newDiagnosisText, newDiagnosisIcd);
-    setNewDiagnosisText("");
-    setNewDiagnosisIcd(null);
+  //JJQR - AI (Nov 20, 2026) C1 C2
+  function addSavedDiagnosisTemplate(t: { body: string; icd10_code?: string | null }) {
+    addDiagnosisLine(t.body, t.icd10_code ?? null);
   }
+  async function saveTypedDiagnosisToMyDiagnoses(text: string) {
+    const label = text.trim();
+    const body = label;
+    if (!label) return;
+    try {
+      const created = await createDiagnosisTemplate(null as never, { label, body, icd10_code: null });
+      templateLib.diagnoses.add(created);
+      notifyTpl("success", `Diagnosis “${created.label}” saved.`);
+      addDiagnosisLine(created.body, created.icd10_code ?? null);
+    } catch {
+      notifyTpl("error", "Diagnosis was not saved. The diagnosis text is unchanged — please try again.");
+    }
+  }
+  //JJQR - END
 
   //JJQR - AI (Oct 31, 2026)
   async function persistAllergies(nextRows: PatientAllergyRow[], nextNkda: boolean) {
@@ -689,22 +760,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
   //JJQR - END
 
-  async function saveDiagnosisTemplate() {
-    const label = saveTplLabel.trim();
-    const body = newDiagnosisText.trim();
-    if (!label || !body) return;
-    //JJQR - AI (Nov 19, 2026) - success/error toast instead of a silent failure
-    try {
-      const created = await createDiagnosisTemplate(null as never, { label, body, icd10_code: newDiagnosisIcd });
-      templateLib.diagnoses.add(created);
-      notifyTpl("success", `Diagnosis “${created.label}” saved.`);
-      setSaveTplOpen(false);
-      setSaveTplLabel("");
-    } catch {
-      notifyTpl("error", "Diagnosis was not saved. The diagnosis text is unchanged — please try again.");
-    }
-    //JJQR - END
-  }
   function removeDiagnosis(index: number) {
     setDiagnoses((prev) => prev.filter((_, i) => i !== index));
   }
@@ -957,13 +1012,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Optional for completion (see REQUIRED_SECTIONS above); the tabs' own
   // sub-fields (amount / waive reason) are what's "required" once a tab is chosen.
   // No real table backs this yet, so it stays local-only like Lab Orders/Vaccinations.
-  //JJQR Nov 20, 2026 - charge PF default
+  //JJQR - AI (Nov 20, 2026) F5 — Charge is the editor default until a stored decision loads
   const [pfDecision, setPfDecision] = useState<"charge" | "waive" | null>("charge");
-  //JJQR - END
   const [pfAmount, setPfAmount] = useState("");
-  //JJQR Nov 20, 2026 - charge PF default
-  const pfAmountTouchedRef = useRef(false);
-  //JJQR - END
   const [pfWaiveReason, setPfWaiveReason] = useState("");
   // §16.6 — doctor picks the fee line; the backend recomputes the booking total
   // on consultation save. Seeded from the booking row in the load effect.
@@ -972,23 +1023,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // see (and reverse) their own override without losing that context.
   const [staffVisitType, setStaffVisitType] = useState<"New" | "FollowUp" | null>(null);
   const [discountCategory, setDiscountCategory] = useState<"Senior" | "PWD" | "">("");
-  const [medCertRequested, setMedCertRequested] = useState(false);
-  const [feeSchedule, setFeeSchedule] = useState<{
-    consultation: number;
-    followUp: number;
-    seniorPwd: number;
-    medCert: number;
-  } | null>(null);
+  const [feeSchedule, setFeeSchedule] = useState<ClinicFeeSchedule | null>(null);
   // §16.8 Form 2 — medical certificate (its own section, index 7).
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
   const [mcAddress, setMcAddress] = useState("");
   //JJQR Nov 20, 2026 - pre-filled with the clinic letterhead (was an empty box with a placeholder)
   const [mcExaminedAt, setMcExaminedAt] = useState(MC_EXAMINED_AT_DEFAULT);
   //JJQR - END
-  // Default "has been examined in ___" to the doctor's own clinic (a solo
-  // practice — the printed cert reads more naturally naming the doctor than
-  // a generic clinic_name), while staying an editable field either way.
-  const doctorClinicLabel = booking ? `${booking.doctorName.replace(/^Dr\.?\s+/i, "").trim()}, MD Clinic` : "";
+  //JJQR - AI (Nov 20, 2026) E1 — exam dates default to today (Manila); overwritten if a saved cert hydrates
+  const [mcExamFrom, setMcExamFrom] = useState(() => todayManila());
+  const [mcExamTo, setMcExamTo] = useState(() => todayManila());
+  //JJQR - END
 
   // Standard clinical patient identifier: Name, Sex, Birthday (+ age) — this
   // is what should always be on screen, not a services list that's empty for
@@ -1127,10 +1172,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       b.patientDob ? `${formatDob(b.patientDob)}${age !== null ? ` (${age}y)` : ""}` : null,
     ].filter(Boolean).join(" · ");
   }
-  //JJQR Nov 20, 2026 - exam dates default to today
-  const [mcExamFrom, setMcExamFrom] = useState(() => todayManila());
-  const [mcExamTo, setMcExamTo] = useState(() => todayManila());
-  //JJQR - END
   const [mcDiagnosis, setMcDiagnosis] = useState("");
   const [mcRecommendations, setMcRecommendations] = useState("");
   const [mcPurposeException, setMcPurposeException] = useState("");
@@ -1142,25 +1183,65 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [saveMcTplOpen, setSaveMcTplOpen] = useState(false);
   const [saveMcTplTitle, setSaveMcTplTitle] = useState("");
 
-  // §16.6 preview of the flat-line fee the backend will compute on save.
-  const previewFee = (() => {
-    if (!feeSchedule) return null;
-    const subtotal = discountCategory
-      ? feeSchedule.seniorPwd
-      : visitType === "FollowUp"
-        ? feeSchedule.followUp
-        : feeSchedule.consultation;
-    return subtotal + (medCertRequested ? feeSchedule.medCert : 0);
-  })();
-
-  //JJQR Nov 20, 2026
-  useEffect(() => {
-    if (pfDecision === "charge" && !pfAmountTouchedRef.current && previewFee !== null) {
-      const next = String(previewFee);
-      setPfAmount((curr) => (curr === next ? curr : next));
-    }
-  }, [pfDecision, previewFee]);
+  //JJQR - AI (Nov 20, 2026) E4 — add-on follows a filled/issued certificate
+  const medCertRequested = medCertFeeAddOn({
+    certExists,
+    recommendations: mcRecommendations,
+    purposeException: mcPurposeException,
+    comeBackOn: mcComeBackOn,
+  });
   //JJQR - END
+
+  //JJQR - AI (Nov 20, 2026) F3 — one total line; same math as the former inline previewFee
+  const feePreview = feeSchedule
+    ? computeClinicFee(feeSchedule, visitType, discountCategory, medCertRequested)
+    : null;
+  const previewFee = feePreview?.total ?? null;
+  //JJQR - END
+
+  //JJQR - AI (Nov 20, 2026) F5 — show/persist the Total as Charge amount when nothing is stored; editor state stays empty until she types or saves
+  const pfAmountShown =
+    previewFee !== null &&
+    shouldPrefillChargeAmount(pfDecision, pfAmount, savedConsultation?.feeDecision?.type ?? null)
+      ? String(previewFee)
+      : pfAmount;
+  //JJQR - END
+
+  //JJQR - AI (Nov 20, 2026) E1 — diagnosis on the certificate follows diagnoses, then Assessment (no sync effect)
+  const mcDiagnosisDefault = diagnosisTextFromConsult(
+    diagnoses.map((d) => d.description),
+    assessment,
+  );
+  const [mcDiagnosisDirty, setMcDiagnosisDirty] = useState(false);
+  const mcDiagnosisField = !certExists && !mcDiagnosisDirty ? mcDiagnosisDefault : mcDiagnosis;
+  //JJQR - END
+
+  //JJQR - AI (Nov 20, 2026) E2 — templates never overwrite address, examined at, exam dates, patient/doctor, or diagnosis when diagnoses/Assessment exist
+  function mcTemplateFieldPlan(template: MedicalCertificateTemplateRow) {
+    const applyDx = shouldApplyTemplateDiagnosis(
+      diagnoses.map((d) => d.description),
+      assessment,
+    );
+    const rows = [
+      ...(applyDx
+        ? [{ label: "Diagnosis / Impressions", current: mcDiagnosisField, next: template.diagnosis_text ?? "", set: (v: string) => { setMcDiagnosisDirty(true); setMcDiagnosis(v); } }]
+        : []),
+      { label: "Recommendations", current: mcRecommendations, next: template.recommendations ?? "", set: setMcRecommendations },
+      { label: "Purpose exception", current: mcPurposeException, next: template.purpose_exception ?? "", set: setMcPurposeException },
+    ];
+    return rows.filter((r) => r.next.trim() !== "");
+  }
+  function doApplyMcTemplate(template: MedicalCertificateTemplateRow) {
+    mcTemplateFieldPlan(template).forEach((r) => r.set(r.next));
+    setPendingMcTemplate(null);
+  }
+  function applyMcTemplate(template: MedicalCertificateTemplateRow) {
+    const overwriting = mcTemplateFieldPlan(template).filter((r) => r.current.trim() !== "" && r.current.trim() !== r.next.trim());
+    if (overwriting.length > 0) setPendingMcTemplate(template);
+    else doApplyMcTemplate(template);
+  }
+  //JJQR - END
+
 
   // Single load effect: real booking (joined), consultation + diagnoses +
   // follow_up, last-visit SOAP + its vitals, this booking's own vital
@@ -1194,6 +1275,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         setPatientDetail(patientRow);
         setPatientLabValues(labVals);
         setPatientVaxHistory(vaxHistory);
+        //JJQR - AI (Nov 20, 2026) E1
+        setDoctorProfile(doctorRow);
+        patientAddressMissingRef.current = !(patientRow?.address ?? "").trim();
+        setMcAddress(patientAddressFromProfile(patientRow?.address, patientRow?.city));
+        //JJQR - END
         if (doctorRow?.specialization) {
           setSoapSpecialtyFilter(defaultSpecialtyFromDoctor(doctorRow.specialization));
         }
@@ -1320,7 +1406,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         }));
         const feeDecisionLoaded =
           consultRes.data.pf_decision === "Charge"
-            ? { type: "Charge" as const, amount: consultRes.data.pf_amount ?? 0 }
+            ? { type: "Charge" as const, amount: consultRes.data.pf_amount ?? undefined }
             : consultRes.data.pf_decision === "Waive"
               ? { type: "Waive" as const, waiveReason: consultRes.data.pf_waive_reason ?? "" }
               : undefined;
@@ -1375,11 +1461,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
       setBooking(realBooking);
       setSavedConsultation(loadedConsultation);
-      setPfAmount(String(realBooking.totalFee || ""));
       setVisitType(realBooking.visitType);
       setStaffVisitType(realBooking.visitType);
       setDiscountCategory(realBooking.discountCategory);
-      setMedCertRequested(realBooking.medCertRequested);
       queryClinicSettings(supabase)
         .then((s) => {
           if (!cancelled && s) {
@@ -1389,7 +1473,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
               followUp: s.fee_follow_up,
               seniorPwd: s.fee_senior_pwd,
               medCert: s.fee_med_cert,
+              discountPct: s.discount_pct,
             });
+            //JJQR - AI (Nov 20, 2026) E1 — keep a saved certificate's examined-at if already hydrated
+            setMcExaminedAt((prev) => prev || examinedAtFromClinic(s.clinic_name, s.address));
+            //JJQR - END
           }
         })
         .catch(() => {});
@@ -1422,16 +1510,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         }
         setVaccinations(toVaxDraft(loadedConsultation.vaccinationsAdministered));
         const fd = loadedConsultation.feeDecision;
-        //JJQR Nov 20, 2026
-        setPfDecision(initialPfDecision(fd));
-        if (fd?.type === "Charge") {
-          setPfAmount(String(fd.amount ?? ""));
-          pfAmountTouchedRef.current = true;
-        } else {
-          pfAmountTouchedRef.current = false;
-        }
+        //JJQR - AI (Nov 20, 2026) F4 F5 — restore Charge/Waive as stored; null becomes Charge in the editor only
+        setPfDecision(pfEditorDecisionFromStored(fd));
+        setPfAmount(pfEditorAmountFromStored(fd));
+        setPfWaiveReason(fd?.type === "Waive" ? (fd.waiveReason ?? "") : "");
         //JJQR - END
-        if (fd?.type === "Waive") setPfWaiveReason(fd.waiveReason ?? "");
       }
 
       // §16.8 Form 3 — lab-test catalog + any lab orders already on this booking.
@@ -1465,6 +1548,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             setMcExamTo(mc.examination_date_to || mc.examination_date_from || todayManila());
             //JJQR - END
             setMcDiagnosis(mc.diagnosis_text ?? "");
+            setMcDiagnosisDirty(true);
             setMcRecommendations(mc.recommendations ?? "");
             setMcPurposeException(mc.purpose_exception ?? "");
             setMcComeBackOn(mc.come_back_on ?? "");
@@ -1534,7 +1618,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     vaccinations.length > 0,
     false,
     certExists,
-    pfDecision !== null && (pfDecision === "charge" ? pfAmount.trim() !== "" : pfWaiveReason.trim().length >= 5),
+    pfDecision !== null && (pfDecision === "charge" ? pfAmountShown.trim() !== "" : pfWaiveReason.trim().length >= 5),
   ];
   const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
   //JJQR Nov 20, 2026
@@ -1649,33 +1733,23 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // the review modal scoped to *this* section — the write underneath always
   // persists the whole record, but the doctor only sees the fields for the
   // section they clicked Save on.
-  function renderSectionSaveHeader(sectionIndex: number) {
+  //JJQR - AI (Nov 20, 2026) C4 C5
+  function renderSectionSaveHeader() {
+    if (!inlineSaved && !(mode === "amend" && !canComplete && missingSectionNames)) return null;
     return (
-      <div className="space-y-sm">
-        {draftSavedAt && mode === "complete" && (
-          <Toast key={draftSavedAt} variant="success" message={`Saved at ${draftSavedAt}.`} />
+      <div className="flex items-center justify-end gap-sm">
+        {inlineSaved && (
+          <p className="text-label-sm text-on-surface-variant" data-testid="consult-inline-saved">Saved</p>
         )}
-        {amendSavedAt && mode === "amend" && (
-          <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
+        {/* JJQR - AI (Nov 20, 2026) - B-40: the button is locked until every required section is done; name what is missing */}
+        {mode === "amend" && !canComplete && missingSectionNames && (
+          <p role="status" className="text-label-md text-status-warning">Finish {missingSectionNames} to save changes.</p>
         )}
-        <div className="flex items-center justify-end gap-sm">
-          <Button
-            variant="secondary"
-            disabled={mode === "amend" && !canComplete}
-            loading={mode === "complete" ? savingDraft : savingChanges}
-            onClick={() => setReviewSection(sectionIndex)}
-          >
-            Review section
-          </Button>
-          {/* JJQR - AI (Nov 20, 2026) - B-40: the button is locked until every required section is done; name what is missing */}
-          {mode === "amend" && !canComplete && missingSectionNames && (
-            <p role="status" className="text-label-md text-status-warning">Finish {missingSectionNames} to save changes.</p>
-          )}
-          {/* JJQR - END */}
-        </div>
+        {/* JJQR - END */}
       </div>
     );
   }
+  //JJQR - END
 
   function buildConsultationRecord(): Consultation {
     return {
@@ -1696,7 +1770,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       vaccinationsAdministered: vaccinations,
       feeDecision:
         pfDecision === "charge"
-          ? { type: "Charge", amount: Number(pfAmount) || 0 }
+          ? { type: "Charge", amount: pfAmountShown.trim() === "" ? undefined : Number(pfAmountShown) }
           : pfDecision === "waive"
             ? { type: "Waive", waiveReason: pfWaiveReason }
             : undefined,
@@ -1712,7 +1786,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // delete-reinserts consultation_diagnoses (matches the UI's own
   // add/remove/mark-primary array semantics) and upserts/clears follow_ups
   // (Implementation-Phases/07-consultations-vitals.md §7a/7b/7d).
-  async function persistConsultation(status: "Draft" | "Completed" | "Amended"): Promise<string | null> {
+  async function persistConsultation(
+    status: "Draft" | "Completed" | "Amended",
+    opts?: { medCertRequested?: boolean },
+  ): Promise<string | null> {
     if (!booking) return null;
     const supabase = null as never;
 
@@ -1729,11 +1806,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         plan: plan || null,
         // §16.6 — backend recomputes total_fee / amount_due from these.
         visit_type: visitType,
-        med_cert_requested: medCertRequested,
+        med_cert_requested: opts?.medCertRequested ?? medCertRequested,
         discount_category: discountCategory || null,
         // §16.6 — the doctor's PF call travels on the consultation row.
+        //JJQR - AI (Nov 20, 2026) F5 — Charge default + Total amount persist on Save/Complete even if section 9 was never opened
         pf_decision: pfDecision === "charge" ? "Charge" : pfDecision === "waive" ? "Waive" : null,
-        pf_amount: pfDecision === "charge" ? Number(pfAmount) || null : null,
+        pf_amount: pfDecision === "charge" ? Number(pfAmountShown) || null : null,
         pf_waive_reason: pfDecision === "waive" ? pfWaiveReason || null : null,
       });
     } catch {
@@ -1741,6 +1819,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
     const savedId = saved.consultation_id;
     setConsultationId(savedId);
+    //JJQR - AI (Nov 20, 2026) F5 — bake the prefilled Total into editor state so the completed line and later Edit keep Charge ₱<total>
+    if (pfDecision === "charge" && pfAmount.trim() === "" && pfAmountShown.trim() !== "") {
+      setPfAmount(pfAmountShown);
+    }
 
     await replaceDiagnoses(
       supabase,
@@ -1827,6 +1909,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (draftSaveInFlight.current || consultationFinalizedRef.current) return;
     draftSaveInFlight.current = true;
     const snapshotBeingSaved = currentFormSnapshot();
+    //JJQR - AI (Nov 20, 2026) C4
+    const previousPayload = lastSavedPayloadRef.current ?? completeBaselineRef.current;
+    if (previousPayload !== null && snapshotBeingSaved === previousPayload) {
+      draftSaveInFlight.current = false;
+      setSavingDraft(false);
+      setInlineSaved(false);
+      return;
+    }
+    //JJQR - END
     setSaveError("");
     setSavingDraft(true);
     try {
@@ -1836,8 +1927,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const savedId = await persistConsultation("Draft");
       if (!savedId) throw new Error("Could not save the draft. Check your connection and try again.");
       completeBaselineRef.current = snapshotBeingSaved;
+      lastSavedPayloadRef.current = snapshotBeingSaved;
       setSavedDraftSnapshot(snapshotBeingSaved);
       setDraftSavedAt(new Date().toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit", second: "2-digit" }) + " PHT");
+      setInlineSaved(true);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save the draft. Try again.");
     } finally {
@@ -1874,17 +1967,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
   }
 
-  async function handleSavePostCompletePf() {
-    setSavingPostCompletePf(true);
-    try {
-      await persistConsultation("Completed");
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "Could not save fee decision.");
-    } finally {
-      setSavingPostCompletePf(false);
-    }
-  }
-
   // §16.8 Form 2 — save the certificate row (upsert on consultation) then print
   // it on the shared clinic letterhead. Requires a saved consultation.
   //JJQR - AI (Nov 20, 2026) - shared cert upsert so Save amendment / Ctrl+S persist the same row as Issue
@@ -1894,15 +1976,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
     const supabase = null as never;
     const today = todayManila();
+    //JJQR - AI (Nov 20, 2026) E1 — persist a typed address onto the patient profile when none was on file
+    const typedAddress = mcAddress.trim();
+    if (typedAddress && patientAddressMissingRef.current) {
+      try {
+        await updatePatient(supabase, booking.patientId, { address: typedAddress });
+        patientAddressMissingRef.current = false;
+        setPatientDetail((p) => (p ? { ...p, address: typedAddress } : p));
+      } catch {
+        // Certificate still issues; profile write is best-effort.
+      }
+    }
+    //JJQR - END
     const cert = {
       patient_id: booking.patientId,
       doctor_id: booking.doctorId,
       issue_date: today,
-      patient_address_snapshot: mcAddress || null,
-      examined_at: mcExaminedAt || doctorClinicLabel || clinicRow.clinic_name,
+      patient_address_snapshot: typedAddress || null,
+      examined_at: mcExaminedAt.trim() || examinedAtFromClinic(clinicRow.clinic_name, clinicRow.address),
       examination_date_from: mcExamFrom || today,
       examination_date_to: mcExamTo || mcExamFrom || today,
-      diagnosis_text: mcDiagnosis || assessment || null,
+      diagnosis_text: mcDiagnosisField.trim() || null,
       recommendations: mcRecommendations || plan || null,
       purpose_exception: mcPurposeException || null,
       come_back_on: mcComeBackOn || followUpDate || null,
@@ -1917,12 +2011,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const supabase = null as never;
     try {
       //JJQR - AI (Oct 31, 2026)
-      const consultId =
-        consultationId ?? (await persistConsultation(mode === "amend" ? "Amended" : "Draft"));
+      const consultId = await persistConsultation(mode === "amend" ? "Amended" : "Draft", {
+        medCertRequested: true,
+      });
       if (!consultId) return;
       const cert = await saveMedCertRow(consultId);
       setCertExists(true);
-      setMedCertRequested(true);
       setCertSavedAt(new Date().toLocaleTimeString());
       if (mode === "amend") setAmendSnapshot(currentFormSnapshot());
       if (!printAfter) return;
@@ -1956,6 +2050,34 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
   }
 
+  //JJQR - AI (Nov 20, 2026) E4 — clearing the certificate turns the fee add-on off
+  async function handleRemoveCertificate() {
+    if (issuingCert) return;
+    setIssuingCert(true);
+    const supabase = null as never;
+    try {
+      if (consultationId) {
+        await deleteMedicalCertificateByConsultation(supabase, consultationId);
+      }
+      setCertExists(false);
+      setMcRecommendations("");
+      setMcPurposeException("");
+      setMcComeBackOn("");
+      setMcDiagnosis("");
+      setMcDiagnosisDirty(false);
+      setMcAddress(patientAddressFromProfile(patientDetail?.address, patientDetail?.city));
+      setMcExaminedAt(MC_EXAMINED_AT_DEFAULT);
+      const today = todayManila();
+      setMcExamFrom(today);
+      setMcExamTo(today);
+      setCertSavedAt(null);
+      await persistConsultation(mode === "amend" ? "Amended" : "Draft", { medCertRequested: false });
+    } finally {
+      setIssuingCert(false);
+    }
+  }
+  //JJQR - END
+
   function currentFormSnapshot() {
     return JSON.stringify({
       chiefComplaint, subjective, objective, assessment, plan,
@@ -1973,9 +2095,19 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - END
 
   function enterAmendMode() {
-    setAmendSnapshot(currentFormSnapshot());
+    const snap = currentFormSnapshot();
+    setAmendSnapshot(snap);
+    lastSavedPayloadRef.current = snap;
     setMode("amend");
   }
+
+  //JJQR - AI (Nov 20, 2026) F1 — completed summary Edit opens section 9 in amend (even if behind More)
+  function openProfessionalFeeForEdit() {
+    setJustCompleted(false);
+    enterAmendMode();
+    goToSection(8);
+  }
+  //JJQR - END
 
   function resetFormFields(source: Consultation | undefined) {
     setChiefComplaint(source?.chiefComplaint ?? "");
@@ -2003,11 +2135,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setFollowUpMode("dated");
       setNoFollowUpConfirmed(false);
     }
-    setPfDecision(initialPfDecision(source?.feeDecision));
-    setPfAmount(String(source?.feeDecision?.amount ?? booking?.totalFee ?? ""));
-    setPfWaiveReason(source?.feeDecision?.waiveReason ?? "");
-    pfAmountTouchedRef.current = source?.feeDecision?.type === "Charge";
     //JJQR - END
+    //JJQR - AI (Nov 20, 2026) F5 — cancel-amend restores stored Charge/Waive; null stored → Charge editor default
+    setPfDecision(pfEditorDecisionFromStored(source?.feeDecision));
+    //JJQR - AI (Nov 20, 2026) F4 — cancel-amend restores the stored amount, not booking.totalFee
+    setPfAmount(pfEditorAmountFromStored(source?.feeDecision));
+    setPfWaiveReason(source?.feeDecision?.type === "Waive" ? (source.feeDecision.waiveReason ?? "") : "");
   }
 
   function finishCancelAmend() {
@@ -2027,6 +2160,14 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Oct 31, 2026) — section/Ctrl+S saves persist without leaving amend
   async function persistAmendProgress(): Promise<boolean> {
     if (!canComplete || !booking) return false;
+    //JJQR - AI (Nov 20, 2026) C4
+    const snapshotBeingSaved = currentFormSnapshot();
+    const previousPayload = lastSavedPayloadRef.current ?? amendSnapshot;
+    if (previousPayload !== null && snapshotBeingSaved === previousPayload) {
+      setInlineSaved(false);
+      return true;
+    }
+    //JJQR - END
     setSaveError("");
     setSavingChanges(true);
     try {
@@ -2036,12 +2177,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       const savedId = await persistConsultation("Amended");
       if (!savedId) throw new Error("Could not save your changes. Check your connection and try again.");
       //JJQR - AI (Nov 20, 2026) - persist cert with the amendment; throw so we never toast "Amendment saved" on cert failure
-      //JJQR Nov 20, 2026 - pre-filled clinic/today values alone don't count as a certificate
-      const certHasContent = mcHasTypedContent(
-        { examinedAt: mcExaminedAt, examFrom: mcExamFrom, examTo: mcExamTo, others: [mcAddress, mcDiagnosis, mcRecommendations, mcPurposeException, mcComeBackOn] },
-        todayManila(),
-      );
-      //JJQR - END
+      const certHasContent = [mcAddress, mcExaminedAt, mcExamFrom, mcExamTo, mcDiagnosisField, mcRecommendations, mcPurposeException, mcComeBackOn].some((v) => v.trim() !== "");
       if (certExists || (medCertRequested && certHasContent)) {
         await saveMedCertRow(savedId);
         setCertExists(true);
@@ -2052,8 +2188,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         { timestamp: new Date().toLocaleString(), author: booking.doctorName, section: "Consultation amended" },
         ...prev,
       ]);
-      setAmendSnapshot(currentFormSnapshot());
+      lastSavedPayloadRef.current = snapshotBeingSaved;
+      setAmendSnapshot(snapshotBeingSaved);
       setAmendSavedAt(new Date().toLocaleTimeString());
+      setInlineSaved(true);
       return true;
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save your changes. Try again.");
@@ -2072,19 +2210,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
   //JJQR - END
 
-  // Per-section "Save" button (Diagnosis, Vaccinations, Follow-up, PF Decision,
-  // SOAP & Chief Complaint) — every section's data already travels together in
-  // one persistConsultation() write (it's not split per-section server-side),
-  // so "save this section" really means "save current progress" the same way
-  // Ctrl+S already does: Draft in complete mode, Amended in amend mode. This
-  // just gives that same action a visible home inside each section, matching
-  // the Vitals/Prescription/Lab Orders/Medical Certificate sections, which
-  // already have their own local Save.
-  function saveCurrentProgress() {
-    if (mode === "complete") handleSaveDraft();
-    else void persistAmendProgress();
-  }
-
   const latestDraftSave = useRef(handleSaveDraft);
   const latestAmendSave = useRef(persistAmendProgress);
   useEffect(() => {
@@ -2102,8 +2227,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       if (mod && /^[1-9]$/.test(e.key)) {
         e.preventDefault();
         //JJQR Nov 20, 2026
-        const jumpSection = visibleSectionOrder[Number(e.key) - 1];
-        if (jumpSection !== undefined) setOpenSection(jumpSection);
+        const jumpSection = navSectionOrder[Number(e.key) - 1];
+        if (jumpSection !== undefined) goToSection(jumpSection);
         //JJQR - END
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
@@ -2123,11 +2248,27 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }, [mode, canComplete, visibleSectionOrder]);
     //JJQR - END
 
+  //JJQR - AI (Nov 20, 2026) C6
+  useEffect(() => {
+    function onHash() {
+      const m = window.location.hash.match(/^#section-(\d+)$/i);
+      const idx = parseConsultSectionParam(m?.[1]);
+      if (idx === null) return;
+      setInlineSaved(false);
+      if (OCCASIONAL_SECTIONS.includes(idx as (typeof OCCASIONAL_SECTIONS)[number])) setShowOccasional(true);
+      setOpenSection(idx);
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  //JJQR - END
+
   //JJQR - AI (Oct 31, 2026) — F-010 beforeunload, F-022 autosave
   useEffect(() => {
     if (loaded && mode === "complete" && completeBaselineRef.current === null) {
       const baseline = currentFormSnapshot();
       completeBaselineRef.current = baseline;
+      lastSavedPayloadRef.current = baseline;
       queueMicrotask(() => setSavedDraftSnapshot(baseline));
     }
   });
@@ -2230,75 +2371,23 @@ Return to patient queue
             <p><strong>Lab orders:</strong> {labCount}</p>
             <p><strong>Follow-up:</strong> {followUpSummary}</p>
           </Card>
-          <Card className="space-y-md">
-            <h4 className="text-headline-sm text-on-surface">Professional fee</h4>
-            <div className="flex flex-wrap gap-sm border-b border-outline-variant">
-              <button
-                type="button"
-                onClick={() => {
-                  //JJQR Nov 20, 2026
-                  pfAmountTouchedRef.current = false;
-                  if (previewFee === null) setPfAmount(String(booking?.totalFee || ""));
-                  setPfDecision("charge");
-                  //JJQR - END
-                }}
-                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
-              >
-                Charge
-              </button>
-              <button
-                type="button"
-                onClick={() => setPfDecision("waive")}
-                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === "waive" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
-              >
-                Waive
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPfDecision(null);
-                  setPfAmount("");
-                  setPfWaiveReason("");
-                }}
-                className={cn("min-h-[44px] border-b-2 px-xs py-sm text-label-md", pfDecision === null ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
-              >
-                Decide at desk
-              </button>
-            </div>
-            {pfDecision === "charge" && (
-              <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input
-                placeholder="Amount*"
-                value={pfAmount}
-                onChange={(e) => {
-                  //JJQR Nov 20, 2026
-                  pfAmountTouchedRef.current = true;
-                  setPfAmount(e.target.value);
-                  //JJQR - END
-                }}
-                className="min-h-[44px] w-full rounded-lg border border-outline-variant px-md py-sm"
-              /></label>
-            )}
-            {pfDecision === "waive" && (
-              <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Reason (minimum 5 characters)</span><textarea
-                placeholder="Reason (minimum 5 characters)*"
-                value={pfWaiveReason}
-                onChange={(e) => setPfWaiveReason(e.target.value)}
-                className="w-full rounded-lg border border-outline-variant p-md"
-                rows={3}
-              /></label>
-            )}
-            {pfDecision === null && (
-              <p className="text-label-md text-on-surface-variant">Front desk can collect or waive later.</p>
-            )}
-            <Button
-              className="min-h-[44px]"
-              loading={savingPostCompletePf}
-              disabled={pfDecision === "charge" ? !pfAmount.trim() : pfDecision === "waive" ? pfWaiveReason.trim().length < 5 : false}
-              onClick={() => void handleSavePostCompletePf()}
+          {/*JJQR - AI (Nov 20, 2026) F1 F5 — read-only PF line uses the just-saved Charge+amount (not the emptied editor prefill) */}
+          <p className="text-body-md text-on-surface">
+            {formatProfessionalFeeLine({
+              decision: pfViewDecisionFromStored(savedConsultation?.feeDecision) ?? pfDecision,
+              amount: pfEditorAmountFromStored(savedConsultation?.feeDecision) || pfAmountShown,
+              waiveReason: savedConsultation?.feeDecision?.type === "Waive" ? (savedConsultation.feeDecision.waiveReason ?? "") : pfWaiveReason,
+              computedTotal: previewFee,
+            })}{" "}
+            <button
+              type="button"
+              onClick={openProfessionalFeeForEdit}
+              className="text-label-md text-primary underline-offset-2 hover:underline"
             >
-              Save fee decision
-            </Button>
-          </Card>
+              Edit
+            </button>
+          </p>
+          {/*JJQR - END */}
         </div>
       </AppShell>
     );
@@ -2440,16 +2529,23 @@ Return to patient queue
                   {sc.followUpDate ? `${sc.followUpDate} — ${sc.followUpReason ?? ""}${sc.followUpInstructions ? ` (${sc.followUpInstructions})` : ""}${sc.followUpReminder ? " · reminder on" : ""}` : "No follow-up recorded."}
                 </p>
               </Card>
-              <Card>
-                <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Professional Fee</h2>
-                <p className="text-body-md text-on-surface-variant">
-                  {sc.feeDecision?.type === "Waive"
-                    ? `Waived — ${sc.feeDecision.waiveReason ?? ""}`
-                    : sc.feeDecision?.type === "Charge"
-                      ? `₱${sc.feeDecision.amount}`
-                      : "Not recorded."}
-                </p>
-              </Card>
+              {/*JJQR - AI (Nov 20, 2026) F1 F5 — read-only line uses the stored decision (Decide at desk when null) */}
+              <p className="text-body-md text-on-surface">
+                {formatProfessionalFeeLine({
+                  decision: pfViewDecisionFromStored(sc.feeDecision),
+                  amount: pfEditorAmountFromStored(sc.feeDecision),
+                  waiveReason: sc.feeDecision?.type === "Waive" ? (sc.feeDecision.waiveReason ?? "") : "",
+                  computedTotal: previewFee,
+                })}{" "}
+                <button
+                  type="button"
+                  onClick={openProfessionalFeeForEdit}
+                  className="text-label-md text-primary underline-offset-2 hover:underline"
+                >
+                  Edit
+                </button>
+              </p>
+              {/*JJQR - END */}
             </>
           )}
         </div>
@@ -2531,9 +2627,7 @@ Return to patient queue
         )}
         {/*JJQR - END */}
 
-        {amendSavedAt && mode === "amend" && (
-          <Toast key={amendSavedAt} variant="success" message={`Amendment saved at ${amendSavedAt}.`} />
-        )}
+        {/* JJQR - AI (Nov 20, 2026) C4 — no green Saved banner; footer + inline Saved after a real change */}
 
         <div className="flex flex-wrap items-center justify-between gap-md">
           <div>
@@ -2583,17 +2677,18 @@ Return to patient queue
           </div>
         </div>
 
-        {/*JJQR - AI (Nov 20, 2026) - wrap-all section pills (no h-scroll, no More) */}
+        {/*JJQR - AI (Nov 20, 2026) C6 - wrap section pills (no h-scroll); Vaccinations + Fee behind More */}
         <div className="space-y-lg">
           <nav
             aria-label="Consultation sections"
+            data-testid="consult-section-nav"
             className="flex flex-wrap gap-sm border-b border-outline-variant pb-md"
           >
             {visibleSectionOrder.map((i, displayIdx) => (
               <button
                 key={SECTIONS[i]}
                 type="button"
-                onClick={() => setOpenSection(i)}
+                onClick={() => goToSection(i)}
                 aria-pressed={openSection === i}
                 aria-controls={openSection === i ? `consultation-section-${i}` : undefined}
                 className={cn(
@@ -2608,6 +2703,17 @@ Return to patient queue
                 </span>
               </button>
             ))}
+            {/*JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Professional Fee live behind "More" in every mode */}
+            <button
+              type="button"
+              onClick={() => setShowOccasional((v) => !v)}
+              aria-expanded={showOccasional}
+              className="flex min-h-11 shrink-0 cursor-pointer items-center gap-xs rounded-nav border border-dashed border-outline-variant px-sm py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
+            >
+              {showOccasional ? "Less" : "More"}
+              <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
+            </button>
+            {/*JJQR - END */}
           </nav>
           {/*JJQR - END */}
 
@@ -2642,7 +2748,7 @@ Return to patient queue
                   {isOpen && i === 0 && (
                     <div className="mt-md space-y-md">
 
-                      {/*JJQR - AI (Nov 19, 2026) - the template picker, Save as Template, Manage and Review notes are always visible at the top of Clinical notes (not inside a collapsed section) */}
+                      {/*JJQR - AI (Nov 20, 2026) C3 C5 - the template picker, Save as Template and Manage are always visible at the top of Clinical notes */}
                       <div className="flex flex-wrap items-center gap-sm border-b border-outline-variant pb-md">
                         <select
                             value=""
@@ -2668,8 +2774,8 @@ Return to patient queue
                             )}
                             {filteredSoapTemplates.map((t) => (
                               <option key={t.id} value={t.id}>
+                                {/*JJQR - AI (Nov 20, 2026) A1 — one flat list of her templates; no (system) suffix */}
                                 {t.title}
-                                {t.isSystemTemplate ? " (system)" : ""}
                               </option>
                             ))}
                           </select>
@@ -2694,15 +2800,6 @@ Return to patient queue
                         >
                           Manage templates
                         </Link>
-                        <Button
-                          variant="secondary"
-                          className="min-h-[44px] sm:ml-auto"
-                          disabled={mode === "amend" && !canComplete}
-                          loading={mode === "complete" ? savingDraft : savingChanges}
-                          onClick={() => setReviewSection(0)}
-                        >
-                          Review notes
-                        </Button>
                       </div>
                       {/*JJQR - END */}
                       <details className="border-b border-outline-variant pb-sm"><summary className="text-label-md font-medium text-on-surface">Previous note and specialty filter</summary><div className="mt-md flex w-full flex-col gap-md">
@@ -2779,7 +2876,7 @@ Return to patient queue
 
                   {isOpen && i === 2 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(2)}
+                      {renderSectionSaveHeader()}
                       {assessmentDiagnosisMismatch && (
                         <p className="rounded-lg border border-status-warning-border bg-status-warning-surface px-md py-sm text-label-sm text-status-warning">
                           Assessment text doesn&apos;t mention the primary diagnosis — update Diagnosis if the visit reason changed.
@@ -2806,61 +2903,26 @@ Return to patient queue
                         {diagnoses.length === 0 && <p className="text-label-md text-on-surface-variant">No diagnoses added yet — at least 1 required.</p>}
                       </div>
 
-                      {/*JJQR - AI (Nov 19, 2026) - Manage saved diagnoses (new tab, deep link) */}
-                      <div className="flex items-center gap-sm">
-                      {diagnosisTemplates.length > 0 && (
-                        <select
-                          value=""
-                          onChange={(e) => {
-                            const t = diagnosisTemplates.find((x) => x.id === e.target.value);
-                            if (t) addDiagnosisLine(t.body, t.icd10_code ?? null);
-                          }}
-                          aria-label="Insert a saved diagnosis"
-                          className="w-full rounded-lg border border-outline-variant bg-transparent px-md py-sm text-body-md text-on-surface-variant"
+                      {/*JJQR - AI (Nov 20, 2026) C1 C2 C3 — one combobox + one Manage deep link */}
+                      <div className="flex items-center justify-end">
+                        <Link
+                          href={manageTemplatesHref("diagnoses")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Manage"
+                          title="Manage saved diagnoses (opens in a new tab)"
+                          className="inline-flex min-h-[44px] shrink-0 items-center text-label-sm text-on-surface-variant hover:underline"
                         >
-                          <option value="">+ Insert saved diagnosis…</option>
-                          {diagnosisTemplates.map((t) => (
-                            <option key={t.id} value={t.id}>{t.label}{t.icd10_code ? ` (${t.icd10_code})` : ""} — {t.body}</option>
-                          ))}
-                        </select>
-                      )}
-                      <Link
-                        href={manageTemplatesHref("diagnoses")}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Manage saved diagnoses (opens in a new tab)"
-                        className="inline-flex min-h-[44px] shrink-0 items-center text-label-sm text-on-surface-variant hover:underline"
-                      >
-                        Manage
-                      </Link>
+                          Manage
+                        </Link>
                       </div>
+                      <DiagnosisCombobox
+                        saved={diagnosisTemplates}
+                        onAdd={addDiagnosisLine}
+                        onPickSaved={addSavedDiagnosisTemplate}
+                        onSaveToMyDiagnoses={saveTypedDiagnosisToMyDiagnoses}
+                      />
                       {/*JJQR - END */}
-
-                      <div className="flex flex-col gap-sm sm:flex-row sm:items-end">
-                        <Icd10DiagnosisField
-                          className="flex-1"
-                          description={newDiagnosisText}
-                          icd10Code={newDiagnosisIcd}
-                          onChange={({ description, icd10Code }) => {
-                            setNewDiagnosisText(description);
-                            setNewDiagnosisIcd(icd10Code);
-                          }}
-                          onEnterSubmit={addDiagnosis}
-                        />
-                        <Button variant="secondary" className="min-h-[44px]" onClick={addDiagnosis}>Add</Button>
-                      </div>
-                      {/* JJQR - END — replaced free-text-only diagnosis input (F-007) */}
-                      <div className="flex items-center justify-between text-label-sm">
-                        <button
-                          type="button"
-                          onClick={() => { setSaveTplLabel(""); setSaveTplOpen(true); }}
-                          disabled={!newDiagnosisText.trim()}
-                          className="text-primary hover:underline disabled:text-on-surface-variant/50 disabled:no-underline"
-                        >
-                          Save typed text as a template
-                        </button>
-                        <Link href="/doctor/templates" className="text-on-surface-variant hover:underline">Manage templates</Link>
-                      </div>
                     </div>
                   )}
 
@@ -3019,7 +3081,7 @@ Return to patient queue
 
                   {isOpen && i === 5 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(5)}
+                      {renderSectionSaveHeader()}
                       {nipStatusRows.length > 0 && (
                         <div className="rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm">
                           <p className="mb-sm text-label-md font-medium text-on-surface">NIP / EPI schedule</p>
@@ -3097,7 +3159,7 @@ Return to patient queue
 
                   {isOpen && i === 6 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(6)}
+                      {renderSectionSaveHeader()}
                       <div className="flex flex-col gap-sm sm:flex-row">
                         {(
                           [
@@ -3167,6 +3229,22 @@ Return to patient queue
                         §16.8 Form 2. Blank fields fall back to the SOAP Assessment / Plan and the
                         follow-up date. Issuing marks &ldquo;medical certificate&rdquo; on the fee (+₱{feeSchedule?.medCert ?? 50}).
                       </p>
+                      {/*JJQR - AI (Nov 20, 2026) E1 — read-only patient / doctor lines; she does not retype these */}
+                      {booking && (
+                        <p className="text-body-md text-on-surface">
+                          {booking.patientName}
+                          {patientAgeYears != null ? `, ${patientAgeYears}y` : ""}
+                          {booking.patientSex ? `, ${booking.patientSex}` : ""}
+                        </p>
+                      )}
+                      <p className="text-label-md text-on-surface-variant">
+                        {booking?.doctorName || doctorProfile?.staff_accounts?.full_name || "Doctor"}
+                        {" · License No. "}
+                        {doctorProfile?.license_number?.trim() || "—"}
+                        {" · PTR No. "}
+                        {doctorProfile?.ptr_number?.trim() || "—"}
+                      </p>
+                      {/*JJQR - END */}
                       <div className="flex flex-wrap items-center justify-end gap-md">
                         {mcTemplates.length > 0 && (
                           <select
@@ -3181,8 +3259,8 @@ Return to patient queue
                             <option value="">Use Template…</option>
                             {mcTemplates.map((t) => (
                               <option key={t.id} value={t.id}>
+                                {/*JJQR - AI (Nov 20, 2026) A1 — one flat list of her certificate templates */}
                                 {t.title}
-                                {t.is_system_template ? " (system)" : ""}
                               </option>
                             ))}
                           </select>
@@ -3195,12 +3273,13 @@ Return to patient queue
                         >
                           Save as Template
                         </button>
-                        {/*JJQR - AI (Nov 19, 2026) - Manage certificate templates in a new tab, deep link */}
+                        {/*JJQR - AI (Nov 20, 2026) C3 — visible and accessible name are both Manage (one link) */}
                         <Link
                           href={manageTemplatesHref("certificates")}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label="Manage certificate templates (opens in a new tab)"
+                          aria-label="Manage"
+                          title="Manage certificate templates (opens in a new tab)"
                           className="text-label-sm text-on-surface-variant hover:underline"
                         >
                           Manage
@@ -3212,21 +3291,29 @@ Return to patient queue
                         <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(false)}>
                           Save without printing
                         </Button>
+                        {/*JJQR - AI (Nov 20, 2026) E4 */}
+                        {medCertRequested && (
+                          <Button variant="ghost" loading={issuingCert} onClick={() => void handleRemoveCertificate()}>
+                            Remove certificate
+                          </Button>
+                        )}
+                        {/*JJQR - END */}
                       </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                        <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Patient address (&ldquo;residing at …&rdquo;)</span><input
+                        {/*JJQR - AI (Nov 20, 2026) E3 */}
+                        <label className="block min-w-0 flex-1 space-y-xs sm:col-span-2"><span className="text-label-md font-medium text-on-surface">Patient address</span><input
                           value={mcAddress}
                           onChange={(e) => setMcAddress(e.target.value)}
-                          placeholder="Patient address (&ldquo;residing at …&rdquo;)"
-                          className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
+                          placeholder={mcAddress.trim() ? undefined : "No address on file"}
+                          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
                         /></label>
-                        <input
+                        {/*JJQR - AI (Nov 20, 2026) E1 */}
+                        <label className="block min-w-0 flex-1 space-y-xs sm:col-span-2"><span className="text-label-md font-medium text-on-surface">Examined at</span><input
                           value={mcExaminedAt}
                           onChange={(e) => setMcExaminedAt(e.target.value)}
-                          placeholder="Examined in…"
-                          aria-label="Examined in"
-                          className="rounded-lg border border-outline-variant px-md py-sm text-body-md sm:col-span-2"
-                        />
+                          className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-md"
+                        /></label>
+                        {/*JJQR - END */}
                         <label className="text-label-sm text-on-surface-variant">
                           Examination from
                           <input type="date" value={mcExamFrom} onChange={(e) => setMcExamFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
@@ -3236,13 +3323,18 @@ Return to patient queue
                           <input type="date" value={mcExamTo} onChange={(e) => setMcExamTo(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
                         </label>
                       </div>
-                      <textarea
-                        value={mcDiagnosis}
-                        onChange={(e) => setMcDiagnosis(e.target.value)}
+                      {/*JJQR - AI (Nov 20, 2026) E1 */}
+                      <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Diagnosis / Impressions</span><textarea
+                        value={mcDiagnosisField}
+                        onChange={(e) => {
+                          setMcDiagnosisDirty(true);
+                          setMcDiagnosis(e.target.value);
+                        }}
                         placeholder={assessment ? `Diagnosis / Impressions (default: “${assessment}”)` : "Diagnosis / Impressions"}
                         rows={2}
                         className="w-full rounded-lg border border-outline-variant p-md text-body-md"
-                      />
+                      /></label>
+                      {/*JJQR - END */}
                       <textarea
                         value={mcRecommendations}
                         onChange={(e) => setMcRecommendations(e.target.value)}
@@ -3267,7 +3359,7 @@ Return to patient queue
 
                   {isOpen && i === 8 && (
                     <div className="mt-md space-y-md">
-                      {renderSectionSaveHeader(8)}
+                      {renderSectionSaveHeader()}
                       {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
                       <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
                         <div className="flex flex-wrap items-center gap-sm">
@@ -3300,48 +3392,52 @@ Return to patient queue
                             <option value="PWD">PWD</option>
                           </select>
                         </div>
-                        <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
-                          <input
-                            type="checkbox"
-                            checked={medCertRequested}
-                            onChange={(e) => setMedCertRequested(e.target.checked)}
-                            className="h-5 w-5"
-                          />
-                          {/* //JJQR Nov 20, 2026 */}
-                          Medical certificate (+₱{feeSchedule?.medCert ?? 50}) — issue it in the Medical Certificate section
-                          {/* //JJQR - END */}
-                        </label>
-                        {previewFee !== null && (
-                          <p className="text-label-md text-on-surface">
-                            Computed clinic fee: <strong>₱{previewFee}</strong>
-                            <span className="text-on-surface-variant"> — applied to the booking on save.</span>
+                        {/*JJQR - AI (Nov 20, 2026) E4 E5 — add-on is read-only; name the Medical Certificate section, no numbers */}
+                        {medCertRequested ? (
+                          <p className="text-body-md text-on-surface">
+                            Medical certificate +₱{feeSchedule?.medCert ?? 50} — included because a certificate was issued
+                          </p>
+                        ) : (
+                          <p className="text-body-md text-on-surface-variant">
+                            Issue it in the{" "}
+                            <button
+                              type="button"
+                              onClick={() => goToSection(7)}
+                              className="text-primary underline"
+                            >
+                              Medical Certificate
+                            </button>
+                            {" "}section
                           </p>
                         )}
+                        {/*JJQR - END */}
+                        {/*JJQR - AI (Nov 20, 2026) F3 — one Total line from computeClinicFee */}
+                        {feePreview && (
+                          <p className="text-label-md text-on-surface">
+                            {feePreview.summary}
+                          </p>
+                        )}
+                        {/*JJQR - END */}
                       </div>
                       <div className="flex gap-sm border-b border-outline-variant">
                         <button
                           type="button"
                           onClick={() => {
-                            //JJQR Nov 20, 2026
-                            pfAmountTouchedRef.current = false;
-                            if (previewFee === null) setPfAmount(String(booking?.totalFee || ""));
                             setPfDecision("charge");
-                            //JJQR - END
+                            //JJQR - AI (Nov 20, 2026) F3 — prefill Amount with the clinic total when empty
+                            if (!pfAmount.trim() && previewFee !== null) setPfAmount(String(previewFee));
                           }}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
-                          {/* //JJQR Nov 20, 2026 */}
+                          {/*JJQR - AI (Nov 20, 2026) F2 — same labels as the completed-visit line */}
                           Charge
-                          {/* //JJQR - END */}
                         </button>
                         <button
                           type="button"
                           onClick={() => setPfDecision("waive")}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "waive" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
-                          {/* //JJQR Nov 20, 2026 */}
                           Waive
-                          {/* //JJQR - END */}
                         </button>
                         <button
                           type="button"
@@ -3357,12 +3453,7 @@ Return to patient queue
                       </div>
                       {pfDecision === "charge" && (
                         <div className="space-y-md">
-                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmount} onChange={(e) => {
-                            //JJQR Nov 20, 2026
-                            pfAmountTouchedRef.current = true;
-                            setPfAmount(e.target.value);
-                            //JJQR - END
-                          }} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmountShown} onChange={(e) => setPfAmount(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
                           <select className="w-full rounded-lg border border-outline-variant px-md py-sm">
                             <option>Pay at Clinic</option>
                             <option>Online</option>
@@ -3449,30 +3540,6 @@ Return to patient queue
         </div>
       </Modal>
 
-      <Modal
-        isOpen={saveTplOpen}
-        onClose={() => setSaveTplOpen(false)}
-        title="Save Diagnosis Template"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setSaveTplOpen(false)}>Cancel</Button>
-            <Button onClick={saveDiagnosisTemplate} disabled={!saveTplLabel.trim() || !newDiagnosisText.trim()}>Save</Button>
-          </>
-        }
-      >
-        <div className="space-y-sm">
-          <p className="text-body-sm text-on-surface-variant">
-            Diagnosis text: <span className="text-on-surface">{newDiagnosisText.trim() || "—"}</span>
-          </p>
-          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Short label (e.g. URTI)</span><input
-            value={saveTplLabel}
-            onChange={(e) => setSaveTplLabel(e.target.value)}
-            placeholder="Short label (e.g. URTI)"
-            className="w-full rounded-lg border border-outline-variant px-md py-sm"
-          /></label>
-        </div>
-      </Modal>
-
       {/*JJQR - AI (Nov 19, 2026) - SOAP template apply: Replace / Append + 5-field preview. Blank template fields never wipe your text. */}
       <Modal
         isOpen={pendingTemplate !== null}
@@ -3507,8 +3574,8 @@ Return to patient queue
           return (
             <div className="space-y-md">
               <p className="text-body-md text-on-surface-variant">
+                {/*JJQR - AI (Nov 20, 2026) A1 — no (system) badge on the apply preview */}
                 Template: <strong className="text-on-surface">&ldquo;{pendingTemplate.title}&rdquo;</strong>
-                {pendingTemplate.isSystemTemplate ? " (system)" : ""}
               </p>
               {!hasSoapContent(pendingTemplate) && (
                 <p role="status" className="text-label-md text-status-warning">This template has no text in any field, so there is nothing to apply.</p>
@@ -3635,105 +3702,6 @@ Return to patient queue
       </Modal>
 
       <Modal
-        isOpen={reviewSection !== null}
-        onClose={() => setReviewSection(null)}
-        title={reviewSection !== null ? SECTIONS[reviewSection] : ""}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setReviewSection(null)}>
-              Go Back
-            </Button>
-            <Button
-              loading={mode === "complete" ? savingDraft : savingChanges}
-              onClick={() => {
-                setReviewSection(null);
-                saveCurrentProgress();
-              }}
-            >
-              Confirm &amp; Save
-            </Button>
-          </>
-        }
-      >
-        {(() => {
-          const entry = buildConsultationRecord();
-          return (
-            <div className="space-y-md text-body-md">
-              {reviewSection === 0 && (
-                <>
-                  <div>
-                    <p className="text-label-sm text-on-surface-variant">Chief Complaint</p>
-                    <p className="text-on-surface">{entry.chiefComplaint || "—"}</p>
-                  </div>
-                  {(entry.subjective || entry.objective || entry.assessment || entry.plan) && (
-                    <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-                      {([
-                        ["Subjective", entry.subjective],
-                        ["Objective", entry.objective],
-                        ["Assessment", entry.assessment],
-                        ["Plan", entry.plan],
-                      ] as const).map(([label, value]) => (
-                        <div key={label}>
-                          <p className="text-label-sm text-on-surface-variant">{label}</p>
-                          <p className="text-on-surface">{value || "—"}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-              {reviewSection === 2 &&
-                (entry.diagnoses.length === 0 ? (
-                  <p className="text-on-surface-variant">No diagnoses entered.</p>
-                ) : (
-                  <ul className="space-y-xs">
-                    {entry.diagnoses.map((d, i) => (
-                      <li key={i} className="text-on-surface">
-                        {d.description} <span className="text-label-sm text-on-surface-variant">({d.type})</span>
-                      </li>
-                    ))}
-                  </ul>
-                ))}
-              {reviewSection === 5 &&
-                (!entry.vaccinationsAdministered?.length ? (
-                  <p className="text-on-surface-variant">No vaccinations staged.</p>
-                ) : (
-                  <ul className="space-y-xs">
-                    {entry.vaccinationsAdministered.map((v, i) => (
-                      <li key={i} className="text-on-surface">{v.vaccineName}</li>
-                    ))}
-                  </ul>
-                ))}
-              {reviewSection === 6 && (
-                <div>
-                  <p className="text-label-sm text-on-surface-variant">Follow-up</p>
-                  <p className="text-on-surface">
-                    {entry.followUpDate ? `${entry.followUpDate}${entry.followUpReason ? ` — ${entry.followUpReason}` : ""}` : "None set"}
-                  </p>
-                  {entry.followUpInstructions && (
-                    <p className="mt-xs text-on-surface-variant">{entry.followUpInstructions}</p>
-                  )}
-                </div>
-              )}
-              {reviewSection === 8 &&
-                (entry.feeDecision ? (
-                  <p className="text-on-surface">
-                    {entry.feeDecision.type === "Charge"
-                      ? `Charge — ₱${entry.feeDecision.amount ?? 0}`
-                      : `Waived — ${entry.feeDecision.waiveReason || "no reason given"}`}
-                  </p>
-                ) : (
-                  <p className="text-on-surface-variant">No decision made yet.</p>
-                ))}
-              {saveError && (
-                <p className="rounded-lg bg-error-container px-md py-sm text-label-md text-on-error-container">{saveError}</p>
-              )}
-            </div>
-          );
-        })()}
-      </Modal>
-
-      <Modal
         isOpen={labsConfirmPrint !== null}
         onClose={() => setLabsConfirmPrint(null)}
         title="Confirm Lab Orders"
@@ -3792,7 +3760,7 @@ Return to patient queue
         }
       >
         <div className="space-y-sm text-body-md">
-          <p><strong>Diagnosis:</strong> {mcDiagnosis || assessment || "—"}</p>
+          <p><strong>Diagnosis:</strong> {mcDiagnosisField || "—"}</p>
           <p><strong>Recommendations:</strong> {mcRecommendations || plan || "—"}</p>
           {mcComeBackOn && <p><strong>Come back on:</strong> {mcComeBackOn}</p>}
         </div>
@@ -3887,9 +3855,9 @@ Return to patient queue
                   //JJQR - AI (Nov 19, 2026) - jump straight to the next missing required section (and start showing warnings)
                   setCompleteAttempted(true);
                   //JJQR Nov 20, 2026
-                  const next = nextMissingSection(missingRequiredSections, openSection, visibleSectionOrder);
+                  const next = nextMissingSection(missingRequiredSections, openSection, navSectionOrder);
                   //JJQR - END
-                  if (next !== null) setOpenSection(next);
+                  if (next !== null) goToSection(next);
                 }}
                 aria-label={`${missingRequiredSections.length} required section${missingRequiredSections.length === 1 ? "" : "s"} left: ${missingSectionNames}. Go to the next one`}
               >

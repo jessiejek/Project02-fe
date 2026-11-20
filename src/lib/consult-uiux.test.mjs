@@ -44,10 +44,12 @@ test('consultation2 UI/UX wiring: visible Use template bar, More toggle, jump bu
   const banner = read('components/doctor/ConsultPatientBanner.tsx');
   assert.ok(page.indexOf('aria-label="Use SOAP template"') < page.indexOf('Previous note and specialty filter'));
   assert.doesNotMatch(page, /Templates and previous notes/);
-  //JJQR - AI (Nov 20, 2026) - wrap-all pills: every section visible; no More toggle
-  assert.match(page, /const revealOccasionalSections = true/);
+  //JJQR - AI (Nov 20, 2026) C6 - More toggle present; tab bar wraps; no overflow-x on the section nav
+  assert.match(page, /\{showOccasional \? "Less" : "More"\}/);
   assert.match(page, /flex flex-wrap gap-sm/);
-  assert.doesNotMatch(page, /\{showOccasional \? "Less" : "More"\}/);
+  const nav = page.slice(page.indexOf('aria-label="Consultation sections"'), page.indexOf('min-w-0 space-y-md pb-[max(16rem'));
+  assert.doesNotMatch(nav, /overflow-x-auto/);
+  assert.match(nav, /cursor-pointer/);
   //JJQR - END
   assert.match(page, /nextMissingSection\(missingRequiredSections/);
   assert.match(page, /data-added="true"/);

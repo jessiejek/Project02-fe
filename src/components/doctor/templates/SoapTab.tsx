@@ -1,17 +1,17 @@
 "use client";
-//JJQR - AI (Nov 19, 2026) - new file: SOAP templates tab (list / search / specialty / create / edit / duplicate / delete / preview). System templates are read-only but duplicable.
+//JJQR - AI (Nov 19, 2026) - new file: SOAP templates tab (list / search / create / edit / duplicate / delete / preview).
+//JJQR - AI (Nov 20, 2026) A1 — one list only: every row is the doctor's own (Edit / Duplicate / Delete).
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SidePanel } from "@/components/ui/SidePanel";
 import { createSoapTemplate, updateSoapTemplate, deleteSoapTemplate, type SoapTemplateRow } from "@/lib/data/clinical";
-import { matchesSpecialtyFilter, SPECIALTY_CHIP_LABELS } from "@/lib/clinical/template-specialty";
 import { matchesQuery } from "@/lib/templates/search";
 import { validateSoapTemplate } from "@/lib/templates/validation";
 import { SOAP_FIELD_LABELS, SOAP_KEYS, type SoapKey } from "@/lib/clinical/soap-merge";
 import { cn } from "@/lib/cn";
-import { copyTitle, isCopyTitle, sortMineFirst } from "@/lib/templates/format";
+import { copyTitle, isCopyTitle } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, FilterChip, FilterGroup, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const COLUMN: Record<SoapKey, keyof SoapTemplateRow> = {
   chiefComplaint: "chief_complaint",
@@ -22,23 +22,18 @@ const COLUMN: Record<SoapKey, keyof SoapTemplateRow> = {
 };
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title);
 
-type Source = "all" | "mine" | "system";
-
 export function SoapTab({ ctx }: { ctx: TabCtx }) {
   const { data, toast, panelId } = ctx;
-  const [source, setSource] = useState<Source>("all");
   const rows = data.soap.items;
 
   const visible = useMemo(
     () =>
-      //JJQR - AI (Nov 19, 2026) - Mine first, then System; A-Z inside each group
-      sortMineFirst(rows, (t) => t.is_system_template, (t) => t.title)
-        //JJQR - END
+      rows
+        .slice()
+        .sort(byTitle)
         .filter((t) => !ctx.isHidden(t.id))
-        .filter((t) => source === "all" || (source === "system") === t.is_system_template)
-        .filter((t) => matchesSpecialtyFilter("soap", t.title, ctx.specialty))
         .filter((t) => matchesQuery(ctx.query, t.title, t.chief_complaint, t.subjective, t.objective, t.assessment, t.plan)),
-    [rows, source, ctx],
+    [rows, ctx],
   );
 
   async function duplicate(row: SoapTemplateRow) {
@@ -74,17 +69,7 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
   return (
     <div className="space-y-md">
       <div className="flex flex-wrap items-center gap-sm">
-        <FilterGroup label="Source">
-          {(["all", "mine", "system"] as const).map((s) => (
-            <FilterChip key={s} active={source === s} onClick={() => setSource(s)}>{s === "all" ? "All" : s === "mine" ? "Mine" : "System"}</FilterChip>
-          ))}
-        </FilterGroup>
-        <span className="hidden h-6 w-px bg-outline-variant sm:block" aria-hidden />
-        <FilterGroup label="Specialty">
-          {SPECIALTY_CHIP_LABELS.map(({ id, label }) => (
-            <FilterChip key={id} active={ctx.specialty === id} onClick={() => ctx.setSpecialty(id)}>{label}</FilterChip>
-          ))}
-        </FilterGroup>
+        {/*JJQR - AI (Nov 20, 2026) A3 — Specialty chips removed from this page. */}
         <Button className="ml-auto" onClick={() => ctx.openPanel("new")}>New SOAP template</Button>
       </div>
 
@@ -99,13 +84,13 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
                 title={t.title}
                 highlight={panelId === t.id}
                 onOpen={() => ctx.openPanel(t.id)}
-                pills={<>{isCopyTitle(t.title) && <Pill>Copy</Pill>}<Pill tone={t.is_system_template ? "system" : "mine"}>{t.is_system_template ? "System" : "Mine"}</Pill></>}
+                pills={isCopyTitle(t.title) ? <Pill>Copy</Pill> : undefined}
                 preview={truncate([t.chief_complaint, t.subjective, t.assessment, t.plan, t.objective].find((x) => x && x.trim()) ?? "")}
                 actions={
                   <>
-                    <TextAction onClick={() => ctx.openPanel(t.id)}>{t.is_system_template ? "View" : "Edit"}</TextAction>
+                    <TextAction onClick={() => ctx.openPanel(t.id)}>Edit</TextAction>
                     <TextAction onClick={() => void duplicate(t)}>Duplicate</TextAction>
-                    {!t.is_system_template && <TextAction tone="danger" onClick={() => confirm.ask(t.id, t.title)}>Delete</TextAction>}
+                    <TextAction tone="danger" onClick={() => confirm.ask(t.id, t.title)}>Delete</TextAction>
                   </>
                 }
               />
@@ -115,22 +100,23 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
       </LoadGate>
 
       {panelId && (panelId === "new" || editing) && (
-        <SoapEditor key={panelId} ctx={ctx} row={editing} onDuplicate={duplicate} />
+        <SoapEditor key={panelId} ctx={ctx} row={editing} />
       )}
+      {/*JJQR - AI (Nov 20, 2026) A4 */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="soap" onRestored={data.soap.reload} toast={toast} />
       {confirm.modal}
     </div>
   );
 }
 
-function SoapEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: SoapTemplateRow | null; onDuplicate: (r: SoapTemplateRow) => Promise<void> }) {
-  const readOnly = !!row?.is_system_template;
+function SoapEditor({ ctx, row }: { ctx: TabCtx; row: SoapTemplateRow | null }) {
   const initial = useMemo(() => ({
     title: row?.title ?? "",
     fields: Object.fromEntries(SOAP_KEYS.map((k) => [k, (row?.[COLUMN[k]] as string | null) ?? ""])) as Record<SoapKey, string>,
   }), [row]);
   const [title, setTitle] = useState(initial.title);
   const [fields, setFields] = useState(initial.fields);
-  const [mode, setMode] = useState<"edit" | "preview">(readOnly ? "preview" : "edit");
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [saving, setSaving] = useState(false);
 
   const dirty = title !== initial.title || SOAP_KEYS.some((k) => fields[k] !== initial.fields[k]);
@@ -168,27 +154,22 @@ function SoapEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: SoapTemplateR
   return (
     <SidePanel
       isOpen
-      title={row ? (readOnly ? row.title : `Edit “${row.title}”`) : "New SOAP template"}
-      subtitle={readOnly ? "System template — read only. Duplicate it to make your own copy." : undefined}
+      title={row ? `Edit “${row.title}”` : "New SOAP template"}
       dirty={dirty}
       saving={saving}
-      readOnly={readOnly}
       onClose={ctx.closePanel}
       onSave={save}
       saveBlockedReason={reason}
-      footer={readOnly && row ? <Button variant="primary" onClick={() => void onDuplicate(row)}>Duplicate to mine</Button> : undefined}
     >
       <div className="space-y-md">
-        {!readOnly && (
-          <div role="tablist" aria-label="Editor view" className="inline-flex rounded-lg border border-outline-variant p-[2px]">
-            {(["edit", "preview"] as const).map((m) => (
-              <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cn("min-h-11 rounded-md px-md text-label-md", mode === m ? "bg-primary/10 text-primary" : "text-on-surface-variant")}>
-                {m === "edit" ? "Edit" : "Preview"}
-              </button>
-            ))}
-          </div>
-        )}
-        {mode === "edit" && !readOnly ? (
+        <div role="tablist" aria-label="Editor view" className="inline-flex rounded-lg border border-outline-variant p-[2px]">
+          {(["edit", "preview"] as const).map((m) => (
+            <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)} className={cn("min-h-11 rounded-md px-md text-label-md", mode === m ? "bg-primary/10 text-primary" : "text-on-surface-variant")}>
+              {m === "edit" ? "Edit" : "Preview"}
+            </button>
+          ))}
+        </div>
+        {mode === "edit" ? (
           <>
             <Field label="Template name">
               <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder='e.g. "Annual Physical — Normal"' autoFocus />

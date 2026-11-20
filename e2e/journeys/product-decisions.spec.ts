@@ -38,8 +38,8 @@ test.describe("Product decisions regression", () => {
     await expect(page.getByRole("listbox").getByRole("option").filter({ hasText: patient.first_name })).not.toHaveCount(0, { timeout: 15_000 });
   });
 
-  //JJQR - AI (Nov 20, 2026) - wrap-all pills: Vaccinations + Fee visible immediately; no More; nav does not scroll horizontally
-  test("vaccinations and professional fee tabs are visible immediately and the step bar does not scroll horizontally", async ({ as, api }) => {
+  //JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Fee behind More; tab bar wraps with no h-scroll
+  test("vaccinations and professional fee sit behind More and the step bar does not scroll horizontally", async ({ as, api }) => {
     const staffApi = await api("staff");
     const tag = Date.now().toString(36);
     const patient = await createPatient(staffApi, tag);
@@ -48,9 +48,12 @@ test.describe("Product decisions regression", () => {
     await page.goto(`/doctor/consultation2/${ticket.booking_id}?mode=complete`);
     const steps = page.getByRole("navigation", { name: "Consultation sections" });
     await expect(steps.getByRole("button", { name: /1\. Clinical notes/ })).toBeVisible({ timeout: 15_000 });
+    await expect(steps.getByRole("button", { name: "More", exact: true })).toBeVisible();
+    await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toHaveCount(0);
+    await steps.getByRole("button", { name: "More", exact: true }).click();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
-    await expect(steps.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
     expect(await steps.evaluate((nav) => nav.scrollWidth <= nav.clientWidth + 1)).toBe(true);
   });
   //JJQR - END

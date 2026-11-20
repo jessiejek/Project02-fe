@@ -22,7 +22,7 @@ test('Diagnosis is excluded from required gating when SHOW_DIAGNOSIS_STEP is fal
 });
 
 test('visible section order and UI surfaces omit hidden Diagnosis', () => {
-  assert.match(page, /!SHOW_DIAGNOSIS_STEP && i === DIAGNOSIS_SECTION_INDEX\) return false/);
+  assert.match(page, /SECTION_ORDER\.filter\(\(i\) => SHOW_DIAGNOSIS_STEP \|\| i !== DIAGNOSIS_SECTION_INDEX\)/);
   assert.match(page, /visibleSectionOrder\.map\(\(i\) => \(\s*\n?\s*<li key=\{SECTIONS\[i\]\}/);
-  assert.match(page, /nextMissingSection\(missingRequiredSections, openSection, visibleSectionOrder\)/);
+  assert.match(page, /nextMissingSection\(missingRequiredSections, openSection, navSectionOrder\)/);
 });

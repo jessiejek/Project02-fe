@@ -7,11 +7,11 @@ import { createSoapPhrase, updateSoapPhrase, deleteSoapPhrase, reorderSoapPhrase
 import { matchesQuery } from "@/lib/templates/search";
 import { validatePhrase } from "@/lib/templates/validation";
 import { moveId } from "@/lib/templates/reorder";
-import { phraseNameFromText } from "@/lib/templates/format";
+import { copyTitle, phraseNameFromText } from "@/lib/templates/format";
 import { PHRASE_FIELDS, phraseFieldLabel, type PhraseField } from "@/lib/templates/urlState";
 import { cn } from "@/lib/cn";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, IconButton, LoadGate, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, IconButton, LoadGate, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const sortRows = (rows: SoapPhraseRow[]) =>
   rows.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.label.localeCompare(b.label));
@@ -46,6 +46,22 @@ export function PhrasesTab({ ctx }: { ctx: TabCtx }) {
     } catch {
       data.phrases.setItems(before);
       toast.push("error", "Couldn’t save the new order. It was put back.");
+    }
+  }
+
+  //JJQR - AI (Nov 20, 2026) A1 — Duplicate is a real copy of her phrase (same field).
+  async function duplicate(row: SoapPhraseRow) {
+    try {
+      const created = await createSoapPhrase(null, ctx.doctorId, {
+        field: row.field,
+        label: copyTitle(row.label, rows.map((r) => r.label)),
+        body: row.body,
+      });
+      data.phrases.setItems((prev) => [...prev, created]);
+      toast.push("success", `Duplicated to “${created.label}”.`);
+      ctx.openPanel(created.id, created.field);
+    } catch {
+      toast.push("error", "Couldn’t duplicate the phrase. Please try again.");
     }
   }
 
@@ -114,6 +130,7 @@ export function PhrasesTab({ ctx }: { ctx: TabCtx }) {
                           <MoveToMenu label={p.label} current={p.field} busy={movingId === p.id} onMove={(f) => void moveToField(p, f)} />
                           {/*JJQR - END */}
                           <TextAction onClick={() => ctx.openPanel(p.id, p.field)}>Edit</TextAction>
+                          <TextAction onClick={() => void duplicate(p)}>Duplicate</TextAction>
                           <TextAction tone="danger" onClick={() => confirm.ask(p.id, p.label)}>Delete</TextAction>
                         </div>
                       </li>
@@ -126,6 +143,8 @@ export function PhrasesTab({ ctx }: { ctx: TabCtx }) {
         })}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <PhraseEditor key={`${panelId}:${ctx.field ?? ""}`} ctx={ctx} row={editing} />}
+      {/*JJQR - AI (Nov 20, 2026) A4 — phrases have built-ins; favorites do not. */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="phrase" onRestored={data.phrases.reload} toast={toast} />
       {confirm.modal}
     </div>
   );

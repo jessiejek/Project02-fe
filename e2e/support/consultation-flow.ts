@@ -1,7 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
 //JJQR - AI (Nov 20, 2026) - batch 2: helpers rewritten for the redesigned /doctor/consultation2 screen
-// ("1. Clinical notes" step bar, labelled text boxes, "Review notes / Review section" → dialog → "Confirm & Save",
+// ("1. Clinical notes" step bar, labelled text boxes, footer "Save draft" / Ctrl+S,
 //  "Save vital signs", "Review & complete" (aria "Complete Consultation") → "Completion Checklist" → "Confirm & Complete",
 //  amend mode = "Amend consultation" + "Save amendment" + "Cancel amendment").
 const stepBar = (page: Page) => page.getByRole("navigation", { name: "Consultation sections" });
@@ -27,15 +27,19 @@ export async function confirmReviewSectionSave(page: Page) {
   await expect(dlg).toHaveCount(0, { timeout: 15_000 });
 }
 
-/** Clinical notes → "Review notes" → confirm. */
+/** Persist progress: footer Save draft, or Ctrl+S in amend (stays in amend). */
 export async function clickSoapToolbarSave(page: Page) {
-  await page.getByRole("main").getByRole("button", { name: "Review notes" }).first().click();
+  const amend = page.getByRole("button", { name: "Save amendment" });
+  if (await amend.isVisible().catch(() => false)) {
+    await page.keyboard.press("Control+s");
+    return;
+  }
+  await page.getByRole("button", { name: "Save draft" }).click();
 }
 
-/** Open section header "Review section" → confirm (works for every section that has it). */
+/** Persist the open section without a Review section button (C5). */
 export async function saveOpenSectionViaReview(page: Page) {
-  await page.getByRole("main").getByRole("button", { name: /^Review (section|notes)$/ }).first().click();
-  await confirmReviewSectionSave(page);
+  await clickSoapToolbarSave(page);
 }
 
 /** Fill every gate required for Complete on consultation2. */
@@ -54,7 +58,7 @@ export async function fillRequiredConsultFields(page: Page, chiefComplaint = "E2
   await confirmReviewSectionSave(page);
 
   await openSectionByTitle(page, /3\. Diagnosis/);
-  await page.getByRole("textbox", { name: /Diagnosis \(search ICD-10/ }).fill("Acute pharyngitis");
+  await page.getByRole("combobox", { name: /Diagnosis \(search ICD-10/ }).fill("Acute pharyngitis");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText(/Acute pharyngitis/).first()).toBeVisible();
 
@@ -86,7 +90,7 @@ export async function openCompletedConsult(page: Page, bookingId: string) {
 /**
  * Click "Edit Consultation" and wait for the amend screen.
  * BUG-40: a consultation completed with "No follow-up" (or with no follow-up row at all) re-opens with the Follow-up step unsatisfied, which
- * disables "Save amendment" and every "Review section / Review notes" button without saying why. Unless `workaround: false`, this helper
+ * disables "Save amendment" without saying why. Unless `workaround: false`, this helper
  * re-ticks "No follow-up for this visit" so the tests that are about something else can carry on; the bug itself is asserted in its own test.
  */
 export async function enterAmendMode(page: Page, opts: { workaround?: boolean } = {}) {

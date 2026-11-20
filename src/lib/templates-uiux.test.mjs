@@ -1,4 +1,5 @@
-//JJQR - AI (Nov 19, 2026) - unit tests for the templates page UI/UX helpers (Mine-first, copy naming, Rx sig, phrase name auto-fill, list view default)
+//JJQR - AI (Nov 19, 2026) - unit tests for the templates page UI/UX helpers (copy naming, Rx sig, phrase name auto-fill, list view default)
+//JJQR - AI (Nov 20, 2026) A1 A3 — Source / Specialty / Mine-first assertions dropped
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,14 +12,6 @@ function load(p) {
   return container.exports;
 }
 const f = load('lib/templates/format.ts');
-
-test('Mine-first sort: Mine before System, A-Z inside each group', () => {
-  const rows = [
-    { t: 'Zeta', sys: false }, { t: 'Alpha', sys: true }, { t: 'Beta', sys: false }, { t: 'Aardvark', sys: true },
-  ];
-  const out = f.sortMineFirst(rows, (r) => r.sys, (r) => r.t).map((r) => r.t);
-  assert.deepEqual(out, ['Beta', 'Zeta', 'Aardvark', 'Alpha']);
-});
 
 test('copy naming is clearly different and never collides', () => {
   assert.equal(f.copyTitle('Fever', ['Fever']), 'Copy of Fever');
@@ -46,16 +39,20 @@ test('phrase name auto-fills from the first words of the text', () => {
   assert.ok(f.phraseNameFromText('supercalifragilisticexpialidocious '.repeat(4)).length <= 40);
 });
 
-test('templates page wiring: list view default, labelled filters, Move to menu, favorites how-to, tab nav wraps', () => {
+test('templates page wiring: list view default, Move to menu, favorites how-to, tab nav wraps', () => {
   const ws = read('components/doctor/templates/TemplatesWorkspace.tsx');
   const shared = read('components/doctor/templates/shared.tsx');
   const phrases = read('components/doctor/templates/PhrasesTab.tsx');
   assert.match(ws, /useState<ViewMode>\("list"\)/);
   assert.match(shared, /createContext<ViewMode>\("list"\)/);
-  assert.match(shared, /<FilterGroup|export function FilterGroup/);
-  for (const tab of ['SoapTab', 'RxTab', 'CertsTab']) assert.match(read(`components/doctor/templates/${tab}.tsx`), /<FilterGroup label="Source">/);
-  assert.match(read('components/doctor/templates/SoapTab.tsx'), /<FilterGroup label="Specialty">/);
-  assert.match(read('components/doctor/templates/SoapTab.tsx'), /sortMineFirst\(rows/);
+  //JJQR - AI (Nov 20, 2026) A1 A3 — Source / Specialty / Mine-first are gone
+  for (const tab of ['SoapTab', 'RxTab', 'CertsTab']) {
+    const src = read(`components/doctor/templates/${tab}.tsx`);
+    assert.doesNotMatch(src, /FilterGroup label="Source"/);
+    assert.doesNotMatch(src, /"Mine"|"System"/);
+  }
+  assert.doesNotMatch(read('components/doctor/templates/SoapTab.tsx'), /FilterGroup label="Specialty"/);
+  assert.doesNotMatch(read('components/doctor/templates/SoapTab.tsx'), /sortMineFirst/);
   assert.match(phrases, /Move to…/);
   assert.doesNotMatch(phrases, /Field: \$\{/);
   assert.match(phrases, /phraseNameFromText\(e\.target\.value\)/);

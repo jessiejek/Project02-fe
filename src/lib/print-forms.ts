@@ -7,6 +7,9 @@
  */
 import { printHtml } from "@/lib/print";
 import { todayManila } from "@/lib/clock";
+//JJQR - AI (Nov 20, 2026) E3
+import { cleanMedCertAddress } from "@/lib/clinical/med-cert-fields";
+//JJQR - END
 import {
   buildLabRequestHtml,
   buildMedicalCertificateHtml,
@@ -131,7 +134,9 @@ export function printMedicalCertificate(opts: {
   cert: MedCertData;
 }): boolean {
   const { clinic, doctor, patient, cert } = opts;
-  const addr = cert.patient_address_snapshot ?? patient.address ?? "";
+  //JJQR - AI (Nov 20, 2026) E3 — print "residing at <address>" without doubling / dangling commas
+  const addr = cleanMedCertAddress(cert.patient_address_snapshot ?? patient.address ?? "");
+  //JJQR - END
   return printForm(
     "Medical Certificate",
     buildMedicalCertificateHtml({

@@ -20,11 +20,14 @@ test.describe("Consultation2 UI/UX", () => {
     // 1. visible template picker (no collapsed details to open)
     await expect(doctor.getByLabel("Use SOAP template")).toBeVisible();
     await expect(doctor.getByRole("link", { name: /Manage templates/ })).toHaveCount(1);
-    //JJQR - AI (Nov 20, 2026) - wrap-all pills: Vaccinations + Fee visible immediately; no More; no h-scroll
+    //JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Fee behind More; tab bar wraps with no h-scroll
     const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await expect(steps.getByRole("button", { name: "More", exact: true })).toBeVisible();
+    await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toHaveCount(0);
+    await steps.getByRole("button", { name: "More", exact: true }).click();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
-    await expect(steps.getByRole("button", { name: "More", exact: true })).toHaveCount(0);
     expect(await steps.evaluate((nav) => nav.scrollWidth <= nav.clientWidth + 1)).toBe(true);
     //JJQR - END
     // 3. untouched required steps show an empty circle (no warning icon) until "required left" is clicked

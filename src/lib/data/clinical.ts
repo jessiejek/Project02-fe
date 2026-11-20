@@ -274,11 +274,18 @@ export async function upsertMedicalCertificateByConsultation(
   return api.put<MedicalCertificateRow>(`/api/medical-certificates/by-consultation/${consultationId}`, body);
 }
 
+/** Idempotent: 404 means there is already no certificate to delete. */
 export async function deleteMedicalCertificateByConsultation(
   _supabase: unknown,
   consultationId: string,
 ): Promise<void> {
-  await api.delete(`/api/medical-certificates/by-consultation/${consultationId}`);
+  //JJQR - AI (Nov 20, 2026) E4
+  try {
+    await api.delete(`/api/medical-certificates/by-consultation/${consultationId}`);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 404)) throw e;
+  }
+  //JJQR - END
 }
 
 // ── prescriptions ─────────────────────────────────────────────────────────
@@ -610,6 +617,21 @@ export async function deleteFavoriteMedicine(_supabase: unknown, id: string): Pr
 //JJQR - AI (Nov 19, 2026) - templates revamp: persist the doctor's favorites order (ids in the wanted order; own favorites only)
 export async function reorderFavoriteMedicines(_supabase: unknown, doctorId: string, ids: string[]): Promise<void> {
   await api.put(`/api/doctor-favorite-medicines/order`, { ids }, { query: { doctorId } });
+}
+//JJQR - END
+
+//JJQR - AI (Nov 20, 2026) A4 — restore any built-in copies this doctor deleted (no-op if she already has them).
+export type RestoreBuiltInKind = "soap" | "rx" | "cert" | "diagnosis" | "phrase";
+
+export async function restoreBuiltInTemplates(
+  doctorId: string,
+  kind: RestoreBuiltInKind,
+): Promise<{ restored: number; kind: RestoreBuiltInKind }> {
+  return api.post<{ restored: number; kind: RestoreBuiltInKind }>(
+    "/api/templates/restore-built-ins",
+    undefined,
+    { query: { doctorId, kind } },
+  );
 }
 //JJQR - END
 

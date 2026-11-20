@@ -1,5 +1,6 @@
 "use client";
 //JJQR - AI (Nov 19, 2026) - new file: saved diagnoses tab - edit the text and attach / change / clear an ICD-10 code
+//JJQR - AI (Nov 20, 2026) A1 — every saved diagnosis is hers (Edit / Duplicate / Delete).
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SidePanel } from "@/components/ui/SidePanel";
@@ -7,15 +8,32 @@ import { Icd10DiagnosisField } from "@/components/doctor/Icd10DiagnosisField";
 import { createDiagnosisTemplate, updateDiagnosisTemplate, deleteDiagnosisTemplate, type DiagnosisTemplateRow } from "@/lib/data/clinical";
 import { matchesQuery } from "@/lib/templates/search";
 import { validateDiagnosis } from "@/lib/templates/validation";
+import { copyTitle } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, RestoreBuiltIns, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label);
 
 export function DiagnosesTab({ ctx }: { ctx: TabCtx }) {
-  const { data, panelId } = ctx;
+  const { data, toast, panelId } = ctx;
   const rows = data.diagnoses.items;
   const visible = rows.filter((d) => !ctx.isHidden(d.id)).filter((d) => matchesQuery(ctx.query, d.label, d.body, d.icd10_code));
+
+  async function duplicate(row: DiagnosisTemplateRow) {
+    try {
+      const created = await createDiagnosisTemplate(null, {
+        label: copyTitle(row.label, rows.map((r) => r.label)),
+        body: row.body,
+        icd10_code: row.icd10_code,
+      });
+      data.diagnoses.setItems((prev) => [...prev, created].sort(byLabel));
+      toast.push("success", `Duplicated to “${created.label}”.`);
+      ctx.openPanel(created.id);
+    } catch {
+      toast.push("error", "Couldn’t duplicate the diagnosis. Please try again.");
+    }
+  }
+
   const confirm = useConfirmDelete((id, label) =>
     ctx.deleteWithUndo({
       id,
@@ -42,13 +60,15 @@ export function DiagnosesTab({ ctx }: { ctx: TabCtx }) {
                 onOpen={() => ctx.openPanel(d.id)}
                 pills={d.icd10_code ? <Pill>ICD-10 {d.icd10_code}</Pill> : undefined}
                 preview={truncate(d.body)}
-                actions={<><TextAction onClick={() => ctx.openPanel(d.id)}>Edit</TextAction><TextAction tone="danger" onClick={() => confirm.ask(d.id, d.label)}>Delete</TextAction></>}
+                actions={<><TextAction onClick={() => ctx.openPanel(d.id)}>Edit</TextAction><TextAction onClick={() => void duplicate(d)}>Duplicate</TextAction><TextAction tone="danger" onClick={() => confirm.ask(d.id, d.label)}>Delete</TextAction></>}
               />
             ))}
           </ItemList>
         )}
       </LoadGate>
       {panelId && (panelId === "new" || editing) && <DiagnosisEditor key={panelId} ctx={ctx} row={editing} />}
+      {/*JJQR - AI (Nov 20, 2026) A4 */}
+      <RestoreBuiltIns doctorId={ctx.doctorId} kind="diagnosis" onRestored={data.diagnoses.reload} toast={toast} />
       {confirm.modal}
     </div>
   );

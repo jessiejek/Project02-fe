@@ -654,25 +654,20 @@ function TemplatesTab({ templates, onAddAll, onAddNew, onEdit, onDelete, notice 
             <button type="button" onClick={() => onAddAll(t)} className="min-w-0 flex-1 text-left text-body-md text-on-surface hover:underline">
               {t.title}
             </button>
-            {/*JJQR - AI (Nov 19, 2026) - every row can be edited: Mine in place, System as your own copy (the System original is never changed); delete stays Mine-only; Mine/System pill on each row*/}
+            {/*JJQR - AI (Nov 20, 2026) A1 — every Rx template is hers: Edit and Delete, no Mine/System pill */}
             <div className="flex shrink-0 items-center gap-sm">
-              <span className={cn("rounded-full px-sm py-[2px] text-label-sm", t.isSystemTemplate ? "bg-surface-container-high text-on-surface-variant" : "bg-primary/10 text-primary")}>
-                {t.isSystemTemplate ? "System" : "Mine"}
-              </span>
               <button
                 type="button"
                 onClick={() => onEdit(t)}
-                aria-label={t.isSystemTemplate ? `Edit ${t.title} (saves your own copy)` : `Edit ${t.title}`}
-                title={t.isSystemTemplate ? "Edit (saves your own copy)" : "Edit"}
+                aria-label={`Edit ${t.title}`}
+                title="Edit"
                 className="flex min-h-[44px] min-w-[44px] items-center justify-center text-on-surface-variant"
               >
                 <Icon name="edit" className="text-[16px]" />
               </button>
-              {!t.isSystemTemplate && (
-                <button type="button" onClick={() => onDelete(t)} aria-label={`Delete ${t.title}`} className="flex min-h-[44px] min-w-[44px] items-center justify-center text-error">
-                  <Icon name="delete" className="text-[16px]" />
-                </button>
-              )}
+              <button type="button" onClick={() => onDelete(t)} aria-label={`Delete ${t.title}`} className="flex min-h-[44px] min-w-[44px] items-center justify-center text-error">
+                <Icon name="delete" className="text-[16px]" />
+              </button>
             </div>
             {/*JJQR - END*/}
           </div>
@@ -698,10 +693,8 @@ interface TemplateModalProps {
 }
 
 function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave }: TemplateModalProps) {
-  //JJQR - AI (Nov 19, 2026) - a System template is never changed: editing it prepares your own copy ("Copy of …"), saved as a new template
-  const isSystemCopy = !!template?.isSystemTemplate;
-  const startTitle = isSystemCopy ? `Copy of ${template?.title ?? ""}` : template?.title ?? "";
-  //JJQR - END
+  //JJQR - AI (Nov 20, 2026) A1 — every template is hers; Edit saves in place (no system-copy fork).
+  const startTitle = template?.title ?? "";
   const [title, setTitle] = useState(startTitle);
   const [items, setItems] = useState<PrescriptionLineItem[]>(template?.items ?? []);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -709,7 +702,7 @@ function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave
   const [tab, setTab] = useState("new");
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const originalSnapshot = isSystemCopy ? "" : JSON.stringify({ title: template?.title ?? "", items: template?.items ?? [] });
+  const originalSnapshot = JSON.stringify({ title: template?.title ?? "", items: template?.items ?? [] });
   const currentSnapshot = JSON.stringify({ title, items });
   const canSave = title.trim() !== "" && items.length > 0 && currentSnapshot !== originalSnapshot;
 
@@ -722,11 +715,6 @@ function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave
   return (
     //JJQR - AI (Nov 19, 2026) - wide modal (960px on laptop), columns stack below 900px so nothing is squeezed or truncated
     <Modal isOpen={isOpen} onClose={onClose} title={template ? "Edit Template" : "Add Template"} size="xl">
-      {isSystemCopy && (
-        <p role="note" className="mb-md rounded-lg border border-status-info-border bg-status-info-surface px-md py-sm text-label-md text-status-info">
-          Editing your own copy of a System template. The System original stays the same for every doctor.
-        </p>
-      )}
       <div className="grid grid-cols-1 gap-xl min-[900px]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-md">
           <input aria-label="Template Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Template Title" className="w-full rounded-lg border border-outline-variant px-md py-sm" />
@@ -761,7 +749,7 @@ function TemplateModal({ isOpen, template, medicines, favorites, onClose, onSave
           }}
           disabled={!canSave}
         >
-          {isSystemCopy ? "Save my copy" : "Save"}
+          Save
         </Button>
       </div>
       <EditLineItemModal
@@ -1439,10 +1427,10 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
         onSave={async (title, tplItems) => {
           const supabase = null as never;
           const items = tplItems.map(lineItemToTemplatePayload);
-          if (editingTemplate && !editingTemplate.isSystemTemplate) {
+          //JJQR - AI (Nov 20, 2026) A1 — Edit always updates her row; create only when adding a new template.
+          if (editingTemplate) {
             await updateRxTemplate(supabase, editingTemplate.id, doctorId, { title, is_system_template: false, items });
           } else {
-            // new template, or "edit" of a System template: always a new personal copy, never an update of the System original
             await createRxTemplate(supabase, doctorId, { title, is_system_template: false, items });
           }
           await reloadFavoritesAndTemplates();

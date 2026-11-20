@@ -5,7 +5,7 @@ import { completeVisitViaApi, settleViaApi } from "../support/visit";
 
 /**
  * COVERAGE-PLAN §3 · Doctor › /doctor/consultation2/[bookingId] — written against the CURRENT screen
- * ("1. Clinical notes", "Review section" → dialog → "Confirm & Save", inline allergy panel).
+ * ("1. Clinical notes", footer Save draft / Ctrl+S, inline allergy panel).
  * The older consultation-*.spec.ts files still drive the previous screen ("1. SOAP", placeholder fields) and fail; see the report.
  */
 
@@ -28,12 +28,6 @@ async function confirmDialog(page: Page) {
   await dlg.getByRole("button").filter({ hasNotText: /^(Cancel|Go Back|Close)$/ }).last().click();
   await expect(dlg).toHaveCount(0, { timeout: 10_000 });
 }
-async function review(page: Page, section: RegExp, button: RegExp) {
-  await nav(page, section).click();
-  await page.getByRole("main").getByRole("button", { name: button }).first().click();
-  await confirmDialog(page);
-}
-
 test.describe("/doctor/consultation2/[bookingId]", () => {
   test("header, section bar and notes load for the visit; Complete is locked while required sections are open", async ({ as, api, tag, cleanup }) => {
     const { p, v } = await openVisit({ api, tag, cleanup }, "cu-load");
@@ -41,8 +35,11 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     await page.goto(`/doctor/consultation2/${v.booking_id}`);
     await expect(page.getByText(new RegExp(`${p.first_name}.*Tester`, "i")).first()).toBeVisible();
     await expect(page.getByRole("heading", { name: "Document consultation", level: 1 })).toBeVisible();
-    //JJQR - AI (Nov 20, 2026)
-    for (const n of [/1\. Clinical notes/, /2\. Vital Signs/, /3\. Diagnosis/, /4\. Prescription/, /5\. Lab Orders/, /6\. Follow-up/, /7\. Medical Certificate/, /Vaccinations/, /Professional Fee/]) await expect(nav(page, n)).toBeVisible();
+    //JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Fee sit behind More
+    for (const n of [/1\. Clinical notes/, /2\. Vital Signs/, /3\. Diagnosis/, /4\. Prescription/, /5\. Lab Orders/, /6\. Follow-up/, /7\. Medical Certificate/]) await expect(nav(page, n)).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Consultation sections" }).getByRole("button", { name: "More", exact: true })).toBeVisible();
+    await page.getByRole("navigation", { name: "Consultation sections" }).getByRole("button", { name: "More", exact: true }).click();
+    for (const n of [/Vaccinations/, /Professional Fee/]) await expect(nav(page, n)).toBeVisible();
     await expect(page.getByRole("textbox", { name: /Chief complaint/ })).toHaveValue("E2E seeded complaint");
     await expect(complete(page)).toBeDisabled();
   });
@@ -76,7 +73,7 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     const { v } = await openVisit({ api, tag, cleanup }, "cu-tpl");
     const page = await as("doctor");
     await page.goto(`/doctor/consultation2/${v.booking_id}`);
-    await page.getByRole("combobox", { name: "Use SOAP template" }).selectOption({ label: "Fever work-up (system)" });
+    await page.getByRole("combobox", { name: "Use SOAP template" }).selectOption({ label: "Fever work-up" });
     await page.waitForTimeout(800);
     const dlg = page.getByRole("dialog");
     if (await dlg.isVisible().catch(() => false)) await dlg.getByRole("button", { name: /Replace|Apply|Use|Confirm|Yes/ }).first().click();
@@ -125,12 +122,9 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     await page.goto(`/doctor/consultation2/${v.booking_id}`);
     await nav(page, /3\. Diagnosis/).click();
     const dx = tag("dx");
-    await page.getByRole("textbox", { name: /Diagnosis \(search ICD-10/ }).fill(dx);
+    await page.getByRole("combobox", { name: /Diagnosis \(search ICD-10/ }).fill(dx);
     await page.getByRole("button", { name: "Add", exact: true }).click();
     await expect(page.getByText(new RegExp(dx, "i")).first()).toBeVisible();
-    await page.getByRole("combobox", { name: "Insert a saved diagnosis" }).selectOption({ index: 4 });
-    await page.getByRole("main").getByRole("button", { name: "Review section" }).first().click();
-    await confirmDialog(page);
     await page.getByRole("button", { name: "Save draft" }).click();
     await page.waitForTimeout(1500);
     const c = await getConsultationByBooking(staff, v.booking_id);
@@ -142,15 +136,16 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     const { staff, v } = await openVisit({ api, tag, cleanup }, "cu-done");
     const page = await as("doctor");
     await page.goto(`/doctor/consultation2/${v.booking_id}`);
-    await review(page, /1\. Clinical/, /Review notes/);
-    await review(page, /3\. Diagnosis/, /Review section/);
+    await nav(page, /1\. Clinical/).click();
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await nav(page, /3\. Diagnosis/).click();
+    await page.getByRole("button", { name: "Save draft" }).click();
     // follow-up: choose "No follow-up"
     await nav(page, /6\. Follow-up/).click();
     await page.getByRole("radio", { name: "No follow-up" }).check({ force: true });
     // choosing the radio alone does NOT satisfy the section — the doctor must also tick "No follow-up for this visit" (the section says so)
     await page.getByRole("checkbox", { name: /No follow-up for this visit/ }).check();
-    await page.getByRole("main").getByRole("button", { name: "Review section" }).first().click();
-    await confirmDialog(page);
+    await page.getByRole("button", { name: "Save draft" }).click();
     // prescription: intentionally none, allergies reviewed
     await nav(page, /4\. Prescription/).click();
     await page.getByRole("checkbox", { name: /No medicines this visit/ }).click({ force: true });

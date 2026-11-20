@@ -125,7 +125,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
 
   // ── 3. Diagnosis — a primary + a secondary line ────────────────────────
   await open(/3\. Diagnosis/);
-  const dx = doctor.getByRole("textbox", { name: /Diagnosis \(search ICD-10/ });
+  const dx = doctor.getByRole("combobox", { name: /Diagnosis \(search ICD-10/ });
   await expect(dx).toBeVisible();
   await dx.fill(DX_PRIMARY);
   await doctor.getByRole("button", { name: "Add", exact: true }).click();
@@ -186,14 +186,11 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ }).getByRole("button", { name: /Confirm & Save/ }).click();
   await expect(doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ })).toHaveCount(0, { timeout: 15_000 });
 
-  // ── 9. Professional Fee Decision — flag med-cert fee + record a charge ──
+  // ── 9. Professional Fee Decision — med-cert add-on follows the issued certificate ──
+  await steps.getByRole("button", { name: "More", exact: true }).click();
   await open(/Professional Fee Decision/);
-  // the +₱50 med-cert line item — this checkbox DOES persist (backend recomputes the fee)
-  //JJQR - AI (Nov 20, 2026)
-  const medCertBox = doctor.getByRole("checkbox", { name: /Medical certificate/ });
-  if (!(await medCertBox.isChecked())) await medCertBox.click();
-  await expect(medCertBox).toBeChecked();
-  await doctor.getByRole("button", { name: "Charge PF" }).click();
+  await expect(doctor.getByText(/Medical certificate \+₱50 — included because a certificate was issued/)).toBeVisible();
+  await doctor.getByRole("button", { name: "Charge", exact: true }).click();
   await doctor.getByRole("textbox", { name: "Amount" }).fill("500");
 
   // ── Complete → checklist modal → confirm ──────────────────────────────
