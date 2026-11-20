@@ -222,6 +222,16 @@ test.describe("Consultation2 simplify E1–E5 medical certificate", () => {
     await expect(doctor.getByText("Total: ₱350 (Follow-up ₱350)")).toBeVisible();
     await expect(doctor.getByText(/included because a certificate was issued/)).toHaveCount(0);
   });
+
+  test("E5 Medical Certificate link in professional fee opens that section", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await steps.getByRole("button", { name: "More", exact: true }).click();
+    await openSectionByTitle(doctor, /Professional Fee/i);
+    await expect(doctor.getByText(/section 8/)).toHaveCount(0);
+    await doctor.getByRole("button", { name: "Medical Certificate", exact: true }).click();
+    await expect(doctor.getByRole("textbox", { name: /Examined at/i })).toBeVisible();
+  });
 });
 //JJQR - END
 

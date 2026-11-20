@@ -3191,10 +3191,22 @@ Return to patient queue
                             <option value="PWD">PWD</option>
                           </select>
                         </div>
-                        {/*JJQR - AI (Nov 20, 2026) E4 — add-on is read-only; follows a filled/issued certificate */}
-                        {medCertRequested && (
+                        {/*JJQR - AI (Nov 20, 2026) E4 E5 — add-on is read-only; name the Medical Certificate section, no numbers */}
+                        {medCertRequested ? (
                           <p className="text-body-md text-on-surface">
                             Medical certificate +₱{feeSchedule?.medCert ?? 50} — included because a certificate was issued
+                          </p>
+                        ) : (
+                          <p className="text-body-md text-on-surface-variant">
+                            Issue it in the{" "}
+                            <button
+                              type="button"
+                              onClick={() => goToSection(7)}
+                              className="text-primary underline"
+                            >
+                              Medical Certificate
+                            </button>
+                            {" "}section
                           </p>
                         )}
                         {/*JJQR - END */}

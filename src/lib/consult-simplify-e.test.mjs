@@ -82,4 +82,12 @@ test('E4 med-cert fee add-on follows a filled/issued certificate; checkbox is go
   assert.equal(medCertFeeAddOn({ certExists: false, recommendations: 'Rest', purposeException: '', comeBackOn: '' }), true);
   assert.equal(medCertFeeAddOn({ certExists: false, recommendations: '', purposeException: '', comeBackOn: '' }), false);
 });
+
+test('E5 professional fee names the Medical Certificate section (no section numbers)', () => {
+  assert.doesNotMatch(page, /issue it in section 8/);
+  assert.doesNotMatch(page, /section 8/);
+  assert.match(page, /Issue it in the/);
+  assert.match(page, /goToSection\(7\)/);
+  assert.match(page, />\s*Medical Certificate\s*</);
+});
 //JJQR - END
