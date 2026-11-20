@@ -118,7 +118,7 @@ test.describe("/staff/bookings/[id] · record payment", () => {
   });
 
   test("a negative or too-small amount is not accepted as full payment", async ({ as, tag, api, cleanup }) => {
-    test.fail(true, "BUG-20: Record payment accepts any amount (₱-50, ₱10 of ₱450) and marks the visit Paid; non-numeric/0 silently become the full amount");
+    //JJQR - AI (Nov 20, 2026) - BUG-20 fixed: test.fail marker removed, the test must now pass //JJQR - END
     for (const bad of ["-50", "10"]) {
       const v = await unpaidVisit({ api, tag, cleanup }, "pay-bad");
       const page = await as("staff");
@@ -362,7 +362,7 @@ test.describe("/staff/payments", () => {
   });
 
   test("a bad amount on the payments page is not recorded as a full payment", async ({ as, tag, api, cleanup }) => {
-    test.fail(true, "BUG-20: the amount is not validated (negative / under-payment accepted and marked Paid)");
+    //JJQR - AI (Nov 20, 2026) - BUG-20 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const v = await unpaidVisit({ api, tag, cleanup }, "pp-bad");
     const page = await as("staff");
     await page.goto("/staff/payments");

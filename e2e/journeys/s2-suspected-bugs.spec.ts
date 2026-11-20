@@ -128,7 +128,7 @@ test.describe("B1 · server-side validation", () => {
 test.describe("B2 · payment AmountReceived is validated", () => {
   for (const [label, amount] of [["negative (-50)", -50], ["zero (0)", 0], ["huge (99,999,999)", 99_999_999]] as const) {
     test(`confirm with ${label} is refused`, async ({ api, tag, guard }) => {
-      test.fail(true, "BUG-02 (B2): POST /api/payments/{id}/confirm accepts any AmountReceived");
+      //JJQR - AI (Nov 20, 2026) - BUG-02 fixed: test.fail marker removed, the test must now pass //JJQR - END
       guard.off();
       const staff = await api("staff");
       const p = await createTaggedPatient(staff, tag("b2"));
@@ -149,7 +149,7 @@ test.describe("B2 · payment AmountReceived is validated", () => {
 test.describe("B3 · /staff/payments amount field", () => {
   for (const [label, typed] of [["abc", "abc"], ["0", "0"], ["-50", "-50"]] as const) {
     test(`typing "${label}" shows a validation error and records nothing`, async ({ as, api, tag, guard }) => {
-      test.fail(true, "BUG-03 (B3): /staff/payments records the payment for NaN / 0 / negative amount");
+      //JJQR - AI (Nov 20, 2026) - BUG-03 fixed: test.fail marker removed, the test must now pass //JJQR - END
       guard.off();
       const staff = await api("staff");
       const p = await createTaggedPatient(staff, tag("b3"));

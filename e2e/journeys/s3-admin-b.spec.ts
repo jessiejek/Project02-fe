@@ -252,7 +252,7 @@ test.describe("/admin/bookings/[id] · actions", () => {
 
   test("Refund: an amount larger than what was paid is not accepted", async ({ as, api, tag, cleanup, guard }) => {
     guard.allow(/\/refund|\/api\/payments\//);
-    test.fail(true, "BUG-38: refunding ₱999,999 on a ₱450 payment is accepted — the booking becomes Refunded with a refund larger than the amount paid");
+    //JJQR - AI (Nov 20, 2026) - BUG-38 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const v = await unpaidVisit({ api, tag, cleanup }, "abd-rfx");
     await settleViaApi(v.staff, v.bookingId);
     const page = await as("admin");

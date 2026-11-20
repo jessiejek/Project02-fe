@@ -1,5 +1,6 @@
 import { test, expect } from "../support/fixtures";
-import { cancelOwnBooking, getDoctor, manilaOpenDate, registerFreshPatient } from "../support/api";
+import { cancelOwnBooking, createTaggedPatient, getDoctor, getPaymentForBooking, manilaOpenDate, registerFreshPatient } from "../support/api";
+import { completeVisitViaApi, settleViaApi } from "../support/visit";
 
 /**
  * finish/all — UI/API proofs for the bugs fixed in the "finish the app" run (B-xx ids from docs/FINISH-CHECKLIST.md).
@@ -34,5 +35,42 @@ test.describe("B-06 / B-29 · booking page warns about days that can't be booked
     const list = await (await me.api.get("/api/bookings/me")).json();
     for (const x of list.items ?? list) cleanup(() => cancelOwnBooking(me.api, x.booking_id));
     expect((list.items ?? list).map((x: any) => x.appointment_date)).toEqual([openDate]);
+  });
+});
+
+test.describe("B-02 / B-03 · payment amount", () => {
+  test("a blank, non-number, zero, negative or too-small amount shows an error and records nothing; a real amount records it", async ({ as, api, tag, cleanup, guard }) => {
+    guard.off();
+    const staff = await api("staff");
+    const doctor = await api("doctor");
+    const p = await createTaggedPatient(staff, tag("b3"));
+    const v = await completeVisitViaApi({ staff, doctor }, p.patient_id);
+    cleanup(() => settleViaApi(staff, v.booking_id));
+    const page = await as("staff");
+    await page.goto(`/staff/bookings/${v.booking_id}`);
+    await page.getByRole("button", { name: "Record payment" }).click();
+    const dialog = page.getByRole("dialog", { name: /Record payment of/ });
+    const amount = dialog.getByLabel("Amount received (₱)");
+    const cases: Array<[string, RegExp]> = [
+      ["", /Enter the amount/],
+      ["abc", /must be a number/],
+      ["0", /more than ₱0/],
+      ["-50", /must be a number|more than ₱0/],
+      ["10", /less than the ₱450/],
+      ["99999999", /can't be more than/],
+    ];
+    for (const [typed, message] of cases) {
+      await amount.fill(typed);
+      await dialog.getByRole("button", { name: "Record payment" }).click();
+      await expect(dialog.getByRole("alert")).toContainText(message);
+      await expect(dialog).toBeVisible();
+    }
+    expect((await getPaymentForBooking(staff, v.booking_id)).status, "nothing was recorded for any bad amount").toBe("Unpaid");
+    await amount.fill("500"); // cash with change is fine
+    await dialog.getByRole("button", { name: "Record payment" }).click();
+    await expect(page.getByRole("dialog", { name: "Receipt" })).toBeVisible();
+    const pay = await getPaymentForBooking(staff, v.booking_id);
+    expect(pay.status).toBe("Paid");
+    expect(Number(pay.amount_received)).toBe(500);
   });
 });

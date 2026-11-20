@@ -238,18 +238,18 @@ test.describe("/admin/staff", () => {
     expect(login.ok()).toBeFalsy();
   });
 
-  //JJQR - AI (Nov 20, 2026) - B-32 fixed: marker removed. Uses the spare dev doctor (phase5doctor@) so the shared staff@ login that other specs
+  //JJQR - AI (Nov 20, 2026) - B-32 fixed: marker removed. Uses the spare dev staff login (spare-staff@) so the shared staff@ login that other specs
   // rely on is never deactivated (the server now rejects a deactivated account's tokens immediately).
   test("a deactivated staff member cannot sign in, and their existing session stops working", async ({ api, cleanup }) => {
     const admin = await api("admin");
-    const me = (await staffAccountByEmail(admin, "phase5doctor@clinic.test"))!;
+    const me = (await staffAccountByEmail(admin, "spare-staff@clinic.test"))!;
     cleanup(async () => { await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: me.status } }); });
     await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Active" } });
-    const ok = await admin.post("/api/auth/login", { data: { email: "phase5doctor@clinic.test", password: "ClinicDev123!" }, headers: { Authorization: "" } });
+    const ok = await admin.post("/api/auth/login", { data: { email: "spare-staff@clinic.test", password: "ClinicDev123!" }, headers: { Authorization: "" } });
     expect(ok.ok(), "an active account can log in").toBeTruthy();
     const session = await ok.json();
     await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Inactive" } });
-    const login = await admin.post("/api/auth/login", { data: { email: "phase5doctor@clinic.test", password: "ClinicDev123!" }, headers: { Authorization: "" } });
+    const login = await admin.post("/api/auth/login", { data: { email: "spare-staff@clinic.test", password: "ClinicDev123!" }, headers: { Authorization: "" } });
     expect(login.ok(), "an inactive staff member must not be able to log in").toBeFalsy();
     expect(login.status()).toBe(403);
     const withOldToken = await admin.get("/api/auth/me", { headers: { Authorization: `Bearer ${session.accessToken}` } });
@@ -259,7 +259,7 @@ test.describe("/admin/staff", () => {
 
   test("team table lists a staff account; Deactivate (immediate, no confirm) → Inactive; Activate restores", async ({ as, api, cleanup }) => {
     const admin = await api("admin");
-    const email = "phase5doctor@clinic.test"; // spare dev account nothing else logs in with
+    const email = "spare-staff@clinic.test"; // spare dev account (seeded by DevDataSeeder) nothing else logs in with
     const me = (await staffAccountByEmail(admin, email))!;
     cleanup(async () => { await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: me.status } }); });
     await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Active" } });

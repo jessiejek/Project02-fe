@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { queryBookingById, updateBookingStatus, rescheduleBooking } from "@/lib/data/bookings";
 import { confirmPayment, waivePayment } from "@/lib/data/payments";
+import { checkAmountReceived } from "@/lib/payment-amount";
 import { RescheduleBookingModal } from "@/components/bookings/RescheduleBookingModal";
 import { Icon } from "@/components/ui/Icon";
 import { InfoField } from "@/components/ui/InfoField";
@@ -303,12 +304,19 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
               loading={paySubmitting}
               onClick={async () => {
                 setPayError("");
+                //JJQR - AI (Nov 20, 2026) - B-03: refuse a blank / NaN / zero / negative / short amount with a visible error instead of recording it
+                const amount = checkAmountReceived(amountReceived, booking.amountDue);
+                if (!amount.ok) {
+                  setPayError(amount.error);
+                  return;
+                }
+                //JJQR - END
                 setPaySubmitting(true);
                 try {
                   await updatePayment({
                     status: "Paid",
                     paymentMethod: paymentMethod,
-                    amountReceived: Number(amountReceived) || booking.amountDue,
+                    amountReceived: amount.value,
                     confirmNotes: notes || undefined,
                     withOrNumber: true,
                   });
@@ -340,7 +348,7 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
           </div>
           <div className="space-y-xs">
             <label htmlFor="payAmount" className={labelStyles}>Amount received (₱)</label>
-            <input id="payAmount" inputMode="decimal" value={amountReceived} onChange={(e) => setAmountReceived(e.target.value)} className={inputStyles("tabular-nums")} />
+            <input id="payAmount" inputMode="decimal" value={amountReceived} onChange={(e) => { setAmountReceived(e.target.value); setPayError(""); }} aria-invalid={payError ? true : undefined} className={inputStyles("tabular-nums")} />
           </div>
           <div className="space-y-xs">
             <label htmlFor="payRef" className={labelStyles}>Reference number <span className="font-normal text-on-surface-variant">(optional)</span></label>
