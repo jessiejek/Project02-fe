@@ -28,10 +28,10 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [x] B-34: No negative fee (Fees tab) (BE 4f48521, FE 9dbf69c)
 - [x] B-33: No future date of birth (BE fd57c1b, FE 05e8deb+cf78e91)
 - [x] B-35: Same min cancel-reason length admin/staff (5) (FE cf78e91 (UI only; server cancel has no min length so internal cleanup helpers keep working))
-- [ ] B-30: Announcements shown to staff and patients
-- [ ] B-39: /patient/doctors fits phone/iPad
-- [ ] B-41: Doctor dashboard "+N more"
-- [ ] B-42: Staff dashboard no 500 cap; don't count cancelled
+- [x] B-30: Announcements shown to staff and patients (FE 179d4e4; e2e pass in batch1)
+- [x] B-39: /patient/doctors fits phone/iPad (FE ed53ac5 (real cause: huge review comment on the single doctor's profile after redirect); verify at F-1)
+- [x] B-41: Doctor dashboard "+N more" (FE 179d4e4; e2e pass in batch1)
+- [x] B-42: Staff dashboard no 500 cap; don't count cancelled (BE 3cf5494+, FE ed53ac5; re-verify at F-1)
 
 ## Phase 4 — privacy (RA 10173)
 - [ ] PV-1: docs/privacy/AUDIT.md (OK/GAP with file:line)
