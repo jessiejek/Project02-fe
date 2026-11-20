@@ -217,7 +217,7 @@ test.describe("/staff/profile", () => {
   });
 
   test("a 300-character name is refused", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): the staff profile stores a 300-character name and the phone 'not-a-number' — no length/format validation");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     cleanup(() => restoreProfile(api));
     const page = await as("staff");
     await page.goto("/staff/profile");

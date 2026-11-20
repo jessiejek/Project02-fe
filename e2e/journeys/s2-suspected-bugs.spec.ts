@@ -16,7 +16,7 @@ const bad = (label: string, res: { status(): number }) =>
 
 test.describe("B1 · server-side validation", () => {
   test("Patients PUT/POST reject empty names, 5000-char strings and a bad date", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off(); // we intentionally send bad payloads
     const staff = await api("staff");
     const p = await createTaggedPatient(staff, tag("b1p"));
@@ -31,7 +31,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("Announcements POST rejects empty title / empty message / 5000-char message", async ({ api, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const admin = await api("admin");
     const made: string[] = [];
@@ -49,7 +49,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("Settings PUT rejects blank clinic name, negative fee, discount > 100%, 5000-char address", async ({ api, guard, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const admin = await api("admin");
     const original = await getSettings(admin);
@@ -68,7 +68,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("StaffAccounts PUT rejects blank full name and a 5000-char contact number", async ({ api, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const admin = await api("admin");
     const email = `${tag("b1s").toLowerCase()}@example.test`;
@@ -82,7 +82,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("Vitals PUT rejects an unknown template id and a 5000-char value", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const staff = await api("staff");
     const p = await createTaggedPatient(staff, tag("b1v"));
@@ -94,7 +94,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("Vaccinations POST rejects blank vaccine, 5000-char vaccine, negative dose number", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const doc = await api("doctor");
     const staff = await api("staff");
@@ -106,7 +106,7 @@ test.describe("B1 · server-side validation", () => {
   });
 
   test("LabOrders PUT rejects a blank test name and a 5000-char test name", async ({ api, tag, guard }) => {
-    test.fail(true, "BUG-01 (B1): server-side validation missing");
+    //JJQR - AI (Nov 20, 2026) - BUG-01 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const staff = await api("staff");
     const doc = await api("doctor");

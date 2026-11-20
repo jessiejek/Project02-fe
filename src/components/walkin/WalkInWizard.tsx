@@ -1,5 +1,7 @@
 "use client";
 
+import { friendlyError } from "@/lib/api/friendly-error";
+import { futureDateProblem, lengthProblem, phoneProblem } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/shell/AppShell";
@@ -146,7 +148,17 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
   //JJQR - END
   const pagedPatients = clientPage(filteredPatients, { page: patientPage }, PATIENTS_PAGE_SIZE);
   const patientPageCount = Math.max(1, Math.ceil(pagedPatients.totalCount / PATIENTS_PAGE_SIZE));
+  // JJQR - AI (Nov 20, 2026) - B-14 / B-15 / B-33: no future birth date, no huge names, no non-phone contact number
+  const quickRegisterProblem =
+    futureDateProblem(quickRegister.dateOfBirth, todayManila()) ??
+    lengthProblem(quickRegister.firstName, 100, "First name") ??
+    lengthProblem(quickRegister.middleName, 100, "Middle name") ??
+    lengthProblem(quickRegister.lastName, 100, "Last name") ??
+    lengthProblem(quickRegister.address, 300, "Address") ??
+    phoneProblem(quickRegister.contactNumber);
+  // JJQR - END
   const canQuickRegister =
+    quickRegisterProblem === null &&
     quickRegister.firstName.trim() !== "" &&
     quickRegister.lastName.trim() !== "" &&
     quickRegister.dateOfBirth.trim() !== "" &&
@@ -168,9 +180,9 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
         contact_number: quickRegister.contactNumber || null,
         address: quickRegister.address || null,
       });
-    } catch {
+    } catch (e) {
       setRegistering(false);
-      setRegisterError("Could not register this patient. Try again.");
+      setRegisterError(friendlyError(e, "Could not register this patient. Try again.")); // JJQR - AI (Nov 20, 2026) - B-01
       return;
     }
     setRegistering(false);
@@ -420,6 +432,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
         >
           <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
             {registerError && <FormAlert className="sm:col-span-2">{registerError}</FormAlert>}
+            {quickRegisterProblem && <FormAlert tone="warning" className="sm:col-span-2">{quickRegisterProblem}</FormAlert>}
             {([
               ["firstName", "First name", true],
               ["middleName", "Middle name", false],

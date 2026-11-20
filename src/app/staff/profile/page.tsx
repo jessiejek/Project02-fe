@@ -1,5 +1,6 @@
 "use client";
 
+import { lengthProblem, phoneProblem } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -83,6 +84,13 @@ function ProfileCard({ staffId, initial }: { staffId: string; initial: StaffProf
       setError("Enter your full name.");
       return;
     }
+    // JJQR - AI (Nov 20, 2026) - B-01: same limits as the API
+    const problem = lengthProblem(form.fullName, 200, "Full name") ?? phoneProblem(form.contactNumber);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    // JJQR - END
     setSaving(true);
     setError("");
     const supabase = null as never;
