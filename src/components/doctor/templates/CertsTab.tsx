@@ -1,5 +1,6 @@
 "use client";
-//JJQR - AI (Nov 19, 2026) - new file: medical certificate templates tab - create / edit / duplicate / delete / live certificate preview. System templates are read-only but duplicable.
+//JJQR - AI (Nov 19, 2026) - new file: medical certificate templates tab - create / edit / duplicate / delete / live certificate preview.
+//JJQR - AI (Nov 20, 2026) A1 — one list only: every certificate template is hers (Edit / Duplicate / Delete).
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SidePanel } from "@/components/ui/SidePanel";
@@ -7,22 +8,19 @@ import { createMedicalCertificateTemplate, updateMedicalCertificateTemplate, del
 import { matchesQuery } from "@/lib/templates/search";
 import { validateCertTemplate } from "@/lib/templates/validation";
 import { cn } from "@/lib/cn";
-import { copyTitle, isCopyTitle, sortMineFirst } from "@/lib/templates/format";
+import { copyTitle, isCopyTitle } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, FilterChip, FilterGroup, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title);
-type Source = "all" | "mine" | "system";
 
 export function CertsTab({ ctx }: { ctx: TabCtx }) {
   const { data, toast, panelId } = ctx;
-  const [source, setSource] = useState<Source>("all");
   const rows = data.certs.items;
-  //JJQR - AI (Nov 19, 2026) - Mine first, then System
-  const visible = sortMineFirst(rows, (t) => t.is_system_template, (t) => t.title)
-    //JJQR - END
+  const visible = rows
+    .slice()
+    .sort(byTitle)
     .filter((t) => !ctx.isHidden(t.id))
-    .filter((t) => source === "all" || (source === "system") === t.is_system_template)
     .filter((t) => matchesQuery(ctx.query, t.title, t.diagnosis_text, t.recommendations, t.purpose_exception));
 
   async function duplicate(row: MedicalCertificateTemplateRow) {
@@ -55,11 +53,6 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
   return (
     <div className="space-y-md">
       <div className="flex flex-wrap items-center gap-sm">
-        <FilterGroup label="Source">
-          {(["all", "mine", "system"] as const).map((s) => (
-            <FilterChip key={s} active={source === s} onClick={() => setSource(s)}>{s === "all" ? "All" : s === "mine" ? "Mine" : "System"}</FilterChip>
-          ))}
-        </FilterGroup>
         <Button className="ml-auto" onClick={() => ctx.openPanel("new")}>New certificate template</Button>
       </div>
       <LoadGate status={data.certs.status} reload={data.certs.reload} empty={false} label="certificate templates">
@@ -73,13 +66,13 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
                 title={t.title}
                 highlight={panelId === t.id}
                 onOpen={() => ctx.openPanel(t.id)}
-                pills={<>{isCopyTitle(t.title) && <Pill>Copy</Pill>}<Pill tone={t.is_system_template ? "system" : "mine"}>{t.is_system_template ? "System" : "Mine"}</Pill></>}
+                pills={isCopyTitle(t.title) ? <Pill>Copy</Pill> : undefined}
                 preview={truncate(t.diagnosis_text || t.recommendations || t.purpose_exception)}
                 actions={
                   <>
-                    <TextAction onClick={() => ctx.openPanel(t.id)}>{t.is_system_template ? "View" : "Edit"}</TextAction>
+                    <TextAction onClick={() => ctx.openPanel(t.id)}>Edit</TextAction>
                     <TextAction onClick={() => void duplicate(t)}>Duplicate</TextAction>
-                    {!t.is_system_template && <TextAction tone="danger" onClick={() => confirm.ask(t.id, t.title)}>Delete</TextAction>}
+                    <TextAction tone="danger" onClick={() => confirm.ask(t.id, t.title)}>Delete</TextAction>
                   </>
                 }
               />
@@ -87,7 +80,7 @@ export function CertsTab({ ctx }: { ctx: TabCtx }) {
           </ItemList>
         )}
       </LoadGate>
-      {panelId && (panelId === "new" || editing) && <CertEditor key={panelId} ctx={ctx} row={editing} onDuplicate={duplicate} />}
+      {panelId && (panelId === "new" || editing) && <CertEditor key={panelId} ctx={ctx} row={editing} />}
       {confirm.modal}
     </div>
   );
@@ -108,8 +101,7 @@ function CertPreview({ diagnosis, recommendations, purpose }: { diagnosis: strin
   );
 }
 
-function CertEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: MedicalCertificateTemplateRow | null; onDuplicate: (r: MedicalCertificateTemplateRow) => Promise<void> }) {
-  const readOnly = !!row?.is_system_template;
+function CertEditor({ ctx, row }: { ctx: TabCtx; row: MedicalCertificateTemplateRow | null }) {
   const initial = useMemo(() => ({ title: row?.title ?? "", dx: row?.diagnosis_text ?? "", rec: row?.recommendations ?? "", pur: row?.purpose_exception ?? "" }), [row]);
   const [title, setTitle] = useState(initial.title);
   const [dx, setDx] = useState(initial.dx);
@@ -138,25 +130,18 @@ function CertEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: MedicalCertif
   return (
     <SidePanel
       isOpen
-      title={row ? (readOnly ? row.title : `Edit “${row.title}”`) : "New certificate template"}
-      subtitle={readOnly ? "System template — read only. Duplicate it to make your own copy." : undefined}
+      title={row ? `Edit “${row.title}”` : "New certificate template"}
       dirty={dirty}
       saving={saving}
-      readOnly={readOnly}
       onClose={ctx.closePanel}
       onSave={save}
       saveBlockedReason={reason}
-      footer={readOnly && row ? <Button onClick={() => void onDuplicate(row)}>Duplicate to mine</Button> : undefined}
     >
       <div className="space-y-md">
-        {!readOnly && (
-          <>
-            <Field label="Template name"><input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder='e.g. "Fit to work"' autoFocus /></Field>
-            <Field label="Diagnosis / Impressions"><textarea className={cn(inputCls, "min-h-20")} rows={3} value={dx} onChange={(e) => setDx(e.target.value)} /></Field>
-            <Field label="Recommendations"><textarea className={cn(inputCls, "min-h-20")} rows={3} value={rec} onChange={(e) => setRec(e.target.value)} /></Field>
-            <Field label="Purpose exception"><textarea className={cn(inputCls, "min-h-20")} rows={2} value={pur} onChange={(e) => setPur(e.target.value)} /></Field>
-          </>
-        )}
+        <Field label="Template name"><input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder='e.g. "Fit to work"' autoFocus /></Field>
+        <Field label="Diagnosis / Impressions"><textarea className={cn(inputCls, "min-h-20")} rows={3} value={dx} onChange={(e) => setDx(e.target.value)} /></Field>
+        <Field label="Recommendations"><textarea className={cn(inputCls, "min-h-20")} rows={3} value={rec} onChange={(e) => setRec(e.target.value)} /></Field>
+        <Field label="Purpose exception"><textarea className={cn(inputCls, "min-h-20")} rows={2} value={pur} onChange={(e) => setPur(e.target.value)} /></Field>
         <CertPreview diagnosis={dx} recommendations={rec} purpose={pur} />
       </div>
     </SidePanel>

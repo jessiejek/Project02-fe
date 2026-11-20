@@ -8,13 +8,12 @@ import { matchesQuery } from "@/lib/templates/search";
 import { validateRxTemplate } from "@/lib/templates/validation";
 import { moveId } from "@/lib/templates/reorder";
 import { cn } from "@/lib/cn";
-import { copyTitle, isCopyTitle, rxSig, sortMineFirst } from "@/lib/templates/format";
+import { copyTitle, isCopyTitle, rxSig } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, FilterChip, FilterGroup, IconButton, ItemCard, ItemList, LoadGate, NIL_GUID, Pill, TextAction, inputCls, truncate, useConfirmDelete, useViewMode } from "./shared";
+import { EmptyHint, Field, IconButton, ItemCard, ItemList, LoadGate, NIL_GUID, Pill, TextAction, inputCls, truncate, useConfirmDelete, useViewMode } from "./shared";
 
 export const TIMING_SLOTS = ["Breakfast", "Lunch", "Dinner", "Bedtime"] as const;
 export const ROUTES = ["PO", "IV", "IM", "SC", "SL", "Topical", "Inhaled", "Nasal", "Ophthalmic", "Otic", "PR"] as const;
-type Source = "all" | "mine" | "system";
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title);
 
 interface LineDraft {
@@ -93,29 +92,21 @@ function RxSigPreview({ items }: { items: RxItem[] }) {
 }
 //JJQR - END
 
-function describe(i: RxItem): string {
-  const when = [i.meal_relation ? `${i.meal_relation.toLowerCase()} meals` : "", i.timing ?? ""].filter(Boolean).join(" · ");
-  const dur = i.duration_kind === "Maintain" ? "maintenance" : i.duration_kind && i.duration_value ? `${i.duration_value} ${i.duration_kind.toLowerCase()}` : "";
-  return [i.generic_name, i.dosage, i.route, when, dur].filter(Boolean).join(" · ");
-}
-
 export function RxTab({ ctx }: { ctx: TabCtx }) {
   const { data, toast, panelId } = ctx;
-  const [source, setSource] = useState<Source>("all");
   const rows = data.rx.items;
+  //JJQR - AI (Nov 20, 2026) A1 — one list only: every prescription set is hers (Edit / Duplicate / Delete).
   const visible = useMemo(
     () =>
-      //JJQR - AI (Nov 19, 2026) - Mine first, then System
-      sortMineFirst(rows, (t) => t.is_system_template, (t) => t.title)
-        //JJQR - END
+      rows
+        .slice()
+        .sort(byTitle)
         .filter((t) => !ctx.isHidden(t.template_id))
-        .filter((t) => source === "all" || (source === "system") === t.is_system_template)
         .filter((t) => matchesQuery(ctx.query, t.title, ...t.prescription_template_items.flatMap((i) => [i.generic_name, i.dosage, i.instruction, i.indication]))),
-    [rows, source, ctx],
+    [rows, ctx],
   );
 
-  //JJQR - AI (Nov 19, 2026) - "Edit" on a System set makes your own copy (never touches the System original) and opens it
-  async function duplicate(row: RxTemplateRow, opts?: { editing?: boolean }) {
+  async function duplicate(row: RxTemplateRow) {
     try {
       const created = await createRxTemplate(null, ctx.doctorId, {
         title: copyTitle(row.title, rows.map((r) => r.title)),
@@ -123,7 +114,7 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
         items: row.prescription_template_items.map((i) => ({ ...fromItemToPlain(i) })),
       });
       data.rx.setItems((prev) => [...prev, created].sort(byTitle));
-      toast.push("success", opts?.editing ? "Editing your own copy of a System template." : `Duplicated to “${created.title}”.`);
+      toast.push("success", `Duplicated to “${created.title}”.`);
       ctx.openPanel(created.template_id);
     } catch {
       toast.push("error", "Couldn’t duplicate the prescription set. Please try again.");
@@ -143,11 +134,6 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
   return (
     <div className="space-y-md">
       <div className="flex flex-wrap items-center gap-sm">
-        <FilterGroup label="Source">
-          {(["all", "mine", "system"] as const).map((s) => (
-            <FilterChip key={s} active={source === s} onClick={() => setSource(s)}>{s === "all" ? "All" : s === "mine" ? "Mine" : "System"}</FilterChip>
-          ))}
-        </FilterGroup>
         <Button className="ml-auto" onClick={() => ctx.openPanel("new")}>New prescription set</Button>
       </div>
       <LoadGate status={data.rx.status} reload={data.rx.reload} empty={false} label="prescription sets">
@@ -161,13 +147,13 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
                 title={t.title}
                 highlight={panelId === t.template_id}
                 onOpen={() => ctx.openPanel(t.template_id)}
-                pills={<>{isCopyTitle(t.title) && <Pill>Copy</Pill>}<Pill>{t.prescription_template_items.length} med{t.prescription_template_items.length === 1 ? "" : "s"}</Pill><Pill tone={t.is_system_template ? "system" : "mine"}>{t.is_system_template ? "System" : "Mine"}</Pill></>}
+                pills={<>{isCopyTitle(t.title) && <Pill>Copy</Pill>}<Pill>{t.prescription_template_items.length} med{t.prescription_template_items.length === 1 ? "" : "s"}</Pill></>}
                 preview={<RxSigPreview items={t.prescription_template_items} />}
                 actions={
                   <>
-                    <TextAction onClick={() => (t.is_system_template ? void duplicate(t, { editing: true }) : ctx.openPanel(t.template_id))}>Edit</TextAction>
+                    <TextAction onClick={() => ctx.openPanel(t.template_id)}>Edit</TextAction>
                     <TextAction onClick={() => void duplicate(t)}>Duplicate</TextAction>
-                    {!t.is_system_template && <TextAction tone="danger" onClick={() => confirm.ask(t.template_id, t.title)}>Delete</TextAction>}
+                    <TextAction tone="danger" onClick={() => confirm.ask(t.template_id, t.title)}>Delete</TextAction>
                   </>
                 }
               />
@@ -175,7 +161,7 @@ export function RxTab({ ctx }: { ctx: TabCtx }) {
           </ItemList>
         )}
       </LoadGate>
-      {panelId && (panelId === "new" || editing) && <RxEditor key={panelId} ctx={ctx} row={editing} onDuplicate={(r) => duplicate(r, { editing: true })} />}
+      {panelId && (panelId === "new" || editing) && <RxEditor key={panelId} ctx={ctx} row={editing} />}
       {confirm.modal}
     </div>
   );
@@ -186,8 +172,7 @@ function fromItemToPlain(i: RxItem): Omit<RxItem, "id"> {
   return toItem(fromItem(i));
 }
 
-function RxEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: RxTemplateRow | null; onDuplicate: (r: RxTemplateRow) => Promise<void> }) {
-  const readOnly = !!row?.is_system_template;
+function RxEditor({ ctx, row }: { ctx: TabCtx; row: RxTemplateRow | null }) {
   const initialLines = useMemo(() => (row ? row.prescription_template_items.map(fromItem) : [blankLine()]), [row]);
   const initialSnapshot = useMemo(() => snapshotOf(row?.title ?? "", initialLines), [row, initialLines]);
   const [title, setTitle] = useState(row?.title ?? "");
@@ -227,29 +212,14 @@ function RxEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: RxTemplateRow |
   return (
     <SidePanel
       isOpen
-      title={row ? (readOnly ? row.title : `Edit “${row.title}”`) : "New prescription set"}
-      subtitle={readOnly ? "System set — read only. Tap “Edit my copy” to change it as your own copy." : undefined}
+      title={row ? `Edit “${row.title}”` : "New prescription set"}
       dirty={dirty}
       saving={saving}
-      readOnly={readOnly}
       onClose={ctx.closePanel}
       onSave={save}
       saveBlockedReason={reason}
-      footer={readOnly && row ? <Button onClick={() => void onDuplicate(row)}>Edit my copy</Button> : undefined}
     >
-      {readOnly && row ? (
-        <ul className="space-y-sm" aria-label="Medicines in this set">
-          {row.prescription_template_items.map((i, n) => (
-            <li key={i.id ?? n} className="rounded-lg border border-outline-variant p-sm text-body-md text-on-surface">
-              {describe(i)}
-              {i.indication && <span className="block text-label-md text-on-surface-variant">For: {i.indication}</span>}
-              {i.instruction && <span className="block text-label-md text-on-surface-variant">{i.instruction}</span>}
-              {i.is_controlled_substance && <Pill>Controlled</Pill>}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="space-y-md">
+      <div className="space-y-md">
           <Field label="Set name">
             <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder='e.g. "Fever kit — adult"' autoFocus />
           </Field>
@@ -303,8 +273,7 @@ function RxEditor({ ctx, row, onDuplicate }: { ctx: TabCtx; row: RxTemplateRow |
             </fieldset>
           ))}
           <Button variant="secondary" onClick={() => setLines((p) => [...p, blankLine()])}>Add medicine</Button>
-        </div>
-      )}
+      </div>
     </SidePanel>
   );
 }

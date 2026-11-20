@@ -1,4 +1,5 @@
-//JJQR - AI (Nov 19, 2026) - pure display helpers for the templates workspace (Mine-first sort, copy naming, Rx sig in normal case, phrase-name auto-fill)
+//JJQR - AI (Nov 19, 2026) - pure display helpers for the templates workspace (copy naming, Rx sig in normal case, phrase-name auto-fill)
+//JJQR - AI (Nov 20, 2026) A1 — dropped Mine-first/System sort; every template is the doctor's own.
 
 /** "AMOXICILLIN 500MG" -> "Amoxicillin 500mg". Text that already has lowercase letters is left alone. */
 export function normalCase(text: string | null | undefined): string {
@@ -30,11 +31,6 @@ export function rxSig(i: SigInput): string {
   const head = [name, dose].filter(Boolean).join(" ");
   const tail = [frequency, duration].filter(Boolean).join(" · ");
   return tail ? `${head} — ${tail}` : head;
-}
-
-/** Mine first, then System; A-Z inside each group. Returns a new array. */
-export function sortMineFirst<T>(items: readonly T[], isSystem: (t: T) => boolean, title: (t: T) => string): T[] {
-  return items.slice().sort((a, b) => Number(isSystem(a)) - Number(isSystem(b)) || title(a).localeCompare(title(b)));
 }
 
 export const COPY_PREFIX = "Copy of ";

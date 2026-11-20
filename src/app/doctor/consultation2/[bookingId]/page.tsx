@@ -2590,8 +2590,8 @@ Return to patient queue
                             )}
                             {filteredSoapTemplates.map((t) => (
                               <option key={t.id} value={t.id}>
+                                {/*JJQR - AI (Nov 20, 2026) A1 — one flat list of her templates; no (system) suffix */}
                                 {t.title}
-                                {t.isSystemTemplate ? " (system)" : ""}
                               </option>
                             ))}
                           </select>
@@ -3077,8 +3077,8 @@ Return to patient queue
                             <option value="">Use Template…</option>
                             {mcTemplates.map((t) => (
                               <option key={t.id} value={t.id}>
+                                {/*JJQR - AI (Nov 20, 2026) A1 — one flat list of her certificate templates */}
                                 {t.title}
-                                {t.is_system_template ? " (system)" : ""}
                               </option>
                             ))}
                           </select>
@@ -3391,8 +3391,8 @@ Return to patient queue
           return (
             <div className="space-y-md">
               <p className="text-body-md text-on-surface-variant">
+                {/*JJQR - AI (Nov 20, 2026) A1 — no (system) badge on the apply preview */}
                 Template: <strong className="text-on-surface">&ldquo;{pendingTemplate.title}&rdquo;</strong>
-                {pendingTemplate.isSystemTemplate ? " (system)" : ""}
               </p>
               {!hasSoapContent(pendingTemplate) && (
                 <p role="status" className="text-label-md text-status-warning">This template has no text in any field, so there is nothing to apply.</p>

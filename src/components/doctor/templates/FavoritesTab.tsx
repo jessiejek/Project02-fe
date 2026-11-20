@@ -75,8 +75,9 @@ export function FavoritesTab({ ctx }: { ctx: TabCtx }) {
                   <div className="flex items-center gap-xs">
                     <IconButton label={`Move ${f.generic_name} up`} icon="expand_less" disabled={filtering || idx <= 0} onClick={() => void reorder(f.id, -1)} />
                     <IconButton label={`Move ${f.generic_name} down`} icon="expand_more" disabled={filtering || idx === shown.length - 1} onClick={() => void reorder(f.id, 1)} />
+                    {/*JJQR - AI (Nov 20, 2026) A1 — favorites have no Duplicate concept; Edit / Delete only. */}
                     <TextAction onClick={() => ctx.openPanel(f.id)}>Edit</TextAction>
-                    <TextAction tone="danger" onClick={() => confirm.ask(f.id, f.generic_name)}>Remove</TextAction>
+                    <TextAction tone="danger" onClick={() => confirm.ask(f.id, f.generic_name)}>Delete</TextAction>
                   </div>
                 </li>
               );
