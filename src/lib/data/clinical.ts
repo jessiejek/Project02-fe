@@ -35,7 +35,9 @@ export interface ConsultationRow {
   //JJQR - AI (Oct 31, 2026)
   consultation_diagnoses?: Array<{ icd10_code: string | null; custom_description: string | null; type: string }>;
   //JJQR - END
-  follow_ups?: { follow_up_date: string | null; instructions: string | null } | null;
+  //JJQR - AI (Nov 20, 2026) - reason is needed to tell a PRN follow-up (saved with today's date) from a real dated one
+  follow_ups?: { follow_up_date: string | null; reason?: string | null; instructions: string | null } | null;
+  //JJQR - END
 }
 
 //JJQR - AI (Oct 31, 2026)
@@ -70,7 +72,9 @@ function flattenConsultation(c: Record<string, unknown>): ConsultationRow {
     bookings: b ? { appointment_date: (b.appointment_date as string) ?? null, doctor_id: (b.doctor_id as string) ?? null } : null,
     doctors: d ? { staff_accounts: sa ? { full_name: (sa.full_name as string) ?? null } : null } : null,
     consultation_diagnoses: (c.consultation_diagnoses as ConsultationRow["consultation_diagnoses"]) ?? [],
-    follow_ups: f ? { follow_up_date: (f.follow_up_date as string) ?? null, instructions: (f.instructions as string) ?? null } : null,
+    //JJQR - AI (Nov 20, 2026)
+    follow_ups: f ? { follow_up_date: (f.follow_up_date as string) ?? null, reason: (f.reason as string) ?? null, instructions: (f.instructions as string) ?? null } : null,
+    //JJQR - END
   };
 }
 

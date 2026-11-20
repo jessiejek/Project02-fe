@@ -50,7 +50,8 @@ function withinRange(n: number, range: NumericRange): boolean {
   return n >= range.min && n <= range.max;
 }
 
-function vitalOutOfRange(formKey: string, value: string): boolean {
+//JJQR - AI (Nov 20, 2026) - exported so the read-only completed-visit card can show the same "Out of range" cue as the edit form
+export function vitalOutOfRange(formKey: string, value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;
 
@@ -73,6 +74,7 @@ function vitalOutOfRange(formKey: string, value: string): boolean {
   const n = parseVitalNumber(trimmed);
   return n != null && !withinRange(n, range);
 }
+//JJQR - END
 //JJQR - END
 
 function VitalInputCard({ template, value, onChange, onRemove }: VitalInputCardProps) {

@@ -159,11 +159,13 @@ export function ConsultPatientBanner({
         {/* JJQR - AI (Oct 31, 2026) — compact sticky identity at all breakpoints */}
         <div
           className={cn(
-            "mx-auto flex min-h-14 max-w-doctor-record flex-wrap items-center gap-x-lg gap-y-sm py-sm",
+            //JJQR - AI (Nov 20, 2026) - gap-x-md (was lg) and a smaller name min-width so the identity line and allergy chips fit one row on a tablet
+            "mx-auto flex min-h-14 max-w-doctor-record flex-wrap items-center gap-x-md gap-y-xs py-xs",
+            //JJQR - END
             contentClassName,
           )}
         >
-          <p className="min-w-[12rem] flex-1 text-body-md text-on-surface">
+          <p className="min-w-[9rem] flex-1 text-body-md text-on-surface">
             <span className="break-words font-semibold">{patientName || "—"}</span>
             {metaCompact ? <span className="text-on-surface-variant"> · {metaCompact}</span> : null}
           </p>

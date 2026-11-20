@@ -7,6 +7,8 @@ export function DoctorPageHeader({ title, description, actions }: { title: strin
       <h1 className="text-balance text-headline-lg font-semibold tracking-tight text-on-surface">{title}</h1>
       {description && <p className="text-body-md text-on-surface-variant">{description}</p>}
     </div>
-    {actions && <div className="flex shrink-0 flex-wrap items-center gap-sm">{actions}</div>}
+    {/*JJQR - AI (Nov 20, 2026) - was shrink-0: on a 375px phone the two buttons stayed on one row and "Open appointments" ran 33px off-screen; max-w-full lets them wrap instead */}
+    {actions && <div className="flex max-w-full flex-wrap items-center gap-sm">{actions}</div>}
+    {/*JJQR - END */}
   </header>;
 }

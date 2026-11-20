@@ -6,6 +6,9 @@ import { addDaysToDate, previousMonth, todayManila } from "@/lib/clock";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DoctorPageHeader } from "@/components/doctor/DoctorPageHeader";
 import { visitDate } from "@/components/doctor/appointments/model";
+//JJQR - AI (Nov 20, 2026)
+import { isPrnFollowUp } from "@/lib/pf-default";
+//JJQR - END
 import { Toast } from "@/components/ui/Toast";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { AppShell } from "@/components/shell/AppShell";
@@ -108,7 +111,10 @@ export default function DoctorDashboardPage() {
             (r) =>
               (r.doctor_id as string) === meDoctorId &&
               (r.follow_up_date as string) >= today &&
-              (r.follow_up_date as string) <= in7Days,
+              (r.follow_up_date as string) <= in7Days &&
+              //JJQR - AI (Nov 20, 2026) - a PRN follow-up is stored with today's date but is not a scheduled return
+              !isPrnFollowUp({ reason: r.reason as string | null }),
+              //JJQR - END
           ),
         ),
         queryBookings(supabase, { doctorId: meDoctorId, from: windowStart }),
@@ -160,10 +166,14 @@ export default function DoctorDashboardPage() {
       const rows = await queryConsultations(supabase, { doctorId: meDoctorId });
       setConsultationsToday(
         rows.filter(
-          (c) => c.bookings?.appointment_date === today && c.status === "Completed" && (!c.assessment?.trim() || !c.plan?.trim()),
+          //JJQR - AI (Nov 20, 2026) - Complete does not require Assessment/Plan, so only flag a chart where BOTH are blank (one filled in is a finished chart)
+          (c) => c.bookings?.appointment_date === today && c.status === "Completed" && !c.assessment?.trim() && !c.plan?.trim(),
+          //JJQR - END
         ),
       );
-      setFollowUpsDueToday(rows.filter((c) => c.follow_ups?.follow_up_date === today));
+      //JJQR - AI (Nov 20, 2026) - PRN follow-ups are saved with today's date; they are not "due today"
+      setFollowUpsDueToday(rows.filter((c) => c.follow_ups?.follow_up_date === today && !isPrnFollowUp(c.follow_ups)));
+      //JJQR - END
     } catch {
       setConsultationsToday([]);
       setFollowUpsDueToday([]);
@@ -323,6 +333,10 @@ export default function DoctorDashboardPage() {
     .sort((a, b) => String(a.queue_number ?? "").localeCompare(String(b.queue_number ?? ""), "en", { numeric: true }))
     .slice(0, 3);
   const unpaidCompleted = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
+  //JJQR - AI (Nov 20, 2026) - the consultation list has no patient names; the queue board does, keyed by booking, so every "Needs attention" row can say WHO
+  const patientNameByBooking = new Map(board.items.map((e) => [e.booking_id, e.patient_name]));
+  const attentionName = (bookingId: string) => patientNameByBooking.get(bookingId)?.trim() || "A patient";
+  //JJQR - END
 
   const prevMonthEntry = earnings.find((e) => e.period === previousMonth(currentMonth));
   const collectedDelta =
@@ -426,20 +440,38 @@ export default function DoctorDashboardPage() {
                   href={`/doctor/consultation2/${c.booking_id}?mode=amend`}
                   className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
-                  <span className="text-body-sm text-on-surface">Chart missing Assessment/Plan</span>
+                  {/*JJQR - AI (Nov 20, 2026) - name the patient */}
+                  <span className="text-body-sm text-on-surface">{attentionName(c.booking_id)} — Assessment and Plan are blank</span>
+                  {/*JJQR - END */}
                   <span className="text-label-sm text-on-surface-variant">Finish chart</span>
                 </Link>
               ))}
+              {/*JJQR - AI (Nov 20, 2026) - say so when a list is cut at 5 (same as the unpaid list) */}
+              {consultationsToday.length > 5 && (
+                <Link href="/doctor/appointments" className="block rounded-lg px-sm py-xs text-label-md font-medium text-primary hover:bg-surface-container-low">
+                  +{consultationsToday.length - 5} more charts to finish — view all
+                </Link>
+              )}
+              {/*JJQR - END */}
               {followUpsDueToday.slice(0, 5).map((c) => (
                 <Link
                   key={`followup-${c.consultation_id}`}
                   href={`/doctor/consultation2/${c.booking_id}?mode=view`}
                   className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
                 >
-                  <span className="text-body-sm text-on-surface">Follow-up due today</span>
+                  {/*JJQR - AI (Nov 20, 2026) - name the patient */}
+                  <span className="text-body-sm text-on-surface">{attentionName(c.booking_id)} — follow-up due today</span>
+                  {/*JJQR - END */}
                   <span className="text-label-sm text-on-surface-variant">View chart</span>
                 </Link>
               ))}
+              {/*JJQR - AI (Nov 20, 2026) */}
+              {followUpsDueToday.length > 5 && (
+                <Link href="/doctor/appointments" className="block rounded-lg px-sm py-xs text-label-md font-medium text-primary hover:bg-surface-container-low">
+                  +{followUpsDueToday.length - 5} more follow-ups due — view all
+                </Link>
+              )}
+              {/*JJQR - END */}
             </div>
           )}
         </Card>

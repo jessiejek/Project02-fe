@@ -20,7 +20,9 @@ import { Drawer } from "@/components/ui/Drawer";
 import { Toast } from "@/components/ui/Toast";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Icon } from "@/components/ui/Icon";
-import { VitalsEditor } from "@/components/doctor/VitalsEditor";
+//JJQR - AI (Nov 20, 2026)
+import { VitalsEditor, vitalOutOfRange } from "@/components/doctor/VitalsEditor";
+//JJQR - END
 import { PatientHistoryModal } from "@/components/doctor/PatientHistoryModal";
 import { PrescriptionForm } from "@/components/doctor/PrescriptionForm";
 import { SoapFieldToolbar } from "@/components/doctor/SoapFieldToolbar";
@@ -61,7 +63,9 @@ import {
 //JJQR - END
 import { cn } from "@/lib/cn";
 //JJQR Nov 20, 2026
-import { followUpModeSatisfied } from "@/lib/pf-default";
+//JJQR - AI (Nov 20, 2026)
+import { followUpModeSatisfied, followUpViewLine } from "@/lib/pf-default";
+//JJQR - END
 //JJQR - END
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
@@ -108,7 +112,9 @@ import {
   printPrescriptionForBooking,
 } from "@/lib/consult-print";
 import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
-import { formatPeso } from "@/lib/format";
+//JJQR - AI (Nov 20, 2026)
+import { formatClinicDateShort, formatPeso } from "@/lib/format";
+//JJQR - END
 import {
   computeClinicFee,
   pfEditorAmountFromStored,
@@ -919,7 +925,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     //JJQR - END
   }
 
-  function consultPrintButtons(className?: string) {
+  //JJQR - AI (Nov 20, 2026) - optional compact button style so the header toolbar fits one row on a tablet
+  function consultPrintButtons(className?: string, buttonClassName?: string) {
+  //JJQR - END
     //JJQR - AI (Nov 20, 2026) - Print Prescription follows live items
     const showRx = effectiveRxItems.length > 0;
     //JJQR - END
@@ -931,6 +939,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           variant="secondary"
           loading={printingRx}
           disabled={!showRx}
+          className={buttonClassName}
           onClick={() => void runPrintPrescription()}
         >
           <Icon name="print" className="text-[16px]" />
@@ -940,6 +949,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           variant="secondary"
           loading={printingLabs}
           disabled={!showLabs}
+          className={buttonClassName}
           onClick={() => void runPrintLabOrders()}
         >
           <Icon name="print" className="text-[16px]" />
@@ -2357,7 +2367,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         : followUpMode === "prn"
           ? `PRN — ${followUpReason || "return if needed"}`
           : followUpDate
-            ? `${followUpDate}${followUpReason ? ` — ${followUpReason}` : ""}`
+            //JJQR - AI (Nov 20, 2026) - friendly date in the review checklist too
+            ? `${formatClinicDateShort(followUpDate, followUpDate)}${followUpReason ? ` — ${followUpReason}` : ""}`
+            //JJQR - END
             : "Not set";
     return (
       <AppShell role="doctor">
@@ -2467,7 +2479,9 @@ Return to patient queue
                 <p className="text-label-sm text-on-surface-variant">{patientIdentifierLine(booking)}</p>
               )}
               <p className="text-label-md text-on-surface-variant">
-                Completed {booking.appointmentDate} by {booking.doctorName}
+                {/*JJQR - AI (Nov 20, 2026) - friendly date instead of 2026-11-20 */}
+                Completed {formatClinicDateShort(booking.appointmentDate, booking.appointmentDate)} by {booking.doctorName}
+                {/*JJQR - END */}
               </p>
             </div>
             <div className="flex flex-wrap gap-sm">
@@ -2490,7 +2504,7 @@ Return to patient queue
               </Card>
               <Card>
                 <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Vital Signs</h2>
-                {vitalReadings.length > 0 ? <dl className="grid grid-cols-2 gap-lg sm:grid-cols-3">{defaultVitalTemplates.map(t => <div key={t.id}><dt className="text-label-md text-on-surface-variant">{t.description}</dt><dd className="mt-xs text-body-lg font-medium tabular-nums text-on-surface">{filledVitals[t.formKey] ? `${filledVitals[t.formKey]}${t.unit ? ` ${t.unit}` : ""}` : "Not recorded"}</dd></div>)}</dl> : <p className="text-body-md text-on-surface-variant">No vitals recorded.</p>}
+                {vitalReadings.length > 0 ? <dl className="grid grid-cols-2 gap-lg sm:grid-cols-3">{defaultVitalTemplates.map(t => <div key={t.id}><dt className="text-label-md text-on-surface-variant">{t.description}</dt><dd className="mt-xs text-body-lg font-medium tabular-nums text-on-surface">{filledVitals[t.formKey] ? `${filledVitals[t.formKey]}${t.unit ? ` ${t.unit}` : ""}` : "Not recorded"}</dd>{/*JJQR - AI (Nov 20, 2026) - same cue as the edit form */}{vitalOutOfRange(t.formKey, filledVitals[t.formKey] ?? "") && <p className="mt-xs flex items-center gap-xs text-label-sm text-status-warning" role="status"><Icon name="warning" className="text-[16px]" aria-hidden />Out of range</p>}{/*JJQR - END */}</div>)}</dl> : <p className="text-body-md text-on-surface-variant">No vitals recorded.</p>}
               </Card>
               <Card>
                 <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Diagnoses</h2>
@@ -2543,7 +2557,12 @@ Return to patient queue
               <Card>
                 <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Follow-up</h2>
                 <p className="text-body-md text-on-surface-variant">
-                  {sc.followUpDate ? `${sc.followUpDate} — ${sc.followUpReason ?? ""}${sc.followUpInstructions ? ` (${sc.followUpInstructions})` : ""}${sc.followUpReminder ? " · reminder on" : ""}` : "No follow-up recorded."}
+                  {/*JJQR - AI (Nov 20, 2026) - no ISO date; PRN shows no date and says PRN once */}
+                  {followUpViewLine(
+                    { date: sc.followUpDate, reason: sc.followUpReason, instructions: sc.followUpInstructions, reminder: sc.followUpReminder },
+                    (d) => formatClinicDateShort(d, d),
+                  )}
+                  {/*JJQR - END */}
                 </p>
               </Card>
               {/*JJQR - AI (Nov 20, 2026) F1 F5 — read-only line uses the stored decision (Decide at desk when null) */}
@@ -2646,8 +2665,9 @@ Return to patient queue
 
         {/* JJQR - AI (Nov 20, 2026) C4 — no green Saved banner; footer + inline Saved after a real change */}
 
-        <div className="flex flex-wrap items-center justify-between gap-md">
-          <div>
+        {/*JJQR - AI (Nov 20, 2026) - compact header: title + visit-type toggle share one line, the toolbar gets ONE full-width row on tablet/phone (was 3-4 stacked rows that pushed Chief complaint to 84% down an iPad screen); desktop keeps title left / toolbar right */}
+        <div className="flex flex-wrap items-center justify-between gap-x-md gap-y-sm" data-testid="consult-header">
+          <div className="flex flex-wrap items-center gap-x-md gap-y-xs">
             {/* JJQR - AI (Oct 31, 2026) — patient identity moved to ConsultPatientBanner */}
             <div className="flex flex-wrap items-center gap-sm">
               <h1 className="text-balance text-headline-lg font-semibold text-on-surface">{mode === "amend" ? "Amend consultation" : "Document consultation"}</h1>
@@ -2656,7 +2676,7 @@ Return to patient queue
             {/* Noticeable, and reversible — staff's New/Follow-up tag from
                 check-in drives the fee, so the doctor needs to see it without
                 digging into §9, and can flip it right here if it's wrong. */}
-            <div className="mt-xs flex flex-wrap items-center gap-sm">
+            <div className="flex flex-wrap items-center gap-sm">
               {(["New", "FollowUp"] as const).map((vt) => (
                 <button
                   key={vt}
@@ -2680,19 +2700,20 @@ Return to patient queue
               )}
             </div>
           </div>
-          <div className="flex flex-wrap gap-sm">
+          <div className="flex w-full flex-wrap gap-sm lg:w-auto">
             <Button variant="secondary" className="!h-11 !min-h-11 !w-11 !px-0 !py-0" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts help">
               <Icon name="help" className="text-[18px]" />
             </Button>
-            <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
+            <Button variant="secondary" className="!px-sm !py-sm" onClick={() => setHistoryOpen(true)}>
               View Patient History
             </Button>
             {/*JJQR - AI (Nov 20, 2026) - print bar follows live Rx items */}
-            {(effectiveRxItems.length > 0 || labOrders.length > 0) && consultPrintButtons()}
+            {(effectiveRxItems.length > 0 || labOrders.length > 0) && consultPrintButtons("contents", "!px-sm !py-sm")}
             {/*JJQR - END */}
-            {mode === "amend" && <Button variant="secondary" onClick={requestCancelAmend}>Cancel amendment</Button>}
+            {mode === "amend" && <Button variant="secondary" className="!px-sm !py-sm" onClick={requestCancelAmend}>Cancel amendment</Button>}
           </div>
         </div>
+        {/*JJQR - END */}
 
         {/*JJQR - AI (Nov 20, 2026) C6 - wrap section pills (no h-scroll); Vaccinations + Fee behind More */}
         <div className="space-y-lg">
