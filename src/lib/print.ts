@@ -2,22 +2,25 @@
  * Open a focused print window. Returns false if the browser blocked popups.
  * Pass `opts.brand` to override the default brand line, or `null` to omit it
  * entirely (the body carries its own letterhead — see `print-forms.ts`).
+ * Pass `opts.bare` for clinic forms: skip the default @page margin, body
+ * padding/font rules, and brand so the form CSS owns the page.
  */
-export function printHtml(title: string, bodyHtml: string, opts?: { brand?: string | null }): boolean {
-  const brand = opts && "brand" in opts ? opts.brand : "Dr. Grace Gavino Clinic";
+export function printHtml(
+  title: string,
+  bodyHtml: string,
+  opts?: { brand?: string | null; bare?: boolean },
+): boolean {
+  const bare = Boolean(opts && opts.bare);
+  const brand = bare ? null : opts && "brand" in opts ? opts.brand : "Dr. Grace Gavino Clinic";
   // NB: no `noopener`/`noreferrer` here — with either flag `window.open` returns
   // null (per spec), and we need the handle to write the document into. The page
   // we write never navigates anywhere external, so there's no opener to protect.
   const win = window.open("", "_blank", "width=800,height=900");
   if (!win) return false;
 
-  win.document.write(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>${escapeHtml(title)}</title>
-  <style>
-    @page { margin: 16mm; }
+  const chromeCss = bare
+    ? `html, body { margin: 0; padding: 0; }`
+    : `@page { margin: 16mm; }
     body {
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
       color: #0b1c30;
@@ -43,7 +46,15 @@ export function printHtml(title: string, bodyHtml: string, opts?: { brand?: stri
       margin: 0 auto;
     }
     .slip .queue { font-size: 28px; font-weight: 700; color: #00685f; margin: 8px 0; }
-    .brand { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #6d7a77; margin-bottom: 12px; }
+    .brand { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #6d7a77; margin-bottom: 12px; }`;
+
+  win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    ${chromeCss}
   </style>
 </head>
 <body>

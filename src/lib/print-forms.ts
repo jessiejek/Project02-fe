@@ -1,12 +1,17 @@
 /**
  * §16.7–16.8 — printable clinical documents (prescription, medical certificate,
- * lab request). One shared letterhead + signature block fed from live
- * `clinic_settings` + `doctors` data, then a form-specific body. All three call
- * `printHtml` with `brand: null` so the default brand line is suppressed and the
- * letterhead below is used instead.
+ * lab request). Layout HTML lives in `print-forms-html.ts` (hard-coded
+ * stationery letterhead). This module formats dates/age, then hands the
+ * document body to `printHtml` with `{ brand: null, bare: true }` so the print
+ * window does not add the default brand line or body padding.
  */
-import { printHtml, escapeHtml } from "@/lib/print";
+import { printHtml } from "@/lib/print";
 import { todayManila } from "@/lib/clock";
+import {
+  buildLabRequestHtml,
+  buildMedicalCertificateHtml,
+  buildPrescriptionHtml,
+} from "@/lib/print-forms-html";
 
 export interface PrintClinic {
   clinic_name: string;
@@ -29,9 +34,18 @@ export interface PrintPatient {
   address?: string | null;
 }
 
-const e = (v: string | null | undefined) => escapeHtml(v ?? "");
+const PAGE_A5 = "148mm 210mm";
+const PAGE_LAB = "4.3in 6.4in";
+
 const fmtDate = (d: string | null | undefined) =>
-  d ? new Date(d).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Manila" }) : "";
+  d
+    ? new Date(d).toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        timeZone: "Asia/Manila",
+      })
+    : "";
 
 //JJQR - AI (Oct 31, 2026)
 function ageFromDob(dob: string | null | undefined): string {
@@ -45,57 +59,15 @@ function ageFromDob(dob: string | null | undefined): string {
 }
 //JJQR - END
 
-function letterhead(clinic: PrintClinic): string {
-  return `<div class="lh">
-    <div class="lh-name">${e(clinic.clinic_name)}</div>
-    <div class="lh-sub">${e(clinic.address)}${clinic.contact_number ? ` · ${e(clinic.contact_number)}` : ""}</div>
-  </div>`;
+function assetOrigin(): string {
+  if (typeof window !== "undefined" && window.location && window.location.origin) {
+    return window.location.origin;
+  }
+  return "";
 }
 
-function signature(doctor: PrintDoctor): string {
-  const lines = [
-    `<div class="sig-name">${e(doctor.full_name)}, MD</div>`,
-    doctor.license_number ? `<div class="sig-line">License No. ${e(doctor.license_number)}</div>` : "",
-    doctor.ptr_number ? `<div class="sig-line">PTR No. ${e(doctor.ptr_number)}</div>` : "",
-    //JJQR - AI (Oct 31, 2026)
-    doctor.s2_number ? `<div class="sig-line">S2 No. ${e(doctor.s2_number)}</div>` : "",
-    //JJQR - END
-  ];
-  return `<div class="sig">${lines.join("")}</div>`;
-}
-
-// Prescription / med cert / lab request are printed on a half sheet of short
-// bond paper fed crosswise (i.e. an 8.5x11 sheet cut in half and printed
-// landscape) — the standard pad size for these forms in a PH clinic, not a
-// full letter page. Width-before-height is what makes this landscape.
-const FORM_CSS = `
-  @page { size: 8.5in 5.5in; margin: 10mm; }
-  .lh { text-align: center; border-bottom: 2px solid #0b1c30; padding-bottom: 10px; margin-bottom: 18px; }
-  .lh-name { font-size: 18px; font-weight: 700; letter-spacing: 0.02em; }
-  .lh-sub { font-size: 11px; color: #3d4947; margin-top: 2px; }
-  .doc-title { text-align: center; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin: 8px 0 18px; }
-  .mc-date { text-align: right; margin: 0 0 14px; }
-  .row { margin: 6px 0; }
-  .row .lbl { color: #3d4947; }
-  .rx-symbol { font-size: 32px; font-weight: 700; margin: 8px 0 4px; }
-  .rx-item { margin: 10px 0; padding-left: 8px; }
-  .rx-item .name { font-weight: 600; }
-  .rx-item .sub { color: #3d4947; font-size: 12px; }
-  .fill { border-bottom: 1px solid #6d7a77; display: inline-block; min-width: 60px; }
-  .sig { margin-top: 56px; text-align: right; }
-  .sig-name { font-weight: 700; border-top: 1px solid #0b1c30; display: inline-block; padding-top: 4px; }
-  .sig-line { font-size: 11px; color: #3d4947; }
-  .checklist { columns: 2; margin: 8px 0; }
-  .checklist div { break-inside: avoid; margin: 3px 0; }
-  .boiler { font-size: 11px; color: #3d4947; margin-top: 16px; font-style: italic; }
-`;
-
-function wrap(title: string, clinic: PrintClinic, doctor: PrintDoctor, inner: string): boolean {
-  return printHtml(
-    title,
-    `<style>${FORM_CSS}</style>${letterhead(clinic)}${inner}${signature(doctor)}`,
-    { brand: null },
-  );
+function printForm(title: string, bodyHtml: string): boolean {
+  return printHtml(title, bodyHtml, { brand: null, bare: true });
 }
 
 export interface RxLine {
@@ -120,55 +92,21 @@ export function printPrescription(opts: {
   patient: PrintPatient;
   items: RxLine[];
   date?: string;
+  next_appointment?: string | null;
 }): boolean {
-  const { clinic, doctor, patient, items } = opts;
-  const dateStr = fmtDate(opts.date ?? new Date().toISOString());
-  const slotList = (t: string | null | undefined) => {
-    const slots = (t ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-    if (slots.length === 0) return "";
-    if (slots.length === 1) return slots[0];
-    return `${slots.slice(0, -1).join(", ")} & ${slots[slots.length - 1]}`;
-  };
-  const whenPhrase = (meal: string | null | undefined, t: string | null | undefined) => {
-    const slots = slotList(t);
-    const m = meal ? String(meal).toLowerCase() : "";
-    if (m && slots) return `${m} ${slots}`;
-    if (m) return `${m} meals`;
-    if (slots) return `at ${slots}`;
-    return "";
-  };
-  const durationPhrase = (kind: string | null | undefined, value: number | null | undefined) => {
-    if (kind === "Maintain") return "maintenance";
-    if ((kind === "Days" || kind === "Weeks") && value) {
-      const unit = kind === "Days" ? "day" : "week";
-      return `for ${value} ${unit}${value === 1 ? "" : "s"}`;
-    }
-    return "";
-  };
-  const rows = items
-    .map((i, idx) => {
-      const dir = [
-        i.route ? String(i.route) : "",
-        whenPhrase(i.meal_relation, i.timing),
-        durationPhrase(i.duration_kind, i.duration_value),
-      ].filter(Boolean).join(", ");
-      const sigLine = dir ? dir.charAt(0).toUpperCase() + dir.slice(1) + "." : "";
-      return `<div class="rx-item">
-        <div class="name">${idx + 1}. ${e(i.generic_name)}${i.dosage ? ` ${e(i.dosage)}` : ""}${i.is_controlled_substance ? " (controlled)" : ""}</div>
-        <div class="sub">Dispense #${e(i.quantity)}</div>
-        ${sigLine ? `<div class="sub">Sig: ${e(sigLine)}</div>` : ""}
-        ${i.indication ? `<div class="sub">For ${e(i.indication)}</div>` : ""}
-        ${i.instruction ? `<div class="sub">${e(i.instruction)}</div>` : ""}
-      </div>`;
-    })
-    .join("");
-  const inner = `<div class="doc-title">Prescription</div>
-    <div class="row"><span class="lbl">Patient:</span> <strong>${e(patient.full_name)}</strong>${patient.patient_code ? ` (${e(patient.patient_code)})` : ""}</div>
-    <div class="row"><span class="lbl">Age/Sex:</span> ${e(ageFromDob(patient.date_of_birth))} / ${e(patient.sex)}</div>
-    <div class="row"><span class="lbl">Date:</span> ${e(dateStr)}</div>
-    <div class="rx-symbol">℞</div>
-    ${rows || '<div class="rx-item sub">No medicines prescribed.</div>'}`;
-  return wrap("Prescription", clinic, doctor, inner);
+  return printForm(
+    "Prescription",
+    buildPrescriptionHtml({
+      origin: assetOrigin(),
+      pageSize: PAGE_A5,
+      doctor: opts.doctor,
+      patient: opts.patient,
+      age: ageFromDob(opts.patient.date_of_birth),
+      date: fmtDate(opts.date ?? new Date().toISOString()),
+      items: opts.items,
+      nextAppointment: opts.next_appointment ?? "",
+    }),
+  );
 }
 
 export interface MedCertData {
@@ -191,22 +129,24 @@ export function printMedicalCertificate(opts: {
 }): boolean {
   const { clinic, doctor, patient, cert } = opts;
   const addr = cert.patient_address_snapshot ?? patient.address ?? "";
-  const salutation = patient.sex === "Male" ? "Mr." : patient.sex === "Female" ? "Ms." : "Mr./Ms.";
-  const inner = `<div class="doc-title">Medical Certificate</div>
-    <div class="mc-date">Date: <span class="fill">${e(fmtDate(cert.issue_date ?? new Date().toISOString()))}</span></div>
-    <p class="row">To whom it may concern,</p>
-    <p class="row">This is to certify that ${salutation} <strong>${e(patient.full_name)}</strong></p>
-    <p class="row">residing at <span class="fill">${e(addr)}</span></p>
-    <p class="row">has been examined in <span class="fill">${e(cert.examined_at ?? clinic.clinic_name)}</span></p>
-    <p class="row">on <span class="fill">${e(fmtDate(cert.examination_date_from))}</span>
-      until <span class="fill">${e(fmtDate(cert.examination_date_to))}</span>.</p>
-    <div class="row"><span class="lbl">Diagnosis/ Impressions:</span><br/>${e(cert.diagnosis_text)}</div>
-    <div class="row"><span class="lbl">Recommendations:</span><br/>${e(cert.recommendations)}</div>
-    <p class="boiler">This certificate is issued upon the request for whatever purpose it may serve except${
-      cert.purpose_exception ? ` ${e(cert.purpose_exception)}` : " ______"
-    } and may not be used for medico-legal purposes.</p>
-    <div class="row"><span class="lbl">Please come back on:</span> ${cert.come_back_on ? e(fmtDate(cert.come_back_on)) : '<span class="fill">&nbsp;</span>'}</div>`;
-  return wrap("Medical Certificate", clinic, doctor, inner);
+  return printForm(
+    "Medical Certificate",
+    buildMedicalCertificateHtml({
+      origin: assetOrigin(),
+      pageSize: PAGE_A5,
+      doctor,
+      patient,
+      issueDate: fmtDate(cert.issue_date ?? new Date().toISOString()),
+      address: addr,
+      examinedAt: cert.examined_at ?? clinic.clinic_name,
+      examFrom: fmtDate(cert.examination_date_from),
+      examTo: fmtDate(cert.examination_date_to),
+      diagnosis: cert.diagnosis_text ?? "",
+      recommendations: cert.recommendations ?? "",
+      purposeException: cert.purpose_exception ?? "",
+      comeBackOn: fmtDate(cert.come_back_on),
+    }),
+  );
 }
 
 export function printLabRequest(opts: {
@@ -221,32 +161,18 @@ export function printLabRequest(opts: {
   diagnoses?: string[];
   //JJQR - END
 }): boolean {
-  const { clinic, doctor, patient, tests } = opts;
-  const chosen = new Set(tests.map((t) => t.toUpperCase()));
-  const boxes = (opts.catalog ?? []).map(
-    (t) => `<div>${chosen.has(t.name.toUpperCase()) ? "☑" : "☐"} ${e(t.name)}</div>`,
+  return printForm(
+    "Laboratory Request",
+    buildLabRequestHtml({
+      origin: assetOrigin(),
+      pageSize: PAGE_LAB,
+      doctor: opts.doctor,
+      patient: opts.patient,
+      age: ageFromDob(opts.patient.date_of_birth),
+      date: fmtDate(opts.date ?? new Date().toISOString()),
+      tests: opts.tests,
+      diagnoses: opts.diagnoses,
+      clinicalNotes: opts.clinicalNotes,
+    }),
   );
-  const extras = tests.filter((t) => !(opts.catalog ?? []).some((c) => c.name.toUpperCase() === t.toUpperCase()));
-  //JJQR - AI (Oct 31, 2026)
-  const dxBlock =
-    opts.diagnoses && opts.diagnoses.length
-      ? `<div class="row"><span class="lbl">Diagnosis:</span> ${e(opts.diagnoses.join("; "))}</div>`
-      : "";
-  const notesBlock = opts.clinicalNotes?.trim()
-    ? `<div class="row"><span class="lbl">Clinical notes:</span><br/>${e(opts.clinicalNotes.trim())}</div>`
-    : "";
-  const requestedBlock = tests.length
-    ? `<div class="row"><span class="lbl">Requested tests:</span> ${e(tests.join(", "))}</div>`
-    : "";
-  //JJQR - END
-  const inner = `<div class="doc-title">Laboratory Request</div>
-    <div class="row"><span class="lbl">Patient:</span> <strong>${e(patient.full_name)}</strong>${patient.patient_code ? ` (${e(patient.patient_code)})` : ""}</div>
-    <div class="row"><span class="lbl">Age/Sex:</span> ${e(ageFromDob(patient.date_of_birth))} / ${e(patient.sex)}</div>
-    <div class="row"><span class="lbl">Date:</span> ${e(fmtDate(opts.date ?? new Date().toISOString()))}</div>
-    ${requestedBlock}
-    ${dxBlock}
-    ${notesBlock}
-    <div class="checklist">${boxes.join("") || '<div class="sub">No standard panel loaded.</div>'}</div>
-    ${extras.length ? `<div class="row"><span class="lbl">Additional:</span> ${e(extras.join(", "))}</div>` : ""}`;
-  return wrap("Laboratory Request", clinic, doctor, inner);
 }
