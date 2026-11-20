@@ -17,7 +17,7 @@ export interface CompletedVisit {
 export async function completeVisitViaApi(
   apis: { staff: APIRequestContext; doctor: APIRequestContext },
   patientId: string,
-  opts: { complaint?: string; rx?: boolean; vaccine?: string; diagnosis?: string; leaveOpen?: boolean; bookingId?: string; pfDecision?: "Charge" | "Waive"; pfReason?: string } = {},
+  opts: { complaint?: string; rx?: boolean; vaccine?: string; diagnosis?: string; leaveOpen?: boolean; bookingId?: string; pfDecision?: "Charge" | "Waive"; pfAmount?: number; pfReason?: string } = {},
 ): Promise<CompletedVisit> {
   const { staff, doctor } = apis;
   const d = await getDoctor(staff);
@@ -72,7 +72,11 @@ export async function completeVisitViaApi(
     const done = await dr(`/api/consultations/by-booking/${q.booking_id}`, {
       patient_id: patientId, doctor_id: d.doctor_id, status: "Completed", chief_complaint: complaint,
       subjective: "E2E subjective", objective: "E2E objective", assessment: "E2E assessment", plan: "E2E plan",
-      ...(opts.pfDecision ? { pf_decision: opts.pfDecision, pf_waive_reason: opts.pfDecision === "Waive" ? (opts.pfReason ?? "E2E doctor waived") : null } : {}),
+      ...(opts.pfDecision ? {
+        pf_decision: opts.pfDecision,
+        pf_amount: opts.pfDecision === "Charge" ? (opts.pfAmount ?? null) : null,
+        pf_waive_reason: opts.pfDecision === "Waive" ? (opts.pfReason ?? "E2E doctor waived") : null,
+      } : {}),
     });
     if (!done.ok()) throw new Error(`consult complete → ${done.status()} ${await done.text()}`);
     const qc = await staff.put(`/api/queue/${q.booking_id}/complete`);

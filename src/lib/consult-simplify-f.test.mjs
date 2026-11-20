@@ -76,4 +76,15 @@ test('F3 section 9 shows one Total line from computeClinicFee; Charge prefills e
   assert.equal(newVisit.total, 450);
   assert.equal(clinicFeePartsSum(newVisit.parts), newVisit.total);
 });
+
+test('F4 stored PF decisions load as-is (no totalFee overwrite); Charge with null amount hints the clinic total', () => {
+  assert.doesNotMatch(page, /setPfAmount\(String\(realBooking\.totalFee/);
+  assert.doesNotMatch(page, /pf_amount \?\? 0/);
+  assert.doesNotMatch(page, /feeDecision\?\.amount \?\? booking\?\.totalFee/);
+  assert.match(page, /fd\?\.type === "Charge" && fd\.amount != null \? String\(fd\.amount\) : ""/);
+  assert.match(page, /consultRes\.data\.pf_amount \?\? undefined/);
+  assert.match(page, /pfAmount\.trim\(\) === "" \? undefined : Number\(pfAmount\)/);
+  assert.match(page, /\(Total: \$\{formatPeso\(opts\.computedTotal\)\}\)/);
+  assert.match(page, /computedTotal: previewFee/);
+});
 //JJQR - END

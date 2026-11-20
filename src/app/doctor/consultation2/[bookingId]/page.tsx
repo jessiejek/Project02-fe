@@ -194,6 +194,7 @@ function formatProfessionalFeeLine(opts: {
   decision: "charge" | "waive" | null;
   amount: string;
   waiveReason: string;
+  computedTotal?: number | null;
 }): string {
   if (opts.decision === "waive") {
     const reason = opts.waiveReason.trim();
@@ -203,7 +204,12 @@ function formatProfessionalFeeLine(opts: {
     const raw = opts.amount.trim();
     const n = Number(raw);
     if (raw !== "" && Number.isFinite(n)) return `Professional fee: Charge ${formatPeso(n)}`;
-    return "Professional fee: Charge";
+    //JJQR - AI (Nov 20, 2026) F4 — Charge with a null amount keeps the label and hints the clinic total
+    const hint =
+      opts.computedTotal != null && Number.isFinite(opts.computedTotal)
+        ? ` (Total: ${formatPeso(opts.computedTotal)})`
+        : "";
+    return `Professional fee: Charge${hint}`;
   }
   return "Professional fee: Decide at desk";
 }
@@ -1239,7 +1245,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         }));
         const feeDecisionLoaded =
           consultRes.data.pf_decision === "Charge"
-            ? { type: "Charge" as const, amount: consultRes.data.pf_amount ?? 0 }
+            ? { type: "Charge" as const, amount: consultRes.data.pf_amount ?? undefined }
             : consultRes.data.pf_decision === "Waive"
               ? { type: "Waive" as const, waiveReason: consultRes.data.pf_waive_reason ?? "" }
               : undefined;
@@ -1294,7 +1300,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
       setBooking(realBooking);
       setSavedConsultation(loadedConsultation);
-      setPfAmount(String(realBooking.totalFee || ""));
       setVisitType(realBooking.visitType);
       setStaffVisitType(realBooking.visitType);
       setDiscountCategory(realBooking.discountCategory);
@@ -1342,9 +1347,11 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         }
         setVaccinations(toVaxDraft(loadedConsultation.vaccinationsAdministered));
         const fd = loadedConsultation.feeDecision;
+        //JJQR - AI (Nov 20, 2026) F4 — restore the stored PF decision as-is; never seed amount from booking.totalFee
         setPfDecision(fd ? (fd.type === "Charge" ? "charge" : "waive") : null);
-        if (fd?.type === "Charge") setPfAmount(String(fd.amount ?? ""));
-        if (fd?.type === "Waive") setPfWaiveReason(fd.waiveReason ?? "");
+        setPfAmount(fd?.type === "Charge" && fd.amount != null ? String(fd.amount) : "");
+        setPfWaiveReason(fd?.type === "Waive" ? (fd.waiveReason ?? "") : "");
+        //JJQR - END
       }
 
       // §16.8 Form 3 — lab-test catalog + any lab orders already on this booking.
@@ -1591,7 +1598,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       vaccinationsAdministered: vaccinations,
       feeDecision:
         pfDecision === "charge"
-          ? { type: "Charge", amount: Number(pfAmount) || 0 }
+          ? { type: "Charge", amount: pfAmount.trim() === "" ? undefined : Number(pfAmount) }
           : pfDecision === "waive"
             ? { type: "Waive", waiveReason: pfWaiveReason }
             : undefined,
@@ -1873,8 +1880,13 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setFollowUpInstructions(source?.followUpInstructions ?? "");
     setFollowUpReminder(source?.followUpReminder ?? true);
     setPfDecision(source?.feeDecision ? (source.feeDecision.type === "Charge" ? "charge" : "waive") : null);
-    setPfAmount(String(source?.feeDecision?.amount ?? booking?.totalFee ?? ""));
-    setPfWaiveReason(source?.feeDecision?.waiveReason ?? "");
+    //JJQR - AI (Nov 20, 2026) F4 — cancel-amend restores the stored amount, not booking.totalFee
+    setPfAmount(
+      source?.feeDecision?.type === "Charge" && source.feeDecision.amount != null
+        ? String(source.feeDecision.amount)
+        : "",
+    );
+    setPfWaiveReason(source?.feeDecision?.type === "Waive" ? (source.feeDecision.waiveReason ?? "") : "");
   }
 
   function finishCancelAmend() {
@@ -2088,7 +2100,7 @@ Return to patient queue
           </Card>
           {/*JJQR - AI (Nov 20, 2026) F1 — read-only PF line; Edit opens section 9 */}
           <p className="text-body-md text-on-surface">
-            {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason })}{" "}
+            {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason, computedTotal: previewFee })}{" "}
             <button
               type="button"
               onClick={openProfessionalFeeForEdit}
@@ -2241,7 +2253,7 @@ Return to patient queue
               </Card>
               {/*JJQR - AI (Nov 20, 2026) F1 — same read-only PF line on the completed record; Edit opens section 9 */}
               <p className="text-body-md text-on-surface">
-                {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason })}{" "}
+                {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmount, waiveReason: pfWaiveReason, computedTotal: previewFee })}{" "}
                 <button
                   type="button"
                   onClick={openProfessionalFeeForEdit}

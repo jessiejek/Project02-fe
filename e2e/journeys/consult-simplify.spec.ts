@@ -2,6 +2,7 @@ import type { APIRequestContext } from "@playwright/test";
 import { test, expect, type Page } from "../support/fixtures";
 import { checkInWalkIn, createPatient, type Role } from "../support/api";
 import { completeConsultFromUi, fillRequiredConsultFields, openSectionByTitle } from "../support/consultation-flow";
+import { completeVisitViaApi } from "../support/visit";
 
 //JJQR - AI (Nov 20, 2026) C1–C6
 test.describe("Consultation2 simplify C1–C6", () => {
@@ -128,6 +129,24 @@ test.describe("Consultation2 simplify F1–F4 professional fee", () => {
     await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
     await expect(doctor.getByText("Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)")).toBeVisible();
     await expect(doctor.getByText("Computed clinic fee")).toHaveCount(0);
+  });
+
+  test("F4 Charge ₱400 still shows after reload in the read-only line and section 9", async ({ as, api }) => {
+    const staffApi = await api("staff");
+    const doctorApi = await api("doctor");
+    const patient = await createPatient(staffApi, Date.now().toString(36));
+    const visit = await completeVisitViaApi({ staff: staffApi, doctor: doctorApi }, patient.patient_id, {
+      pfDecision: "Charge",
+      pfAmount: 400,
+    });
+    const doctor = await as("doctor");
+    await doctor.goto(`/doctor/consultation2/${visit.booking_id}`);
+    await expect(doctor.getByText("Professional fee: Charge ₱400")).toBeVisible();
+    await doctor.reload();
+    await expect(doctor.getByText("Professional fee: Charge ₱400")).toBeVisible();
+    await doctor.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(doctor.getByRole("heading", { name: "Amend consultation" })).toBeVisible();
+    await expect(doctor.getByRole("textbox", { name: "Amount" })).toHaveValue("400");
   });
 });
 //JJQR - END
