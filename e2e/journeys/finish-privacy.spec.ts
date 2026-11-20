@@ -91,7 +91,8 @@ test.describe("PV-13 / PV-14 · my data", () => {
     await page.getByRole("tab", { name: "Privacy" }).click();
     const send = page.getByRole("button", { name: "Send request" });
     await expect(send).toBeDisabled();
-    await page.getByLabel("What should be corrected?").fill("My contact number is out of date.");
+    const note = `${tag("pv14note")} contact number is out of date.`; // unique so the admin list check can't match an older run
+    await page.getByLabel("What should be corrected?").fill(note);
     await send.click();
     await expect(page.getByText("Your request is logged. The clinic will review it.")).toBeVisible();
     await expect(page.getByText(/Correction · Pending/)).toBeVisible();
@@ -106,7 +107,7 @@ test.describe("PV-13 / PV-14 · my data", () => {
     await ap.goto("/admin/settings");
     await ap.getByRole("tab", { name: "Privacy & consent" }).click();
     await expect(ap.getByRole("heading", { name: "Patient data requests" })).toBeVisible();
-    await expect(ap.getByText("My contact number is out of date.")).toBeVisible();
+    await expect(ap.getByText(note)).toBeVisible();
   });
 
   test("a deletion request from a patient with no visit on file is logged as Pending (the 7-year Scheduled/early-completion rules are in the API tests)", async ({ api, tag, cleanup }) => {

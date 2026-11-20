@@ -8,7 +8,7 @@ import { createPatient, checkInWalkIn, getBooking } from "../support/api";
 const LISTS = ["bookings", "consultations", "prescription-groups", "lab-orders", "medical-certificates", "follow-ups"] as const;
 
 test.describe("doctor scope · pages and lists", () => {
-  test("a doctor's pages still load their own data, lists are forced to the doctor, staff are unaffected", async ({ as, api }) => {
+  test("a doctor's pages still load their own data, lists are forced to the doctor, staff are unaffected @global", async ({ as, api }) => {
     const tag = Math.random().toString(36).slice(2, 9);
     const staffApi = await api("staff");
     const doctorApi = await api("doctor");

@@ -95,7 +95,8 @@ test.describe("/patient/profile", () => {
     });
   }
 
-  test("very long address (2,000 chars) does not crash the page (no 5xx) and reloads cleanly", async ({ loginAs, tag, cleanup }) => {
+  test("very long address (2,000 chars) does not crash the page (no 5xx) and reloads cleanly", async ({ loginAs, tag, cleanup, guard }) => {
+    guard.allow(/400 PUT \/api\/patients\//); // JJQR - AI (Nov 20, 2026) - B-01: the server now refuses an over-long address with a 400 and a message; the page shows it // JJQR - END
     const me = await newPatient({ tag, cleanup }, "proflong");
     const page = await loginAs(me.email, me.password);
     await page.goto("/patient/profile");
@@ -427,7 +428,8 @@ test.describe("/patient/reviews/[bookingId]", () => {
     expect(reviews).toHaveLength(1);
   });
 
-  test("a 5,000-char comment is stored or refused cleanly (never a 500)", async ({ loginAs, api, tag, cleanup }) => {
+  test("a 5,000-char comment is stored or refused cleanly (never a 500)", async ({ loginAs, api, tag, cleanup, guard }) => {
+    guard.allow(/4\d\d POST \/api\/reviews/); // JJQR - AI (Nov 20, 2026) - B-01: a refusal (4xx + message on the page) is a valid outcome // JJQR - END
     const me = await newPatient({ tag, cleanup }, "revlong");
     const v = await completeVisitViaApi({ staff: await api("staff"), doctor: await api("doctor") }, me.patientId);
     const page = await loginAs(me.email, me.password);
@@ -435,7 +437,13 @@ test.describe("/patient/reviews/[bookingId]", () => {
     await page.getByRole("radio", { name: "3 stars" }).click();
     await page.getByLabel(/Comment/).fill("y".repeat(5000));
     await page.getByRole("button", { name: "Send review" }).click();
-    await expect(page).toHaveURL(/\/patient\/bookings\//);
+    // JJQR - AI (Nov 20, 2026) - stored (moves on to the booking) OR refused with a visible message; never a blank failure
+    await expect(async () => {
+      const moved = /\/patient\/bookings\//.test(page.url());
+      const refused = await page.getByRole("alert").filter({ hasText: /\S/ }).first().isVisible();
+      expect(moved || refused).toBeTruthy();
+    }).toPass({ timeout: 10_000 });
+    // JJQR - END
   });
 
   test("another patient cannot review this visit", async ({ api, tag, cleanup, guard }) => {

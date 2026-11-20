@@ -545,7 +545,9 @@ test.describe("/admin/audit-logs", () => {
     await admin.put(`/api/patients/${p.patient_id}`, { data: { ...p, contact_number: "09171112233" } });
     const page = await as("admin");
     await page.goto("/admin/audit-logs");
-    await page.getByRole("searchbox", { name: "Search" }).fill(p.first_name);
+    // JJQR - AI (Nov 20, 2026) - PV-9: the change log no longer holds the patient's name, so search by the record id
+    await page.getByRole("searchbox", { name: "Search" }).fill(p.patient_id);
+    // JJQR - END
     const rows = page.getByRole("row").filter({ hasText: p.patient_id });
     await expect(rows.first()).toBeVisible();
     await expect(rows.first()).toContainText("Patient");

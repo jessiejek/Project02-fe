@@ -41,7 +41,7 @@ async function mockPerformance(page: Page, b: unknown) {
 }
 
 test.describe("doctor · performance", () => {
-  test("shows the doctor's own numbers, and they match the API for each period", async ({ as, api }) => {
+  test("shows the doctor's own numbers, and they match the API for each period @global", async ({ as, api }) => {
     const page = await as("doctor");
     await page.goto("/doctor/performance");
     await expect(page.getByTestId("perf-page")).toBeVisible();
