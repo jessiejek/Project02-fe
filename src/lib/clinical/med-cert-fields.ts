@@ -15,4 +15,9 @@ export function diagnosisTextFromConsult(descriptions: string[], assessment?: st
   const fromDx = descriptions.map((d) => d.trim()).filter(Boolean).join("; ");
   return fromDx || (assessment ?? "").trim();
 }
+
+//JJQR - AI (Nov 20, 2026) E2 — template DiagnosisText is ignored when diagnoses or Assessment already exist
+export function shouldApplyTemplateDiagnosis(descriptions: string[], assessment?: string | null): boolean {
+  return diagnosisTextFromConsult(descriptions, assessment) === "";
+}
 //JJQR - END

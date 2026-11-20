@@ -95,6 +95,7 @@ import {
   diagnosisTextFromConsult,
   examinedAtFromClinic,
   patientAddressFromProfile,
+  shouldApplyTemplateDiagnosis,
 } from "@/lib/clinical/med-cert-fields";
 //JJQR - END
 import {
@@ -590,23 +591,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Nov 19, 2026) - certificate templates: confirm before replacing filled fields; blank template fields keep your text
   const [pendingMcTemplate, setPendingMcTemplate] = useState<MedicalCertificateTemplateRow | null>(null);
   const [savingMcTemplate, setSavingMcTemplate] = useState(false);
-  function mcTemplateFieldPlan(template: MedicalCertificateTemplateRow) {
-    const rows = [
-      { label: "Diagnosis / Impressions", current: mcDiagnosis, next: template.diagnosis_text ?? "", set: setMcDiagnosis },
-      { label: "Recommendations", current: mcRecommendations, next: template.recommendations ?? "", set: setMcRecommendations },
-      { label: "Purpose exception", current: mcPurposeException, next: template.purpose_exception ?? "", set: setMcPurposeException },
-    ];
-    return rows.filter((r) => r.next.trim() !== "");
-  }
-  function doApplyMcTemplate(template: MedicalCertificateTemplateRow) {
-    mcTemplateFieldPlan(template).forEach((r) => r.set(r.next));
-    setPendingMcTemplate(null);
-  }
-  function applyMcTemplate(template: MedicalCertificateTemplateRow) {
-    const overwriting = mcTemplateFieldPlan(template).filter((r) => r.current.trim() !== "" && r.current.trim() !== r.next.trim());
-    if (overwriting.length > 0) setPendingMcTemplate(template);
-    else doApplyMcTemplate(template);
-  }
 
   async function saveMcAsTemplate() {
     if (!saveMcTplTitle.trim() || !booking || savingMcTemplate) return;
@@ -1106,15 +1090,39 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const previewFee = feePreview?.total ?? null;
   //JJQR - END
 
-  //JJQR - AI (Nov 20, 2026) E1 — diagnosis on the certificate follows diagnoses, then Assessment
+  //JJQR - AI (Nov 20, 2026) E1 — diagnosis on the certificate follows diagnoses, then Assessment (no sync effect)
   const mcDiagnosisDefault = diagnosisTextFromConsult(
     diagnoses.map((d) => d.description),
     assessment,
   );
-  useEffect(() => {
-    if (certExists) return;
-    setMcDiagnosis(mcDiagnosisDefault);
-  }, [certExists, mcDiagnosisDefault]);
+  const [mcDiagnosisDirty, setMcDiagnosisDirty] = useState(false);
+  const mcDiagnosisField = !certExists && !mcDiagnosisDirty ? mcDiagnosisDefault : mcDiagnosis;
+  //JJQR - END
+
+  //JJQR - AI (Nov 20, 2026) E2 — templates never overwrite address, examined at, exam dates, patient/doctor, or diagnosis when diagnoses/Assessment exist
+  function mcTemplateFieldPlan(template: MedicalCertificateTemplateRow) {
+    const applyDx = shouldApplyTemplateDiagnosis(
+      diagnoses.map((d) => d.description),
+      assessment,
+    );
+    const rows = [
+      ...(applyDx
+        ? [{ label: "Diagnosis / Impressions", current: mcDiagnosisField, next: template.diagnosis_text ?? "", set: (v: string) => { setMcDiagnosisDirty(true); setMcDiagnosis(v); } }]
+        : []),
+      { label: "Recommendations", current: mcRecommendations, next: template.recommendations ?? "", set: setMcRecommendations },
+      { label: "Purpose exception", current: mcPurposeException, next: template.purpose_exception ?? "", set: setMcPurposeException },
+    ];
+    return rows.filter((r) => r.next.trim() !== "");
+  }
+  function doApplyMcTemplate(template: MedicalCertificateTemplateRow) {
+    mcTemplateFieldPlan(template).forEach((r) => r.set(r.next));
+    setPendingMcTemplate(null);
+  }
+  function applyMcTemplate(template: MedicalCertificateTemplateRow) {
+    const overwriting = mcTemplateFieldPlan(template).filter((r) => r.current.trim() !== "" && r.current.trim() !== r.next.trim());
+    if (overwriting.length > 0) setPendingMcTemplate(template);
+    else doApplyMcTemplate(template);
+  }
   //JJQR - END
 
   // Single load effect: real booking (joined), consultation + diagnoses +
@@ -1412,6 +1420,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
             setMcExamFrom(mc.examination_date_from ?? "");
             setMcExamTo(mc.examination_date_to ?? "");
             setMcDiagnosis(mc.diagnosis_text ?? "");
+            setMcDiagnosisDirty(true);
             setMcRecommendations(mc.recommendations ?? "");
             setMcPurposeException(mc.purpose_exception ?? "");
             setMcComeBackOn(mc.come_back_on ?? "");
@@ -1840,7 +1849,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         examined_at: mcExaminedAt.trim() || examinedAtFromClinic(clinicRow.clinic_name, clinicRow.address),
         examination_date_from: mcExamFrom || today,
         examination_date_to: mcExamTo || mcExamFrom || today,
-        diagnosis_text: mcDiagnosis.trim() || mcDiagnosisDefault || null,
+        diagnosis_text: mcDiagnosisField.trim() || null,
         recommendations: mcRecommendations || plan || null,
         purpose_exception: mcPurposeException || null,
         come_back_on: mcComeBackOn || followUpDate || null,
@@ -3067,8 +3076,11 @@ Return to patient queue
                       </div>
                       {/*JJQR - AI (Nov 20, 2026) E1 */}
                       <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Diagnosis / Impressions</span><textarea
-                        value={mcDiagnosis}
-                        onChange={(e) => setMcDiagnosis(e.target.value)}
+                        value={mcDiagnosisField}
+                        onChange={(e) => {
+                          setMcDiagnosisDirty(true);
+                          setMcDiagnosis(e.target.value);
+                        }}
                         placeholder={assessment ? `Diagnosis / Impressions (default: “${assessment}”)` : "Diagnosis / Impressions"}
                         rows={2}
                         className="w-full rounded-lg border border-outline-variant p-md text-body-md"
@@ -3485,7 +3497,7 @@ Return to patient queue
         }
       >
         <div className="space-y-sm text-body-md">
-          <p><strong>Diagnosis:</strong> {mcDiagnosis || assessment || "—"}</p>
+          <p><strong>Diagnosis:</strong> {mcDiagnosisField || "—"}</p>
           <p><strong>Recommendations:</strong> {mcRecommendations || plan || "—"}</p>
           {mcComeBackOn && <p><strong>Come back on:</strong> {mcComeBackOn}</p>}
         </div>

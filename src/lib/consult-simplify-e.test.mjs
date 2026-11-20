@@ -15,7 +15,12 @@ function load(p, requireImpl = () => ({})) {
 }
 const page = read('app/doctor/consultation2/[bookingId]/page.tsx');
 const cert = page.slice(page.indexOf('{isOpen && i === 7 &&'), page.indexOf('{isOpen && i === 8 &&'));
-const { patientAddressFromProfile, examinedAtFromClinic, diagnosisTextFromConsult } = load('lib/clinical/med-cert-fields.ts');
+const {
+  patientAddressFromProfile,
+  examinedAtFromClinic,
+  diagnosisTextFromConsult,
+  shouldApplyTemplateDiagnosis,
+} = load('lib/clinical/med-cert-fields.ts');
 
 test('E1 auto-fills known medical-certificate fields; doctor only types recs / except / come-back', () => {
   assert.match(cert, /patientAgeYears != null \? `, \$\{patientAgeYears\}y`/);
@@ -37,5 +42,17 @@ test('E1 auto-fills known medical-certificate fields; doctor only types recs / e
   assert.equal(diagnosisTextFromConsult(['Asthma', 'URI'], 'fallback'), 'Asthma; URI');
   assert.equal(diagnosisTextFromConsult([], '  Assessment only  '), 'Assessment only');
   assert.equal(diagnosisTextFromConsult([], ''), '');
+});
+
+test('E2 applying a certificate template only fills recs / except / come-back, never diagnosis when consult dx exists', () => {
+  assert.match(page, /shouldApplyTemplateDiagnosis/);
+  assert.match(page, /applyDx\s*\?\s*\[\s*\{\s*label: "Diagnosis \/ Impressions"/);
+  assert.doesNotMatch(page, /setMcExaminedAt\(template/);
+  assert.doesNotMatch(page, /setMcAddress\(template/);
+  assert.doesNotMatch(page, /setMcExamFrom\(template/);
+  assert.doesNotMatch(page, /setMcExamTo\(template/);
+  assert.equal(shouldApplyTemplateDiagnosis(['Asthma'], ''), false);
+  assert.equal(shouldApplyTemplateDiagnosis([], 'Assessment'), false);
+  assert.equal(shouldApplyTemplateDiagnosis([], ''), true);
 });
 //JJQR - END

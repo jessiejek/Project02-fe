@@ -171,6 +171,32 @@ test.describe("Consultation2 simplify E1–E5 medical certificate", () => {
     await expect(doctor.getByText(/License No\./)).toBeVisible();
     await expect(doctor.getByPlaceholder("No address on file")).toBeVisible();
   });
+
+  test("E2 apply template keeps examined at and diagnosis", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    await openSectionByTitle(doctor, /3\. Diagnosis/i);
+    const box = doctor.getByRole("combobox", { name: /Diagnosis \(search ICD-10/ });
+    await box.fill("Acute pharyngitis");
+    await doctor.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(doctor.getByText(/Acute pharyngitis/).first()).toBeVisible();
+    await openSectionByTitle(doctor, /7\. Medical Certificate/i);
+    const examined = doctor.getByRole("textbox", { name: /Examined at/i });
+    await expect(examined).toHaveValue(/Grace Medical Clinic/, { timeout: 15_000 });
+    const dx = doctor.getByRole("textbox", { name: /Diagnosis \/ Impressions/ });
+    await expect(dx).toHaveValue(/Acute pharyngitis/);
+    const examinedBefore = await examined.inputValue();
+    const dxBefore = await dx.inputValue();
+    const tpl = doctor.getByLabel("Use certificate template");
+    await expect(tpl).toBeVisible({ timeout: 15_000 });
+    const option = tpl.locator("option").filter({ hasText: /Medical clearance/i }).first();
+    const value = await option.getAttribute("value");
+    expect(value).toBeTruthy();
+    await tpl.selectOption(value!);
+    await expect(doctor.getByPlaceholder(/Recommendations/)).not.toHaveValue("");
+    await expect(examined).toHaveValue(examinedBefore);
+    await expect(dx).toHaveValue(dxBefore);
+    await expect(dx).not.toHaveValue(/No active contagious disease/i);
+  });
 });
 //JJQR - END
 
