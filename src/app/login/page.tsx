@@ -63,7 +63,10 @@ function LoginPageForm() {
       footer={<>New patient?{" "}
         <Link href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"} className="font-medium text-primary hover:underline">
           Create an account
-        </Link></>}
+        </Link>
+        <span className="mt-xs block">
+          <Link href="/privacy" className="text-label-md text-on-surface-variant hover:underline">Privacy Notice</Link>
+        </span></>}
     >
       <form className="space-y-md" onSubmit={handleSubmit}>
         {error && <FormAlert>{error}</FormAlert>}

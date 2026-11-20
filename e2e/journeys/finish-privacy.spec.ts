@@ -20,7 +20,7 @@ test.describe("PV-11 · public privacy notice", () => {
   test("the register page links to it and its consent box starts unticked", async ({ anon }) => {
     const page = await anon();
     await page.goto("/register");
-    await expect(page.getByRole("link", { name: "Privacy Notice" })).toHaveAttribute("href", /privacy-notice/);
+    await expect(page.getByRole("link", { name: "Privacy Notice" })).toHaveAttribute("href", "/privacy");
     await expect(page.getByRole("checkbox", { name: /read the Privacy Notice/ })).not.toBeChecked();
   });
 });
