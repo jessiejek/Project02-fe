@@ -79,7 +79,7 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - Fill the DPO name/contact placeholders in the Privacy Notice and in `docs/privacy/*`. A legal adviser should review the DRAFT notice, consent text and handling guide.
 - Nothing deletes data after the 7-year retention period. Decide who runs that.
 - `package.json` has no e2e script (it is your uncommitted file). The two-pass run commands are in `e2e/README.md`.
-- The e2e login tests use `patient@clinic.test` with wrong passwords (about 3 per run). Several runs within 15 minutes could lock that account. Wait out the lock or run the unlock script.
+- The e2e login tests use `patient@clinic.test` with wrong passwords (about 3 per run). Several runs within 15 minutes could lock that account. Wait 15 minutes for the lock to clear.
 - Rate limits: a default test run with 4 workers can hit the auth rate limit on the dev server. Raise `RateLimiting__AuthPermitPerMinute` when you run the full suite on :5055.
 
 ## Log
