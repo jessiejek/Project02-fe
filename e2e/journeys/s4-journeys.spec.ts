@@ -46,7 +46,7 @@ test.describe("§4 journeys", () => {
   });
 
   test("J4 · admin publishes a new consent version → a patient who consented before is asked to consent again", async ({ as, loginAs, api, tag, cleanup }) => {
-    test.fail(true, "BUG-37: the consent bump is not stored by the server, and the patient dashboard only checks 'ever consented', never the version");
+    //JJQR - AI (Nov 20, 2026) - BUG-37 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const orig = await getSettings(admin);
     cleanup(() => putSettings(admin, orig));

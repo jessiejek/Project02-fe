@@ -173,7 +173,7 @@ test.describe("B3 · /staff/payments amount field", () => {
 
 test.describe("B4 · review only a Completed visit", () => {
   test("API: patient reviewing their own Pending booking is refused", async ({ tag, guard, cleanup, api }) => {
-    test.fail(true, "BUG-04 (B4): POST /api/reviews does not require a Completed booking");
+    //JJQR - AI (Nov 20, 2026) - BUG-04 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b4"));
     cleanup(() => me.dispose());
@@ -186,7 +186,7 @@ test.describe("B4 · review only a Completed visit", () => {
   });
 
   test("UI: /patient/reviews/[bookingId] does not offer the form for a visit that never happened", async ({ loginAs, tag, guard, cleanup }) => {
-    test.fail(true, "BUG-04 (B4): the review page shows the form for a Pending booking");
+    //JJQR - AI (Nov 20, 2026) - BUG-04 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b4u"));
     cleanup(() => me.dispose());
@@ -199,7 +199,7 @@ test.describe("B4 · review only a Completed visit", () => {
   });
 
   test("API: patient reviewing a Cancelled booking is refused", async ({ tag, guard, cleanup, api }) => {
-    test.fail(true, "BUG-04 (B4): POST /api/reviews does not require a Completed booking");
+    //JJQR - AI (Nov 20, 2026) - BUG-04 fixed: test.fail marker removed, the test must now pass //JJQR - END
     guard.off();
     const me = await registerFreshPatient(tag("b4x"));
     cleanup(() => me.dispose());

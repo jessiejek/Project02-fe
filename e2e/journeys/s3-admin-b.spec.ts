@@ -330,7 +330,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("General: an empty clinic name is not stored", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-36: the General tab saves an empty clinic name (and the public site would show a blank name)");
+    //JJQR - AI (Nov 20, 2026) - BUG-36 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));
@@ -343,7 +343,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("General: an empty address is not stored", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-36b: the General tab also saves an empty address");
+    //JJQR - AI (Nov 20, 2026) - BUG-36 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));
@@ -414,7 +414,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("Fees: a negative fee is not stored", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-34: the Fees tab accepts and stores a negative standard consultation fee");
+    //JJQR - AI (Nov 20, 2026) - BUG-34 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));
@@ -469,7 +469,7 @@ test.describe("/admin/settings", () => {
   });
 
   test("Privacy: a published consent version is still there after a reload / in the API", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-37: 'Publish new consent version' only changes the number on screen — PUT /api/settings ignores consent_version, so after reload it is back to the old version and patients are never asked to re-consent");
+    //JJQR - AI (Nov 20, 2026) - BUG-37 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await snapshot(admin);
     cleanup(() => restore(admin, s));

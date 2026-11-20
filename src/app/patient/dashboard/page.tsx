@@ -16,7 +16,7 @@ import { StatusPill } from "@/components/ui/StatusPill";
 import { formatClinicDate, formatClockTime } from "@/lib/format";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctors } from "@/lib/data/doctors";
-import { queryDoctorRatings } from "@/lib/data/admin";
+import { queryClinicSettings, queryDoctorRatings } from "@/lib/data/admin";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 import { queryPatientById } from "@/lib/data/patients";
 import { queryMyBookings } from "@/lib/data/bookings";
@@ -61,6 +61,9 @@ export default function PatientDashboardPage() {
   const [patientEmail, setPatientEmail] = useState("");
   const [isEmailVerified, setIsEmailVerified] = useState(true);
   const [consentedAt, setConsentedAt] = useState<string | null>(null);
+  // JJQR - AI (Nov 20, 2026) - B-37: a patient who agreed to an OLDER consent version must be asked again
+  const [consentOutdated, setConsentOutdated] = useState(false);
+  // JJQR - END
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [prescriptionCount, setPrescriptionCount] = useState(0);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
@@ -89,6 +92,10 @@ export default function PatientDashboardPage() {
         setPatientEmail(patientRow.email);
         setIsEmailVerified(patientRow.is_email_verified);
         setConsentedAt(patientRow.consented_at);
+        // JJQR - AI (Nov 20, 2026) - B-37: compare the patient's agreed version with the clinic's published one
+        const clinic = await queryClinicSettings();
+        setConsentOutdated(Boolean(patientRow.consented_at) && clinic != null && patientRow.consent_version < clinic.consent_version);
+        // JJQR - END
 
         const mappedBookings: BookingRow[] = bookingRows.map((b) => {
           const payment = b.payments;
@@ -204,10 +211,11 @@ export default function PatientDashboardPage() {
               actionLoading={resending}
             />
           )}
-          {!consentedAt && (
+          {/* JJQR - AI (Nov 20, 2026) - B-37: re-consent prompt when the clinic published a newer version */}
+          {(!consentedAt || consentOutdated) && (
             <Toast
               variant="warning"
-              message="Please review how the clinic uses your information."
+              message={consentOutdated ? "We updated how the clinic uses your information. Please review it again." : "Please review how the clinic uses your information."}
               actionLabel="Review consent"
               actionHref="/patient/privacy-consent"
             />
