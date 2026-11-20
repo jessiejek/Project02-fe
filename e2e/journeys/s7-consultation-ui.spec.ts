@@ -69,7 +69,7 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     const { v } = await openVisit({ api, tag, cleanup }, "cu-tpl");
     const page = await as("doctor");
     await page.goto(`/doctor/consultation2/${v.booking_id}`);
-    await page.getByRole("combobox", { name: "Use SOAP template" }).selectOption({ label: "Fever work-up (system)" });
+    await page.getByRole("combobox", { name: "Use SOAP template" }).selectOption({ label: "Fever work-up" });
     await page.waitForTimeout(800);
     const dlg = page.getByRole("dialog");
     if (await dlg.isVisible().catch(() => false)) await dlg.getByRole("button", { name: /Replace|Apply|Use|Confirm|Yes/ }).first().click();

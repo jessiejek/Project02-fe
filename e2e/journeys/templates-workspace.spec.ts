@@ -88,19 +88,17 @@ test.describe("Templates workspace", () => {
     await expect(panel.getByLabel("Phrase name")).toHaveValue("My throat exam");
   });
 
-  test("SOAP tab: compact list view is the default, Mine sorts first, filters are labelled", async ({ as }) => {
+  test("SOAP tab: compact list view is the default", async ({ as }) => {
     const page = await as("doctor");
     await page.goto("/doctor/templates?tab=soap");
     await expect(page.getByRole("button", { name: /SOAP \(\d+\)/ })).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('ul[data-view="list"]')).toBeVisible();
     await expect(page.getByRole("group", { name: "View" }).getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByText("Source", { exact: true })).toBeVisible();
-    await expect(page.getByText("Specialty", { exact: true })).toBeVisible();
-    // Mine first: no "Mine" pill may appear after a "System" pill
-    const pills = await page.locator('ul[data-view="list"] > li').evaluateAll((lis) =>
-      lis.map((li) => (li.textContent ?? "").includes("System") ? "S" : (li.textContent ?? "").includes("Mine") ? "M" : "?"),
-    );
-    expect(pills.join("")).not.toMatch(/SM/);
+    //JJQR - AI (Nov 20, 2026) A1 A3 — Source / Specialty / Mine / System are gone from this page
+    await expect(page.getByText("Source", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Specialty", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Mine", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("System", { exact: true })).toHaveCount(0);
     await page.getByRole("group", { name: "View" }).getByRole("button", { name: "Cards" }).click();
     await expect(page.locator('ul[data-view="cards"]')).toBeVisible();
   });

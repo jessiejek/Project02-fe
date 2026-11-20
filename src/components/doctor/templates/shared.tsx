@@ -189,7 +189,7 @@ export const truncate = (text: string | null | undefined, max = 140) => {
 
 export const NIL_GUID = "00000000-0000-0000-0000-000000000000";
 
-//JJQR - AI (Nov 20, 2026) A4 — low-emphasis restore link + in-app confirm (never window.confirm).
+//JJQR - AI (Nov 20, 2026) A4 — low-emphasis restore link + in-app confirm modal (not a browser dialog).
 export function RestoreBuiltIns({
   doctorId,
   kind,

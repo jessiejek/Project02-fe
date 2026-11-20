@@ -79,15 +79,20 @@ test('wiring: the gate shows a message and the Templates tab renders the result 
   assert.match(src, /data-testid="rx-template-notice"/);
   assert.match(src, /planTemplateApply\(template\.items/);
 });
-test('wiring: every Rx row can be edited, System edits become your own copy, modal is wide', () => {
+test('wiring: every Rx row can be edited and deleted in place, modal is wide', () => {
   const src = read('components/doctor/PrescriptionForm.tsx');
-  assert.match(src, /isSystemCopy/);
-  assert.match(src, /Editing your own copy of a System template/);
+  //JJQR - AI (Nov 20, 2026) A1 — no Mine/System fork; Edit saves her row
+  assert.doesNotMatch(src, /isSystemCopy/);
+  assert.doesNotMatch(src, /Editing your own copy of a System template/);
+  assert.doesNotMatch(src, /t\.isSystemTemplate \? "System" : "Mine"/);
+  assert.match(src, /aria-label=\{`Edit \$\{t\.title\}`\}/);
+  assert.match(src, /aria-label=\{`Delete \$\{t\.title\}`\}/);
   assert.match(src, /size="xl"/);
   assert.match(src, /min-\[900px\]:grid-cols-/);
-  assert.ok(!/\{!t\.isSystemTemplate && \(\s*<div className="flex items-center gap-sm">/.test(src), 'edit/delete must not be Mine-only any more');
   assert.match(read('components/ui/Modal.tsx'), /xl: "max-w-\[60rem\]"/);
   const rx = read('components/doctor/templates/RxTab.tsx');
-  assert.match(rx, /duplicate\(t, \{ editing: true \}\)/);
+  assert.doesNotMatch(rx, /duplicate\(t, \{ editing: true \}\)/);
+  assert.match(rx, />Edit<\/TextAction>/);
+  assert.match(rx, />Delete<\/TextAction>/);
 });
 //JJQR - END

@@ -21,7 +21,8 @@ test('workspace wiring: route keeps the h1 + e2e selectors, panel is guarded, de
   const undo = read('components/doctor/templates/useUndoableDelete.ts');
   assert.match(undo, /UNDO_MS = 5000/);
   const soap = read('components/doctor/templates/SoapTab.tsx');
-  assert.match(soap, /SPECIALTY_CHIP_LABELS/); // specialty chips come from SPECIALTY_CHIP_LABELS
+  //JJQR - AI (Nov 20, 2026) A3 — Specialty chips no longer live on the templates SOAP tab
+  assert.doesNotMatch(soap, /SPECIALTY_CHIP_LABELS/);
 });
 
 test('consultation2 + Rx form use the new template data (ICD code on Dx, full Rx-pad fields on Rx sets)', () => {
