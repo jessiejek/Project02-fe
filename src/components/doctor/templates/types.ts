@@ -5,7 +5,6 @@ import type {
 } from "@/lib/data/clinical";
 import type { LoadStatus } from "@/lib/clinical/useTemplateLibrary";
 import type { ToastApi } from "@/components/ui/ToastHost";
-import type { Specialty } from "@/lib/clinical/template-specialty";
 import type { PhraseField } from "@/lib/templates/urlState";
 import type { UndoableDeleteSpec } from "./useUndoableDelete";
 
@@ -38,8 +37,7 @@ export interface TabCtx {
   panelId: string | null;
   /** URL ?field= (phrases) */
   field: PhraseField | null;
-  specialty: Specialty | "All";
-  setSpecialty: (s: Specialty | "All") => void;
+  //JJQR - AI (Nov 20, 2026) A3 — specialty filter state lived here; it is gone from the templates page.
   openPanel: (id: string, field?: string | null) => void;
   closePanel: () => void;
   deleteWithUndo: (spec: UndoableDeleteSpec) => void;

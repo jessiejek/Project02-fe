@@ -76,15 +76,7 @@ export function ItemList({ children }: { children: ReactNode }) {
   );
 }
 
-/** Labelled chip group ("Source", "Specialty") so the filters say what they filter. */
-export function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-xs">
-      <span className="shrink-0 text-label-md font-medium text-on-surface-variant">{label}</span>
-      <div className="flex gap-xs overflow-x-auto" role="group" aria-label={label}>{children}</div>
-    </div>
-  );
-}
+//JJQR - AI (Nov 20, 2026) A3 — FilterGroup (Source / Specialty chip labels) is gone with those filters.
 
 /** One item: title row, optional pills, preview text, action row. Compact single row in list view. */
 export function ItemCard({ title, pills, preview, actions, onOpen, highlight }: { title: string; pills?: ReactNode; preview?: ReactNode; actions?: ReactNode; onOpen?: () => void; highlight?: boolean }) {

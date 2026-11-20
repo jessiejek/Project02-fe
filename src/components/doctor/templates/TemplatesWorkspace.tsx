@@ -1,5 +1,6 @@
 "use client";
 //JJQR - AI (Nov 19, 2026) - new file: /doctor/templates workspace shell. 6 tabs, deep links (?tab=&field=&id=), search (this tab / all tabs), toasts, undoable delete.
+//JJQR - AI (Nov 20, 2026) A3 — Specialty filter state removed from this page.
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "@/components/providers/SessionProvider";
@@ -7,7 +8,6 @@ import { ToastHost, useToastQueue } from "@/components/ui/ToastHost";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
-import type { Specialty } from "@/lib/clinical/template-specialty";
 import { TEMPLATE_TABS, TAB_LABELS, buildTemplatesUrl, parseField, parseTab, type TemplateTab } from "@/lib/templates/urlState";
 import { releaseHistoryGuard } from "@/lib/templates/historyGuard";
 import { searchAll, totalHits, type SearchLibrary } from "@/lib/templates/search";
@@ -39,7 +39,6 @@ export function TemplatesWorkspace() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   //JJQR - END
   const [scope, setScope] = useState<"tab" | "all">("tab");
-  const [specialty, setSpecialty] = useState<Specialty | "All">("All");
 
   const go = useCallback((url: string) => router.replace(url, { scroll: false }), [router]);
   const openPanel = useCallback((id: string, f?: string | null) => go(buildTemplatesUrl({ tab, id, field: f ?? field })), [go, tab, field]);
@@ -68,7 +67,7 @@ export function TemplatesWorkspace() {
   );
 
   const ctx: TabCtx = {
-    doctorId, data, toast, query: scope === "tab" ? query : "", panelId, field, specialty, setSpecialty, openPanel, closePanel, deleteWithUndo, isHidden,
+    doctorId, data, toast, query: scope === "tab" ? query : "", panelId, field, openPanel, closePanel, deleteWithUndo, isHidden,
   };
 
   // ?id= pointing at something that was deleted / belongs to someone else.

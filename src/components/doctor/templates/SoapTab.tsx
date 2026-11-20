@@ -1,18 +1,17 @@
 "use client";
-//JJQR - AI (Nov 19, 2026) - new file: SOAP templates tab (list / search / specialty / create / edit / duplicate / delete / preview).
+//JJQR - AI (Nov 19, 2026) - new file: SOAP templates tab (list / search / create / edit / duplicate / delete / preview).
 //JJQR - AI (Nov 20, 2026) A1 — one list only: every row is the doctor's own (Edit / Duplicate / Delete).
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { SidePanel } from "@/components/ui/SidePanel";
 import { createSoapTemplate, updateSoapTemplate, deleteSoapTemplate, type SoapTemplateRow } from "@/lib/data/clinical";
-import { matchesSpecialtyFilter, SPECIALTY_CHIP_LABELS } from "@/lib/clinical/template-specialty";
 import { matchesQuery } from "@/lib/templates/search";
 import { validateSoapTemplate } from "@/lib/templates/validation";
 import { SOAP_FIELD_LABELS, SOAP_KEYS, type SoapKey } from "@/lib/clinical/soap-merge";
 import { cn } from "@/lib/cn";
 import { copyTitle, isCopyTitle } from "@/lib/templates/format";
 import type { TabCtx } from "./types";
-import { EmptyHint, Field, FilterChip, FilterGroup, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
+import { EmptyHint, Field, ItemCard, ItemList, LoadGate, Pill, TextAction, inputCls, truncate, useConfirmDelete } from "./shared";
 
 const COLUMN: Record<SoapKey, keyof SoapTemplateRow> = {
   chiefComplaint: "chief_complaint",
@@ -33,7 +32,6 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
         .slice()
         .sort(byTitle)
         .filter((t) => !ctx.isHidden(t.id))
-        .filter((t) => matchesSpecialtyFilter("soap", t.title, ctx.specialty))
         .filter((t) => matchesQuery(ctx.query, t.title, t.chief_complaint, t.subjective, t.objective, t.assessment, t.plan)),
     [rows, ctx],
   );
@@ -71,11 +69,7 @@ export function SoapTab({ ctx }: { ctx: TabCtx }) {
   return (
     <div className="space-y-md">
       <div className="flex flex-wrap items-center gap-sm">
-        <FilterGroup label="Specialty">
-          {SPECIALTY_CHIP_LABELS.map(({ id, label }) => (
-            <FilterChip key={id} active={ctx.specialty === id} onClick={() => ctx.setSpecialty(id)}>{label}</FilterChip>
-          ))}
-        </FilterGroup>
+        {/*JJQR - AI (Nov 20, 2026) A3 — Specialty chips removed from this page. */}
         <Button className="ml-auto" onClick={() => ctx.openPanel("new")}>New SOAP template</Button>
       </div>
 
