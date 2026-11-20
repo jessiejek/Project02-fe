@@ -216,13 +216,27 @@ export async function createOnlineBooking(opts: {
   visitType?: "New" | "FollowUp";
   notes?: string;
 }): Promise<BookingRow> {
+  // JJQR - AI (Nov 20, 2026) - B-06 (and BUG-07): the data API is snake_case; camelCase keys were silently ignored, so "Book this day" always booked today
   const raw = await api.post<Raw>("/api/bookings/book", {
-    appointmentDate: opts.appointmentDate ?? null,
-    visitType: opts.visitType ?? null,
+    appointment_date: opts.appointmentDate ?? null,
+    visit_type: opts.visitType ?? null,
     notes: opts.notes ?? null,
   });
+  // JJQR - END
   return projectBooking(raw);
 }
+
+// JJQR - AI (Nov 20, 2026) - B-06 / B-29: days online booking refuses (clinic closed, doctor blocked / off) and why
+export interface ClosedDate {
+  date: string; // yyyy-MM-dd
+  reason: string;
+}
+
+/** Upcoming days that cannot be booked, with the reason to show the patient. */
+export async function queryClosedDates(days = 90): Promise<ClosedDate[]> {
+  return api.get<ClosedDate[]>(`/api/bookings/closed-dates?days=${days}`);
+}
+// JJQR - END
 
 /** Staff/admin list: all, today, or unpaid-for-payment. */
 export async function queryStaffBookings(

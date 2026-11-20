@@ -598,7 +598,7 @@ test.describe("/admin/dashboard", () => {
   });
 
   test("an unpaid booking on a Sunday (clinic closed) cannot be booked online", async ({ api, tag, cleanup }) => {
-    test.fail(true, "BUG-29: the clinic hours say Sunday is closed, yet POST /api/bookings/book accepts a Sunday date");
+    //JJQR - AI (Nov 20, 2026) - BUG-29 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const staff = await api("staff");
     const me = await registerFreshPatient(tag("sun"));
     cleanup(() => me.dispose());

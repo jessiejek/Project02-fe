@@ -187,6 +187,15 @@ export function manilaDate(offsetDays = 0): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
+//JJQR - AI (Nov 20, 2026) - B-29: online booking now refuses the clinic's closed day (Sunday in the dev settings). This returns
+// the first date at/after `offsetDays` that is not a Sunday, so a test about something else never lands on a closed day by accident.
+export function manilaOpenDate(offsetDays = 0): string {
+  let n = offsetDays;
+  while (new Date(`${manilaDate(n)}T12:00:00Z`).getUTCDay() === 0) n++;
+  return manilaDate(n);
+}
+//JJQR - END
+
 export const PASSWORD = "E2e-Passw0rd!";
 
 /** Create a patient with a tagged name (visible in search as `<tag> Tester`). */

@@ -238,30 +238,41 @@ test.describe("/admin/staff", () => {
     expect(login.ok()).toBeFalsy();
   });
 
-  test("a deactivated staff member cannot sign in", async ({ api, cleanup }) => {
-    test.fail(true, "BUG-32: after 'Deactivate' on /admin/staff the account is Inactive but POST /api/auth/login still succeeds");
+  //JJQR - AI (Nov 20, 2026) - B-32 fixed: marker removed. Uses the spare dev doctor (phase5doctor@) so the shared staff@ login that other specs
+  // rely on is never deactivated (the server now rejects a deactivated account's tokens immediately).
+  test("a deactivated staff member cannot sign in, and their existing session stops working", async ({ api, cleanup }) => {
     const admin = await api("admin");
-    const me = (await staffAccountByEmail(admin, "staff@clinic.test"))!;
-    cleanup(async () => { await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Active" } }); });
+    const me = (await staffAccountByEmail(admin, "phase5doctor@clinic.test"))!;
+    cleanup(async () => { await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: me.status } }); });
+    await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Active" } });
+    const ok = await admin.post("/api/auth/login", { data: { email: "phase5doctor@clinic.test", password: "ClinicDev123!" }, headers: { Authorization: "" } });
+    expect(ok.ok(), "an active account can log in").toBeTruthy();
+    const session = await ok.json();
     await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Inactive" } });
-    const login = await admin.post("/api/auth/login", { data: { email: "staff@clinic.test", password: "ClinicDev123!" } });
+    const login = await admin.post("/api/auth/login", { data: { email: "phase5doctor@clinic.test", password: "ClinicDev123!" }, headers: { Authorization: "" } });
     expect(login.ok(), "an inactive staff member must not be able to log in").toBeFalsy();
+    expect(login.status()).toBe(403);
+    const withOldToken = await admin.get("/api/auth/me", { headers: { Authorization: `Bearer ${session.accessToken}` } });
+    expect(withOldToken.status(), "the old access token stops working at once").toBe(401);
   });
+  //JJQR - END
 
-  test("team table lists the dev staff account; Deactivate (immediate, no confirm) → Inactive; Activate restores", async ({ as, api, cleanup }) => {
+  test("team table lists a staff account; Deactivate (immediate, no confirm) → Inactive; Activate restores", async ({ as, api, cleanup }) => {
     const admin = await api("admin");
-    const me = (await staffAccountByEmail(admin, "staff@clinic.test"))!;
-    cleanup(async () => { await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Active" } }); });
+    const email = "phase5doctor@clinic.test"; // spare dev account nothing else logs in with
+    const me = (await staffAccountByEmail(admin, email))!;
+    cleanup(async () => { await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: me.status } }); });
+    await admin.put(`/api/staff-accounts/${me.staff_id}`, { data: { ...me, status: "Active" } });
     const page = await as("admin");
     await page.goto("/admin/staff");
-    const row = page.getByRole("row", { name: /staff@clinic\.test/ });
+    const row = page.getByRole("row", { name: new RegExp(email.replace(".", "\\.")) });
     await expect(row).toContainText("Active");
     await row.getByRole("button", { name: "Deactivate" }).click();
-    await expect.poll(async () => (await staffAccountByEmail(admin, "staff@clinic.test"))?.status).toBe("Inactive");
+    await expect.poll(async () => (await staffAccountByEmail(admin, email))?.status).toBe("Inactive");
     await expect(row).toContainText("Inactive");
     await page.reload();
     await row.getByRole("button", { name: "Activate" }).click();
-    await expect.poll(async () => (await staffAccountByEmail(admin, "staff@clinic.test"))?.status).toBe("Active");
+    await expect.poll(async () => (await staffAccountByEmail(admin, email))?.status).toBe("Active");
     await page.reload();
     await expect(row).toContainText("Active");
   });

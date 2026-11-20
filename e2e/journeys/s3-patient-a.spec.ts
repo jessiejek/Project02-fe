@@ -242,7 +242,7 @@ test.describe("/patient/bookings", () => {
   });
 
   test("a future date books THAT date (not today)", async ({ loginAs, tag, cleanup }) => {
-    test.fail(true, "BUG-07: the UI sends camelCase appointmentDate; the API only binds appointment_date → 'Book this day' books TODAY");
+    //JJQR - AI (Nov 20, 2026) - BUG-07 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const me = await newPatient({ tag, cleanup }, "bkfut");
     const page = await loginAs(me.email, me.password);
     await page.goto("/patient/bookings");

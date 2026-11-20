@@ -11,7 +11,7 @@ test.describe("§4 journeys", () => {
   });
 
   test("J2 · doctor blocks tomorrow → patient cannot book tomorrow (covered by B7 in s2-suspected-bugs.spec.ts)", async ({ api, cleanup, tag }) => {
-    test.fail(true, "BUG-06 (B7): a blocked date is not enforced when booking online");
+    //JJQR - AI (Nov 20, 2026) - BUG-06 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const doc = await api("doctor");
     const d = (await (await doc.get("/api/doctors")).json())[0];
     const blockedDate = manilaDate(3);
