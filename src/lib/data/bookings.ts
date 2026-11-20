@@ -252,11 +252,14 @@ export async function queryStaffBookings(
 
 // JJQR - AI (Nov 20, 2026) - B-42: the front-desk dashboard wants today's LIVE rows (no Cancelled/Expired) and the true total, so a busy day cannot hide new walk-ins behind a 500-row cap
 export async function queryStaffToday(_supabase?: unknown): Promise<{ rows: BookingRow[]; total: number }> {
-  const res = await api.get<{ items?: Raw[]; totalCount?: number }>("/api/bookings/staff/today", {
-    query: { pageSize: 500, activeOnly: true },
-  });
-  const rows = unwrap(res).map(projectBooking);
-  return { rows, total: Array.isArray(res) ? rows.length : (res.totalCount ?? rows.length) };
+  // The arrivals list only shows Confirmed / CheckedIn rows, so ask for exactly those (a busy day cannot push them past the page cap),
+  // and read the true "on today's list" count (live rows only) from a second, one-row request.
+  const [list, count] = await Promise.all([
+    api.get<{ items?: Raw[] }>("/api/bookings/staff/today", { query: { pageSize: 500, activeOnly: true, statuses: "Confirmed,CheckedIn" } }),
+    api.get<{ totalCount?: number }>("/api/bookings/staff/today", { query: { pageSize: 1, activeOnly: true } }),
+  ]);
+  const rows = unwrap(list).map(projectBooking);
+  return { rows, total: count.totalCount ?? rows.length };
 }
 // JJQR - END
 
