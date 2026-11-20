@@ -50,6 +50,9 @@ const GLOBAL_ALLOW: RegExp[] = [
   /\/hubs\/clinic\//,             // SignalR negotiate/reconnect noise
   /_next\/|\.(?:png|ico|svg|woff2?|map|webmanifest)(\?|$)/, // static assets
   /\/serwist\/|\/sw\.js|\/manifest/,
+  //JJQR - AI (Nov 20, 2026) - batch 2 finding 1a: the consultation page asks GET /api/consultations/by-booking/{id} on open; the endpoint EXISTS (ConsultationsController.cs:85) and answers 404 by design when no consultation has been started for that booking yet (FE clinical.ts queryConsultationByBooking catches it → null). Expected on every first open of a new visit, not a missing endpoint.
+  /^404 GET \/api\/consultations\/by-booking\//,
+  //JJQR - END
 ];
 
 export const test = base.extend<Fixtures>({

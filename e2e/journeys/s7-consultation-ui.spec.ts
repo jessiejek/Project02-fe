@@ -138,9 +138,6 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
   });
 
   test("complete through the UI: review every required section → Complete → visit is Completed, patient owes the fee", async ({ as, api, tag, cleanup }) => {
-    // NOT FINISHED: after reviewing notes, diagnosis, follow-up ("No follow-up"), ticking "No medicines" and NKDA, the page still says
-    // "1 required section left" and Complete stays disabled; which section it is was not identified before the session was cut off.
-    test.fixme(true, "test incomplete — remaining required section not identified (not a confirmed app bug)");
     const { staff, v } = await openVisit({ api, tag, cleanup }, "cu-done");
     const page = await as("doctor");
     await page.goto(`/doctor/consultation2/${v.booking_id}`);
@@ -149,6 +146,8 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     // follow-up: choose "No follow-up"
     await nav(page, /6\. Follow-up/).click();
     await page.getByRole("radio", { name: "No follow-up" }).check({ force: true });
+    // choosing the radio alone does NOT satisfy the section — the doctor must also tick "No follow-up for this visit" (the section says so)
+    await page.getByRole("checkbox", { name: /No follow-up for this visit/ }).check();
     await page.getByRole("main").getByRole("button", { name: "Review section" }).first().click();
     await confirmDialog(page);
     // prescription: intentionally none, allergies reviewed
@@ -158,6 +157,7 @@ test.describe("/doctor/consultation2/[bookingId]", () => {
     await page.getByRole("checkbox", { name: "NKDA" }).click({ force: true });
     const doneBtn = page.getByRole("button", { name: "Done" });
     if (await doneBtn.isVisible().catch(() => false)) await doneBtn.click();
+    await expect(page.getByText(/required section.* left/)).toHaveCount(0);
     await expect(complete(page)).toBeEnabled({ timeout: 10_000 });
     await complete(page).click();
     const dlg = page.getByRole("dialog");
