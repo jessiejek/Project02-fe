@@ -1,6 +1,10 @@
 //JJQR - AI (Nov 19, 2026) - new file: /doctor/templates deep links (?tab=&field=&id=). The URL is the single source of truth for tab / open item.
 export const TEMPLATE_TABS = ["soap", "phrases", "rx", "favorites", "diagnoses", "certificates"] as const;
 export type TemplateTab = (typeof TEMPLATE_TABS)[number];
+//JJQR Nov 20, 2026 - Diagnoses tab hidden (same as consultation2 SHOW_DIAGNOSIS_STEP = false); data untouched
+export const SHOW_DIAGNOSES_TAB = false;
+export const VISIBLE_TEMPLATE_TABS: readonly TemplateTab[] = TEMPLATE_TABS.filter((t) => SHOW_DIAGNOSES_TAB || t !== "diagnoses");
+//JJQR - END
 
 export const TAB_LABELS: Record<TemplateTab, string> = {
   soap: "SOAP",
@@ -37,8 +41,10 @@ const TAB_ALIASES: Record<string, TemplateTab> = {
 
 export function parseTab(v: string | null | undefined): TemplateTab {
   const t = (v ?? "").trim().toLowerCase();
-  if ((TEMPLATE_TABS as readonly string[]).includes(t)) return t as TemplateTab;
-  return TAB_ALIASES[t] ?? "soap";
+  //JJQR Nov 20, 2026 - a hidden tab falls back to the first visible one
+  const found: TemplateTab = (TEMPLATE_TABS as readonly string[]).includes(t) ? (t as TemplateTab) : (TAB_ALIASES[t] ?? VISIBLE_TEMPLATE_TABS[0]);
+  return VISIBLE_TEMPLATE_TABS.includes(found) ? found : VISIBLE_TEMPLATE_TABS[0];
+  //JJQR - END
 }
 
 /** Accepts "Plan", "plan", "chiefComplaint", "chief_complaint", "ChiefComplaint"… → DB casing, or null. */

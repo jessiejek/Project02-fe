@@ -1,5 +1,5 @@
 "use client";
-//JJQR - AI (Nov 19, 2026) - new file: right-hand editor panel. Esc closes, Ctrl/Cmd+S saves, unsaved-changes guard; full-width sheet below 1024px (iPad portrait).
+//JJQR - AI (Nov 19, 2026) - new file: template editor (Nov 20: centered modal, max-w-2xl, max-h-[90vh], sticky header/footer; was a right-hand drawer). Esc closes, Ctrl/Cmd+S saves, unsaved-changes guard; full-width sheet below 1024px (iPad portrait).
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
 import { Button } from "@/components/ui/Button";
@@ -84,7 +84,7 @@ export function SidePanel({ isOpen, title, subtitle, dirty = false, saving = fal
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-sm sm:p-lg">
       <button type="button" aria-label="Close editor" onClick={requestClose} className="absolute inset-0 bg-on-surface/40 backdrop-blur-sm" />
       <div
         ref={panelRef}
@@ -92,9 +92,9 @@ export function SidePanel({ isOpen, title, subtitle, dirty = false, saving = fal
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 flex h-full w-full flex-col bg-surface-container-lowest shadow-lg outline-none lg:w-[540px]"
+        className="relative z-10 flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl bg-surface-container-lowest shadow-lg outline-none"
       >
-        <div className="flex items-start justify-between gap-md border-b border-outline-variant px-lg py-md">
+        <div className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-md border-b border-outline-variant bg-surface-container-lowest px-lg py-md">
           <div className="min-w-0">
             <h2 className="truncate text-headline-sm text-on-surface">{title}</h2>
             {subtitle && <p className="text-label-md text-on-surface-variant">{subtitle}</p>}
@@ -103,8 +103,8 @@ export function SidePanel({ isOpen, title, subtitle, dirty = false, saving = fal
             <Icon name="close" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-lg py-lg">{children}</div>
-        <div className="sticky bottom-0 border-t border-outline-variant bg-surface-container-lowest px-lg py-md">
+        <div className="min-h-0 flex-1 overflow-y-auto px-lg py-lg">{children}</div>
+        <div className="sticky bottom-0 shrink-0 border-t border-outline-variant bg-surface-container-lowest px-lg py-md">
           {!readOnly && saveBlockedReason && (
             <p role="status" className="mb-sm text-label-md text-status-warning">{saveBlockedReason}</p>
           )}

@@ -6,7 +6,7 @@ const TABS: { tab: string; button: RegExp }[] = [
   { tab: "phrases", button: /Phrases \(\d+\)/ },
   { tab: "rx", button: /Prescriptions \(\d+\)/ },
   { tab: "favorites", button: /Favorites \(\d+\)/ },
-  { tab: "diagnoses", button: /Diagnoses \(\d+\)/ },
+  //JJQR Nov 20, 2026 - Diagnoses tab hidden
   { tab: "certificates", button: /Certificates \(\d+\)/ },
 ];
 

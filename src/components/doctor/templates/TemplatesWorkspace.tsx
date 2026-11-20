@@ -8,7 +8,7 @@ import { ToastHost, useToastQueue } from "@/components/ui/ToastHost";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
-import { TEMPLATE_TABS, TAB_LABELS, buildTemplatesUrl, parseField, parseTab, type TemplateTab } from "@/lib/templates/urlState";
+import { VISIBLE_TEMPLATE_TABS, TAB_LABELS, buildTemplatesUrl, parseField, parseTab, type TemplateTab } from "@/lib/templates/urlState";
 import { releaseHistoryGuard } from "@/lib/templates/historyGuard";
 import { searchAll, totalHits, type SearchLibrary } from "@/lib/templates/search";
 import { useTemplatesData } from "./useTemplatesData";
@@ -85,7 +85,7 @@ export function TemplatesWorkspace() {
     <div className="space-y-md">
       {/*JJQR - AI (Nov 19, 2026) - plain buttons (no ARIA tab roles) so the existing e2e selector getByRole("button", { name: /SOAP \(\d+\)/ }) keeps working */}
       <nav aria-label="Template type" className="flex flex-wrap gap-x-xs border-b border-outline-variant">
-        {TEMPLATE_TABS.map((id) => {
+        {/* //JJQR Nov 20, 2026 - Diagnoses hidden */}{VISIBLE_TEMPLATE_TABS.map((id) => {
           const label = `${TAB_LABELS[id]} (${counts[id]})`;
           const active = tab === id;
           return (
@@ -156,7 +156,7 @@ function SearchResults({ hits, query, onOpen }: { hits: ReturnType<typeof search
   }
   return (
     <div className="space-y-md" aria-label="Search results">
-      {TEMPLATE_TABS.filter((t) => hits[t].length > 0).map((t) => (
+      {VISIBLE_TEMPLATE_TABS.filter((t) => hits[t].length > 0).map((t) => (
         <section key={t} aria-label={`${TAB_LABELS[t]} results`}>
           <h3 className="mb-xs text-label-lg font-semibold text-on-surface">{TAB_LABELS[t]} <span className="font-normal text-on-surface-variant">({hits[t].length})</span></h3>
           <ul className="divide-y divide-outline-variant rounded-xl border border-outline-variant bg-surface-container-lowest">

@@ -23,6 +23,12 @@ test('urlState: tabs, aliases and the Phase 1 consultation2 deep links', () => {
   assert.equal(url.parseTab('med-certs'), 'certificates');
   assert.equal(url.parseTab('nope'), 'soap');
   assert.equal(url.parseTab(null), 'soap');
+  //JJQR Nov 20, 2026 - Diagnoses tab hidden
+  assert.equal(url.SHOW_DIAGNOSES_TAB, false);
+  assert.deepEqual([...url.VISIBLE_TEMPLATE_TABS], ['soap', 'phrases', 'rx', 'favorites', 'certificates']);
+  assert.equal(url.parseTab('diagnoses'), 'soap');
+  assert.equal(url.parseTab('diagnosis'), 'soap');
+  //JJQR - END
   assert.equal(url.parseField('chiefComplaint'), 'ChiefComplaint');
   assert.equal(url.parseField('plan'), 'Plan');
   assert.equal(url.parseField('Chief_Complaint'), 'ChiefComplaint');
