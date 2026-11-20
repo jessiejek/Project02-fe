@@ -100,7 +100,7 @@ test.describe("consultation-regression-matrix — amend cluster", () => {
         run: async () => {
           await showOccasionalSections(page);
           await openSectionByTitle(page, /Professional Fee/i);
-          await page.getByRole("button", { name: "Charge PF" }).click();
+          await page.getByRole("button", { name: "Charge", exact: true }).click();
           await page.getByRole("textbox", { name: "Amount" }).fill("500");
           await saveOpenSectionViaReview(page);
         },

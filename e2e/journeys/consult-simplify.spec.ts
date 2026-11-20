@@ -106,5 +106,17 @@ test.describe("Consultation2 simplify F1–F4 professional fee", () => {
     await expect(doctor.getByText("Appointment type")).toBeVisible();
     await expect(doctor.getByRole("button", { name: "Decide at desk" })).toBeVisible();
   });
+
+  test("F2 section 9 labels are Charge, Waive, Decide at desk", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await steps.getByRole("button", { name: "More", exact: true }).click();
+    await openSectionByTitle(doctor, /Professional Fee/i);
+    await expect(doctor.getByRole("button", { name: "Charge", exact: true })).toBeVisible();
+    await expect(doctor.getByRole("button", { name: "Waive", exact: true })).toBeVisible();
+    await expect(doctor.getByRole("button", { name: "Decide at desk", exact: true })).toBeVisible();
+    await expect(doctor.getByRole("button", { name: "Charge PF" })).toHaveCount(0);
+    await expect(doctor.getByRole("button", { name: "Waive PF" })).toHaveCount(0);
+  });
 });
 //JJQR - END

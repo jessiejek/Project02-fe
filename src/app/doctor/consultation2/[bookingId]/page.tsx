@@ -3088,14 +3088,15 @@ Return to patient queue
                           onClick={() => setPfDecision("charge")}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
-                          Charge PF
+                          {/*JJQR - AI (Nov 20, 2026) F2 — same labels as the completed-visit line */}
+                          Charge
                         </button>
                         <button
                           type="button"
                           onClick={() => setPfDecision("waive")}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "waive" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
-                          Waive PF
+                          Waive
                         </button>
                         <button
                           type="button"

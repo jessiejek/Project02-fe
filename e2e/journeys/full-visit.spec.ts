@@ -193,7 +193,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await open(/Professional Fee Decision/);
   // the +₱50 med-cert line item — this checkbox DOES persist (backend recomputes the fee)
   await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
-  await doctor.getByRole("button", { name: "Charge PF" }).click();
+  await doctor.getByRole("button", { name: "Charge", exact: true }).click();
   await doctor.getByRole("textbox", { name: "Amount" }).fill("500");
 
   // ── Complete → checklist modal → confirm ──────────────────────────────

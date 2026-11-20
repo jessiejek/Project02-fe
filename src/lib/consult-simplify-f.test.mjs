@@ -29,4 +29,16 @@ test('F1 completed view is a read-only Professional fee line; Edit opens section
   assert.match(view, /openProfessionalFeeForEdit/);
   assert.doesNotMatch(view, /Waived —/);
 });
+
+test('F2 labels are Charge, Waive, Decide at desk (no Charge PF / Waive PF)', () => {
+  assert.doesNotMatch(page, /Charge PF/);
+  assert.doesNotMatch(page, /Waive PF/);
+  assert.match(page, /setPfDecision\("charge"\)[\s\S]{0,500}Charge\s*<\/button>/);
+  assert.match(page, /setPfDecision\("waive"\)[\s\S]{0,400}Waive\s*<\/button>/);
+  assert.match(page, /setPfDecision\(null\)[\s\S]{0,400}Decide at desk\s*<\/button>/);
+  const fullVisit = readFileSync(new URL('../../e2e/journeys/full-visit.spec.ts', import.meta.url), 'utf8');
+  const matrix = readFileSync(new URL('../../e2e/journeys/consultation-regression-matrix.spec.ts', import.meta.url), 'utf8');
+  assert.doesNotMatch(fullVisit, /Charge PF|Waive PF/);
+  assert.doesNotMatch(matrix, /Charge PF|Waive PF/);
+});
 //JJQR - END
