@@ -30,7 +30,7 @@ for (const [name, viewport] of [["iPad portrait 768×1024", { width: 768, height
     test.use({ viewport });
     for (const [path, heading] of PATIENT_PAGES) {
       test(`${path} fits the screen and shows its heading`, async ({ as }) => {
-        if (path === "/patient/doctors") test.fail(true, "BUG-39: /patient/doctors is ~37,000px wide on an iPad/phone (something inside the page never wraps), so the page scrolls sideways");
+        //JJQR - AI (Nov 20, 2026) - B-39 fixed: test.fail marker removed, /patient/doctors must now fit the screen //JJQR - END
         const page = await as("patient");
         await page.goto(path);
         await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();

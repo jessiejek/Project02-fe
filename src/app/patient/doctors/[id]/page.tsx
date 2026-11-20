@@ -108,7 +108,7 @@ export default async function DoctorProfilePage({ params }: { params: Promise<{ 
                     </span>
                     <span className="tabular-nums">{formatClinicDate(review.created_at.slice(0, 10))}</span>
                   </p>
-                  <p className="text-body-md text-on-surface">{review.comment?.trim() || <span className="text-on-surface-variant">No comment.</span>}</p>
+                  <p className="text-body-md text-on-surface [overflow-wrap:anywhere]" /* JJQR - AI (Nov 20, 2026) - B-39: a 5,000-letter review comment with no spaces made the page ~37,000px wide */>{review.comment?.trim() || <span className="text-on-surface-variant">No comment.</span>}</p>
                 </li>
               ))}
             </ul>
