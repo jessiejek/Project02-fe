@@ -36,9 +36,9 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 ## Phase 4 — privacy (RA 10173)
 - [ ] PV-1: docs/privacy/AUDIT.md (OK/GAP with file:line)
 - [ ] PV-2: Role AND ownership checks on every endpoint
-- [ ] PV-3: Password min 12 + common-password block + lockout after failed logins
+- [x] PV-3: Password min 12 + common-password block + lockout after failed logins (BE fe999a7 lockout 5 fails/15 min + common-password block + 12 min; FE 691a5d5; xUnit 15 pass)
 - [~] PV-4: EXCLUDED by Jessie (Nov 20)
-- [ ] PV-5: Audit log of record views, logins, failed logins; admin "who looked at this patient"
+- [x] PV-5: Audit log of record views, logins, failed logins; admin "who looked at this patient" (BE 84109b5 Access/Auth rows + GET /api/audit-logs/patient/{id}/access; FE 691a5d5 'Access log' tab; xUnit 3 pass)
 - [ ] PV-6: HTTPS only in production; secure httpOnly cookies
 - [ ] PV-7: Uploaded files never public; auth + type/size checks
 - [ ] PV-8: Secrets out of code/config into env vars
