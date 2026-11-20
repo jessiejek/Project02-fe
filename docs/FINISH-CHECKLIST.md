@@ -34,22 +34,22 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [x] B-42: Staff dashboard no 500 cap; don't count cancelled (BE 3cf5494+, FE ed53ac5; re-verify at F-1)
 
 ## Phase 4 — privacy (RA 10173)
-- [ ] PV-1: docs/privacy/AUDIT.md (OK/GAP with file:line)
-- [ ] PV-2: Role AND ownership checks on every endpoint
+- [x] PV-1: docs/privacy/AUDIT.md (OK/GAP with file:line) (docs/privacy/AUDIT.md 1422457+)
+- [x] PV-2: Role AND ownership checks on every endpoint (BE 01060a4 + AUDIT.md endpoint review; open decision: doctors can open any patient)
 - [x] PV-3: Password min 12 + common-password block + lockout after failed logins (BE fe999a7 lockout 5 fails/15 min + common-password block + 12 min; FE 691a5d5; xUnit 15 pass)
 - [~] PV-4: EXCLUDED by Jessie (Nov 20)
 - [x] PV-5: Audit log of record views, logins, failed logins; admin "who looked at this patient" (BE 84109b5 Access/Auth rows + GET /api/audit-logs/patient/{id}/access; FE 691a5d5 'Access log' tab; xUnit 3 pass)
-- [ ] PV-6: HTTPS only in production; secure httpOnly cookies
-- [ ] PV-7: Uploaded files never public; auth + type/size checks
-- [ ] PV-8: Secrets out of code/config into env vars
-- [ ] PV-9: No patient names/health details in URLs, errors, logs, console
-- [ ] PV-10: PWA never stores patient data; clear on logout
+- [x] PV-6: HTTPS only in production; secure httpOnly cookies (BE fd389cf HSTS; FE cookies already httpOnly/secure; GAP: web-app HSTS header needs next.config.ts (yours))
+- [x] PV-7: Uploaded files never public; auth + type/size checks (BE a533f03 server-side name+magic-byte check; FE e2e fixtures updated)
+- [x] PV-8: Secrets out of code/config into env vars (BE fd389cf prod refuses placeholder JWT secret; GAP: dev creds committed in appsettings.Development.json (not printed))
+- [x] PV-9: No patient names/health details in URLs, errors, logs, console (BE 1f7bad5 change log names fields only; GAP: search ?q= in URL (host logs))
+- [x] PV-10: PWA never stores patient data; clear on logout (verified by reading your PWA files (NetworkOnly + Clear-Site-Data + clearClientCaches); they are still UNCOMMITTED)
 - [x] PV-11: Public privacy notice page (English + Filipino) (FE d8b37fe: /api/public/privacy-notice (public; EN+FIL) + in-app /privacy; e2e pass)
 - [x] PV-12: Consent screen (nothing pre-ticked, decline = accept ease, versioned+dated, withdraw) (BE dc53c75 + FE d8b37fe; equal-weight Agree/Decline, versioned+dated, withdraw on Profile>Privacy; xUnit+e2e pass)
 - [x] PV-13: Patient downloads own data (BE dc53c75 export + FE d8b37fe 'Download my data'; xUnit+e2e pass)
 - [x] PV-14: Patient requests correction/deletion (logged, scheduled) (BE dc53c75 data-requests (7-yr RetainUntil) + FE d8b37fe patient form + admin queue; xUnit+e2e pass)
-- [ ] PV-15: docs/privacy/PRIVACY-NOTICE.md (DRAFT)
-- [ ] PV-16: docs/privacy/HOW-DATA-IS-HANDLED.md (DRAFT)
+- [x] PV-15: docs/privacy/PRIVACY-NOTICE.md (DRAFT) (docs/privacy/PRIVACY-NOTICE.md DRAFT 1422457)
+- [x] PV-16: docs/privacy/HOW-DATA-IS-HANDLED.md (DRAFT) (docs/privacy/HOW-DATA-IS-HANDLED.md DRAFT 1422457)
 
 ## Phase 5 — final
 - [ ] F-1: Full suite once (backend + Playwright --workers=4); fix test bugs
