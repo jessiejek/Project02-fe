@@ -1,5 +1,6 @@
 "use client";
 
+import { friendlyError } from "@/lib/api/friendly-error";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -44,7 +45,17 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
   const [bio, setBio] = useState(doctor?.bio ?? "");
   const [schedule, setSchedule] = useState<DoctorScheduleDay[]>(doctor?.schedule ?? defaultSchedule());
 
+  // JJQR - AI (Nov 20, 2026) - B-31: a negative / non-numeric fee or a silly slot length cannot be saved (the API refuses it too)
+  const feeNumber = Number(consultationFee);
+  const formProblem =
+    consultationFee.trim() !== "" && (!Number.isFinite(feeNumber) || feeNumber < 0)
+      ? "Consultation fee cannot be negative."
+      : !Number.isInteger(Number(slotDurationMinutes)) || Number(slotDurationMinutes) < 5 || Number(slotDurationMinutes) > 240
+        ? "Slot duration must be a whole number between 5 and 240 minutes."
+        : null;
+  // JJQR - END
   const canSave =
+    formProblem === null &&
     name.trim() !== "" &&
     specialization.trim() !== "" &&
     consultationFee.trim() !== "" &&
@@ -112,9 +123,9 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
         s2_number: s2Number || null,
         slot_duration_minutes: Number(slotDurationMinutes) || 30,
       });
-    } catch {
+    } catch (e) {
       setInviting(false);
-      setInviteError("Could not save the doctor profile.");
+      setInviteError(friendlyError(e, "Could not save the doctor profile.")); // JJQR - AI (Nov 20, 2026) - B-01
       return;
     }
 
@@ -196,6 +207,7 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
             <label htmlFor={fid("slot")} className={labelStyles}>Slot duration (minutes)</label>
             <input id={fid("slot")} inputMode="numeric" value={slotDurationMinutes} onChange={(e) => setSlotDurationMinutes(e.target.value)} className={inputStyles("tabular-nums")} />
           </div>
+          {formProblem && <FormAlert tone="warning" className="sm:col-span-2">{formProblem}</FormAlert>}
         </div>
         <div className="space-y-xs">
           <label htmlFor={fid("bio")} className={labelStyles}>Bio <span className="font-normal text-on-surface-variant">(shown to patients)</span></label>

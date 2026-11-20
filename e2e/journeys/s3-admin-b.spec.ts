@@ -160,7 +160,7 @@ test.describe("/admin/bookings/[id] · actions", () => {
   });
 
   test("Cancel booking: a 4-character reason is refused (staff need 5+)", async ({ as, api, tag, cleanup }) => {
-    test.fail(true, "BUG-35: /admin/bookings/[id] 'Cancel booking' accepts a 4-character reason, while /staff/bookings/[id] requires 5+ — the rule differs by role");
+    //JJQR - AI (Nov 20, 2026) - BUG-35 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const b = await confirmedBooking({ api, tag, cleanup }, "abd-can4");
     const page = await as("admin");
     await page.goto(`/admin/bookings/${b.bookingId}`);

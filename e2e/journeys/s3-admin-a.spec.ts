@@ -122,7 +122,7 @@ test.describe("/admin/doctors", () => {
   });
 
   test("edit: a negative consultation fee is not stored", async ({ as, api, cleanup }) => {
-    test.fail(true, "BUG-31: /admin/doctors/{id}/edit accepts and stores a negative consultation fee (-50)");
+    //JJQR - AI (Nov 20, 2026) - BUG-31 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const s = await doctorSnapshot(admin);
     cleanup(() => restoreDoctor(admin, s));
@@ -340,7 +340,7 @@ test.describe("/admin/patients", () => {
   });
 
   test("Add patient: a date of birth in the future is refused", async ({ as, api, tag }) => {
-    test.fail(true, "BUG-33: 'Add patient' accepts a date of birth in the future (2999-01-01) typed into the date field (max= is only a hint) and creates the patient");
+    //JJQR - AI (Nov 20, 2026) - BUG-33 fixed: test.fail marker removed, the test must now pass //JJQR - END
     const admin = await api("admin");
     const first = tag("fut");
     const page = await as("admin");
