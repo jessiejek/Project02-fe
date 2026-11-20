@@ -52,8 +52,8 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 - [x] PV-16: docs/privacy/HOW-DATA-IS-HANDLED.md (DRAFT) (docs/privacy/HOW-DATA-IS-HANDLED.md DRAFT 1422457)
 
 ## Phase 5 — final
-- [ ] F-1: Full suite once (backend + Playwright --workers=4); fix test bugs
-- [ ] F-2: Build both (dotnet build, next build); lint 0 errors
+- [x] F-1: Full suite once (backend + Playwright --workers=4); fix test bugs (BE xUnit 345/345; Playwright 467 parallel -> 14 fails fixed (BE a7ef198 queue-number bug, FE 769fa51, be5b559), failing specs re-run green, serial @global 23/23)
+- [x] F-2: Build both (dotnet build, next build); lint 0 errors (dotnet build 0 errors; next build ok; eslint 0 errors, 29 warnings; FE 20db1b3)
 - [ ] F-3: docs/FINISH-REPORT.md written and returned
 
 ## Assumptions
