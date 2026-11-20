@@ -76,6 +76,7 @@ export interface RegisterPayload {
   dateOfBirth: string; // yyyy-MM-dd
   sex: "Male" | "Female";
   contactNumber?: string;
+  acceptedPrivacyNotice?: boolean; // JJQR - AI (Nov 20, 2026) - PV-12 // JJQR - END
 }
 
 export const dotnetAuth = {

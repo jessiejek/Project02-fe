@@ -9,6 +9,7 @@ import { AuthShell } from "@/components/auth/AuthShell";
 import { hintStyles, inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { safeNext } from "@/lib/auth/next";
 import { todayManila } from "@/lib/clock";
+import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJQR - AI (Nov 20, 2026) - PV-3 // JJQR - END
 
 const legendStyles = "text-headline-sm text-on-surface";
 
@@ -26,6 +27,7 @@ function RegisterPageForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [readNotice, setReadNotice] = useState(false); // JJQR - AI (Nov 20, 2026) - PV-12: never pre-ticked, optional here — the consent screen asks again // JJQR - END
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const mismatch = confirmPassword.length > 0 && password !== confirmPassword;
@@ -54,6 +56,7 @@ function RegisterPageForm() {
           contactNumber: contactNumber || undefined,
           email,
           password,
+          acceptedPrivacyNotice: readNotice, // JJQR - AI (Nov 20, 2026) - PV-12 // JJQR - END
         }),
       });
     } catch {
@@ -141,13 +144,13 @@ function RegisterPageForm() {
           <div className="grid gap-md sm:grid-cols-2">
             <div className="space-y-xs">
               <label htmlFor="password" className={labelStyles}>Password</label>
-              <input id="password" type="password" autoComplete="new-password" required minLength={6} value={password}
+              <input id="password" type="password" autoComplete="new-password" required minLength={PASSWORD_MIN_LENGTH} value={password}
                 aria-describedby="password-hint" onChange={(e) => setPassword(e.target.value)} className={inputStyles()} />
-              <p id="password-hint" className={hintStyles}>At least 6 characters.</p>
+              <p id="password-hint" className={hintStyles}>{PASSWORD_HINT}</p>
             </div>
             <div className="space-y-xs">
               <label htmlFor="confirmPassword" className={labelStyles}>Confirm password</label>
-              <input id="confirmPassword" type="password" autoComplete="new-password" required minLength={6} value={confirmPassword}
+              <input id="confirmPassword" type="password" autoComplete="new-password" required minLength={PASSWORD_MIN_LENGTH} value={confirmPassword}
                 aria-invalid={mismatch || undefined} aria-describedby={mismatch ? "confirm-hint" : undefined}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className={inputStyles(mismatch ? "border-status-danger focus:border-status-danger focus:ring-status-danger/20" : undefined)} />
@@ -155,6 +158,13 @@ function RegisterPageForm() {
             </div>
           </div>
         </fieldset>
+
+        {/* JJQR - AI (Nov 20, 2026) - PV-12: optional, unticked. Creating an account does not depend on it; the consent screen before booking records the decision. */}
+        <label className="flex items-start gap-sm text-body-md text-on-surface">
+          <input type="checkbox" checked={readNotice} onChange={(e) => setReadNotice(e.target.checked)} className="mt-1 h-4 w-4" />
+          <span>I have read the <Link href="/privacy" target="_blank" className="underline">Privacy Notice</Link> (optional — you will be asked again before you book).</span>
+        </label>
+        {/* JJQR - END */}
 
         <Button type="submit" className="w-full" loading={submitting}>
           {submitting ? "Creating account…" : "Create account"}

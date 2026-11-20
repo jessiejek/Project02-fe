@@ -1,5 +1,6 @@
 "use client";
 
+import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJQR - AI (Nov 20, 2026) - PV-3 // JJQR - END
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -295,7 +296,7 @@ function ChangePasswordTab() {
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= 6 && newPassword === confirmPassword;
+  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= PASSWORD_MIN_LENGTH && newPassword === confirmPassword;
 
   async function handleUpdate() {
     if (!canUpdate) return;
@@ -322,7 +323,7 @@ function ChangePasswordTab() {
       {savedAt && <FormAlert tone="success">Password updated. Use it the next time you sign in.</FormAlert>}
       {error && <FormAlert>{error}</FormAlert>}
       <Field label="Current password" type="password" autoComplete="current-password" value={currentPassword} onChange={setCurrentPassword} />
-      <Field label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={setNewPassword} hint="At least 6 characters." />
+      <Field label="New password" type="password" autoComplete="new-password" value={newPassword} onChange={setNewPassword} hint={PASSWORD_HINT} />
       <Field label="Confirm new password" type="password" autoComplete="new-password" value={confirmPassword} onChange={setConfirmPassword} error={mismatch ? "Passwords don’t match yet." : undefined} />
       <Button type="submit" disabled={!canUpdate} loading={updating}>
         {updating ? "Updating…" : "Update password"}

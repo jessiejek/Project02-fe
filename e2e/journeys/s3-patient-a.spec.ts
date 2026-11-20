@@ -131,7 +131,7 @@ test.describe("/patient/profile", () => {
     expect((await (await me.api.get("/api/patients/me")).json()).city).toBe("Mandaue");
   });
 
-  test("Password tab: wrong current password is refused; mismatch / <6 chars keep the button disabled", async ({ loginAs, tag, cleanup, guard }) => {
+  test("Password tab: wrong current password is refused; mismatch / <12 chars keep the button disabled", async ({ loginAs, tag, cleanup, guard }) => {
     guard.allow(/4\d\d POST \/api\/(session|auth)\//);
     const me = await newPatient({ tag, cleanup }, "pw");
     const page = await loginAs(me.email, me.password);
@@ -143,6 +143,11 @@ test.describe("/patient/profile", () => {
     await page.getByLabel("New password", { exact: true }).fill("short");
     await page.getByLabel("Confirm new password").fill("short");
     await expect(update, "5-char password").toBeDisabled();
+    // JJQR - AI (Nov 20, 2026) - PV-3: minimum is now 12
+    await page.getByLabel("New password", { exact: true }).fill("Short-Pass1");
+    await page.getByLabel("Confirm new password").fill("Short-Pass1");
+    await expect(update, "11-char password").toBeDisabled();
+    // JJQR - END
     await page.getByLabel("New password", { exact: true }).fill("Longer-Pass-1");
     await page.getByLabel("Confirm new password").fill("Different-Pass-2");
     await expect(page.getByText("Passwords don’t match yet.")).toBeVisible();

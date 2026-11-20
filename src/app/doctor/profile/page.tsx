@@ -1,5 +1,6 @@
 "use client";
 
+import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJQR - AI (Nov 20, 2026) - PV-3 // JJQR - END
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
@@ -178,7 +179,7 @@ function ChangePasswordSection() {
   const [error, setError] = useState("");
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= 6 && newPassword === confirmPassword;
+  const canUpdate = currentPassword.trim() !== "" && newPassword.length >= PASSWORD_MIN_LENGTH && newPassword === confirmPassword;
 
   async function handleUpdate() {
     if (!canUpdate) return;

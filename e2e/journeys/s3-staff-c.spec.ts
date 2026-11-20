@@ -231,7 +231,7 @@ test.describe("/staff/profile", () => {
     expect(me.contact_number).not.toBe("not-a-number");
   });
 
-  test("password change: needs 6+ chars and a matching confirmation; wrong current password is refused; a correct change works and the new password logs in", async ({ as, api, cleanup, guard }) => {
+  test("password change: needs 12+ chars and a matching confirmation; wrong current password is refused; a correct change works and the new password logs in", async ({ as, api, cleanup, guard }) => {
     guard.allow(/\/api\/auth\/change-password/);
     const NEW = "E2e-Temp-Pass-1!";
     cleanup(() => restoreDevPassword("staff@clinic.test", [NEW]));
