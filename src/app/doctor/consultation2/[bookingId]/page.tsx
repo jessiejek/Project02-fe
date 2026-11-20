@@ -81,6 +81,7 @@ import {
   deleteFollowUpByConsultation,
   upsertMedicalCertificateByConsultation,
   queryMedicalCertificateByConsultation,
+  deleteMedicalCertificateByConsultation,
   queryRxGroups,
   queryVitalReadings,
   type RxGroupRow,
@@ -96,6 +97,7 @@ import {
   examinedAtFromClinic,
   patientAddressFromProfile,
   shouldApplyTemplateDiagnosis,
+  medCertFeeAddOn,
 } from "@/lib/clinical/med-cert-fields";
 //JJQR - END
 import {
@@ -924,7 +926,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // see (and reverse) their own override without losing that context.
   const [staffVisitType, setStaffVisitType] = useState<"New" | "FollowUp" | null>(null);
   const [discountCategory, setDiscountCategory] = useState<"Senior" | "PWD" | "">("");
-  const [medCertRequested, setMedCertRequested] = useState(false);
   const [feeSchedule, setFeeSchedule] = useState<ClinicFeeSchedule | null>(null);
   // §16.8 Form 2 — medical certificate (its own section, index 7).
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
@@ -1082,6 +1083,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // Doctor's reusable "reason for the cert" text (managed in Settings).
   const [saveMcTplOpen, setSaveMcTplOpen] = useState(false);
   const [saveMcTplTitle, setSaveMcTplTitle] = useState("");
+
+  //JJQR - AI (Nov 20, 2026) E4 — add-on follows a filled/issued certificate
+  const medCertRequested = medCertFeeAddOn({
+    certExists,
+    recommendations: mcRecommendations,
+    purposeException: mcPurposeException,
+    comeBackOn: mcComeBackOn,
+  });
+  //JJQR - END
 
   //JJQR - AI (Nov 20, 2026) F3 — one total line; same math as the former inline previewFee
   const feePreview = feeSchedule
@@ -1337,7 +1347,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setVisitType(realBooking.visitType);
       setStaffVisitType(realBooking.visitType);
       setDiscountCategory(realBooking.discountCategory);
-      setMedCertRequested(realBooking.medCertRequested);
       queryClinicSettings(supabase)
         .then((s) => {
           if (!cancelled && s) {
@@ -1652,7 +1661,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   // delete-reinserts consultation_diagnoses (matches the UI's own
   // add/remove/mark-primary array semantics) and upserts/clears follow_ups
   // (Implementation-Phases/07-consultations-vitals.md §7a/7b/7d).
-  async function persistConsultation(status: "Draft" | "Completed" | "Amended"): Promise<string | null> {
+  async function persistConsultation(
+    status: "Draft" | "Completed" | "Amended",
+    opts?: { medCertRequested?: boolean },
+  ): Promise<string | null> {
     if (!booking) return null;
     const supabase = null as never;
 
@@ -1669,7 +1681,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         plan: plan || null,
         // §16.6 — backend recomputes total_fee / amount_due from these.
         visit_type: visitType,
-        med_cert_requested: medCertRequested,
+        med_cert_requested: opts?.medCertRequested ?? medCertRequested,
         discount_category: discountCategory || null,
         // §16.6 — the doctor's PF call travels on the consultation row.
         pf_decision: pfDecision === "charge" ? "Charge" : pfDecision === "waive" ? "Waive" : null,
@@ -1825,8 +1837,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     const supabase = null as never;
     try {
       //JJQR - AI (Oct 31, 2026)
-      const consultId =
-        consultationId ?? (await persistConsultation(mode === "amend" ? "Amended" : "Draft"));
+      const consultId = await persistConsultation(mode === "amend" ? "Amended" : "Draft", {
+        medCertRequested: true,
+      });
       if (!consultId) return;
       const today = todayManila();
       //JJQR - AI (Nov 20, 2026) E1 — persist a typed address onto the patient profile when none was on file
@@ -1856,7 +1869,6 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       };
       await upsertMedicalCertificateByConsultation(supabase, consultId, cert);
       setCertExists(true);
-      setMedCertRequested(true);
       setCertSavedAt(new Date().toLocaleTimeString());
       if (mode === "amend") setAmendSnapshot(currentFormSnapshot());
       if (!printAfter) return;
@@ -1889,6 +1901,34 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setIssuingCert(false);
     }
   }
+
+  //JJQR - AI (Nov 20, 2026) E4 — clearing the certificate turns the fee add-on off
+  async function handleRemoveCertificate() {
+    if (issuingCert) return;
+    setIssuingCert(true);
+    const supabase = null as never;
+    try {
+      if (consultationId) {
+        await deleteMedicalCertificateByConsultation(supabase, consultationId);
+      }
+      setCertExists(false);
+      setMcRecommendations("");
+      setMcPurposeException("");
+      setMcComeBackOn("");
+      setMcDiagnosis("");
+      setMcDiagnosisDirty(false);
+      setMcAddress(patientAddressFromProfile(patientDetail?.address, patientDetail?.city));
+      setMcExaminedAt(examinedAtFromClinic(clinicRow?.clinic_name, clinicRow?.address));
+      const today = todayManila();
+      setMcExamFrom(today);
+      setMcExamTo(today);
+      setCertSavedAt(null);
+      await persistConsultation(mode === "amend" ? "Amended" : "Draft", { medCertRequested: false });
+    } finally {
+      setIssuingCert(false);
+    }
+  }
+  //JJQR - END
 
   function currentFormSnapshot() {
     return JSON.stringify({
@@ -3050,6 +3090,13 @@ Return to patient queue
                         <Button variant="secondary" loading={issuingCert} disabled={!clinicRow} onClick={() => setCertConfirmPrint(false)}>
                           Save without printing
                         </Button>
+                        {/*JJQR - AI (Nov 20, 2026) E4 */}
+                        {medCertRequested && (
+                          <Button variant="ghost" loading={issuingCert} onClick={() => void handleRemoveCertificate()}>
+                            Remove certificate
+                          </Button>
+                        )}
+                        {/*JJQR - END */}
                       </div>
                       <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
                         {/*JJQR - AI (Nov 20, 2026) E3 */}
@@ -3144,15 +3191,13 @@ Return to patient queue
                             <option value="PWD">PWD</option>
                           </select>
                         </div>
-                        <label className="flex items-center gap-sm text-body-md text-on-surface-variant">
-                          <input
-                            type="checkbox"
-                            checked={medCertRequested}
-                            onChange={(e) => setMedCertRequested(e.target.checked)}
-                            className="h-5 w-5"
-                          />
-                          Medical certificate (+₱{feeSchedule?.medCert ?? 50}) — issue it in section 8
-                        </label>
+                        {/*JJQR - AI (Nov 20, 2026) E4 — add-on is read-only; follows a filled/issued certificate */}
+                        {medCertRequested && (
+                          <p className="text-body-md text-on-surface">
+                            Medical certificate +₱{feeSchedule?.medCert ?? 50} — included because a certificate was issued
+                          </p>
+                        )}
+                        {/*JJQR - END */}
                         {/*JJQR - AI (Nov 20, 2026) F3 — one Total line from computeClinicFee */}
                         {feePreview && (
                           <p className="text-label-md text-on-surface">

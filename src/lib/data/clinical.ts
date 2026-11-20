@@ -274,11 +274,18 @@ export async function upsertMedicalCertificateByConsultation(
   return api.put<MedicalCertificateRow>(`/api/medical-certificates/by-consultation/${consultationId}`, body);
 }
 
+/** Idempotent: 404 means there is already no certificate to delete. */
 export async function deleteMedicalCertificateByConsultation(
   _supabase: unknown,
   consultationId: string,
 ): Promise<void> {
-  await api.delete(`/api/medical-certificates/by-consultation/${consultationId}`);
+  //JJQR - AI (Nov 20, 2026) E4
+  try {
+    await api.delete(`/api/medical-certificates/by-consultation/${consultationId}`);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 404)) throw e;
+  }
+  //JJQR - END
 }
 
 // ── prescriptions ─────────────────────────────────────────────────────────

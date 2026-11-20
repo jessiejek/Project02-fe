@@ -123,10 +123,11 @@ test.describe("Consultation2 simplify F1–F4 professional fee", () => {
   test("F3 follow-up with med cert shows Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)", async ({ as, api }) => {
     const doctor = await openFreshConsult(as, api);
     await doctor.getByRole("button", { name: "Follow-up visit" }).click();
+    await openSectionByTitle(doctor, /7\. Medical Certificate/i);
+    await doctor.getByPlaceholder(/Recommendations/).fill("Rest 3 days");
     const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
     await steps.getByRole("button", { name: "More", exact: true }).click();
     await openSectionByTitle(doctor, /Professional Fee/i);
-    await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
     await expect(doctor.getByText("Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)")).toBeVisible();
     await expect(doctor.getByText("Computed clinic fee")).toHaveCount(0);
   });
@@ -196,6 +197,30 @@ test.describe("Consultation2 simplify E1–E5 medical certificate", () => {
     await expect(examined).toHaveValue(examinedBefore);
     await expect(dx).toHaveValue(dxBefore);
     await expect(dx).not.toHaveValue(/No active contagious disease/i);
+  });
+
+  test("E4 issuing a certificate turns the fee add-on on; removing turns it off", async ({ as, api }) => {
+    const doctor = await openFreshConsult(as, api);
+    await doctor.getByRole("button", { name: "Follow-up visit" }).click();
+    const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+    await steps.getByRole("button", { name: "More", exact: true }).click();
+    await openSectionByTitle(doctor, /Professional Fee/i);
+    await expect(doctor.getByText("Total: ₱350 (Follow-up ₱350)")).toBeVisible();
+    await openSectionByTitle(doctor, /7\. Medical Certificate/i);
+    await doctor.getByPlaceholder(/Recommendations/).fill("Rest 3 days");
+    await doctor.getByRole("button", { name: "Save without printing" }).click();
+    await doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ }).getByRole("button", { name: /Confirm & Save/ }).click();
+    await expect(doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ })).toHaveCount(0, { timeout: 15_000 });
+    await steps.getByRole("button", { name: "More", exact: true }).click();
+    await openSectionByTitle(doctor, /Professional Fee/i);
+    await expect(doctor.getByText("Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)")).toBeVisible();
+    await expect(doctor.getByText(/Medical certificate \+₱50 — included because a certificate was issued/)).toBeVisible();
+    await openSectionByTitle(doctor, /7\. Medical Certificate/i);
+    await doctor.getByRole("button", { name: "Remove certificate" }).click();
+    await steps.getByRole("button", { name: "More", exact: true }).click();
+    await openSectionByTitle(doctor, /Professional Fee/i);
+    await expect(doctor.getByText("Total: ₱350 (Follow-up ₱350)")).toBeVisible();
+    await expect(doctor.getByText(/included because a certificate was issued/)).toHaveCount(0);
   });
 });
 //JJQR - END

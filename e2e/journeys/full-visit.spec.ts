@@ -189,10 +189,10 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ }).getByRole("button", { name: /Confirm & Save/ }).click();
   await expect(doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ })).toHaveCount(0, { timeout: 15_000 });
 
-  // ── 9. Professional Fee Decision — flag med-cert fee + record a charge ──
+  // ── 9. Professional Fee Decision — med-cert add-on follows the issued certificate ──
+  await steps.getByRole("button", { name: "More", exact: true }).click();
   await open(/Professional Fee Decision/);
-  // the +₱50 med-cert line item — this checkbox DOES persist (backend recomputes the fee)
-  await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
+  await expect(doctor.getByText(/Medical certificate \+₱50 — included because a certificate was issued/)).toBeVisible();
   await doctor.getByRole("button", { name: "Charge", exact: true }).click();
   await doctor.getByRole("textbox", { name: "Amount" }).fill("500");
 

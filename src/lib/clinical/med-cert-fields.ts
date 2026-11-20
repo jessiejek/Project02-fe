@@ -29,4 +29,15 @@ export function cleanMedCertAddress(addr: string | null | undefined): string {
   s = s.replace(/,\s*,+/g, ", ");
   return s;
 }
+
+//JJQR - AI (Nov 20, 2026) E4 — fee add-on follows a filled/issued certificate, not a checkbox
+export function medCertFeeAddOn(opts: {
+  certExists: boolean;
+  recommendations: string;
+  purposeException: string;
+  comeBackOn: string;
+}): boolean {
+  if (opts.certExists) return true;
+  return [opts.recommendations, opts.purposeException, opts.comeBackOn].some((s) => s.trim() !== "");
+}
 //JJQR - END

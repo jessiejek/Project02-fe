@@ -21,6 +21,7 @@ const {
   diagnosisTextFromConsult,
   shouldApplyTemplateDiagnosis,
   cleanMedCertAddress,
+  medCertFeeAddOn,
 } = load('lib/clinical/med-cert-fields.ts');
 const printForms = read('lib/print-forms.ts');
 
@@ -67,5 +68,18 @@ test('E3 patient address is a clean field; print builds a single residing-at sen
   assert.equal(cleanMedCertAddress('residing at residing at Cebu City,'), 'Cebu City');
   assert.equal(cleanMedCertAddress('  123 Main St,  '), '123 Main St');
   assert.equal(cleanMedCertAddress(''), '');
+});
+
+test('E4 med-cert fee add-on follows a filled/issued certificate; checkbox is gone', () => {
+  assert.match(page, /medCertFeeAddOn/);
+  assert.match(page, /included because a certificate was issued/);
+  assert.match(page, /Remove certificate/);
+  assert.match(page, /deleteMedicalCertificateByConsultation/);
+  assert.doesNotMatch(page, /issue it in section 8/);
+  assert.doesNotMatch(page, /setMedCertRequested/);
+  assert.doesNotMatch(page, /type="checkbox"[\s\S]{0,180}Medical certificate \(\+₱/);
+  assert.equal(medCertFeeAddOn({ certExists: true, recommendations: '', purposeException: '', comeBackOn: '' }), true);
+  assert.equal(medCertFeeAddOn({ certExists: false, recommendations: 'Rest', purposeException: '', comeBackOn: '' }), true);
+  assert.equal(medCertFeeAddOn({ certExists: false, recommendations: '', purposeException: '', comeBackOn: '' }), false);
 });
 //JJQR - END
