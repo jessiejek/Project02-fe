@@ -1774,6 +1774,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         med_cert_requested: opts?.medCertRequested ?? medCertRequested,
         discount_category: discountCategory || null,
         // §16.6 — the doctor's PF call travels on the consultation row.
+        //JJQR - AI (Nov 20, 2026) F5 — Charge default + Total amount persist on Save/Complete even if section 9 was never opened
         pf_decision: pfDecision === "charge" ? "Charge" : pfDecision === "waive" ? "Waive" : null,
         pf_amount: pfDecision === "charge" ? Number(pfAmountShown) || null : null,
         pf_waive_reason: pfDecision === "waive" ? pfWaiveReason || null : null,
@@ -1783,6 +1784,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
     const savedId = saved.consultation_id;
     setConsultationId(savedId);
+    //JJQR - AI (Nov 20, 2026) F5 — bake the prefilled Total into editor state so the completed line and later Edit keep Charge ₱<total>
+    if (pfDecision === "charge" && pfAmount.trim() === "" && pfAmountShown.trim() !== "") {
+      setPfAmount(pfAmountShown);
+    }
 
     await replaceDiagnoses(
       supabase,
@@ -2311,9 +2316,14 @@ Return to patient queue
             <p><strong>Lab orders:</strong> {labCount}</p>
             <p><strong>Follow-up:</strong> {followUpSummary}</p>
           </Card>
-          {/*JJQR - AI (Nov 20, 2026) F1 — read-only PF line; Edit opens section 9 */}
+          {/*JJQR - AI (Nov 20, 2026) F1 F5 — read-only PF line uses the just-saved Charge+amount (not the emptied editor prefill) */}
           <p className="text-body-md text-on-surface">
-            {formatProfessionalFeeLine({ decision: pfDecision, amount: pfAmountShown, waiveReason: pfWaiveReason, computedTotal: previewFee })}{" "}
+            {formatProfessionalFeeLine({
+              decision: pfViewDecisionFromStored(savedConsultation?.feeDecision) ?? pfDecision,
+              amount: pfEditorAmountFromStored(savedConsultation?.feeDecision) || pfAmountShown,
+              waiveReason: savedConsultation?.feeDecision?.type === "Waive" ? (savedConsultation.feeDecision.waiveReason ?? "") : pfWaiveReason,
+              computedTotal: previewFee,
+            })}{" "}
             <button
               type="button"
               onClick={openProfessionalFeeForEdit}
@@ -2842,7 +2852,8 @@ Return to patient queue
                           href={manageTemplatesHref("diagnoses")}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label="Manage saved diagnoses (opens in a new tab)"
+                          aria-label="Manage"
+                          title="Manage saved diagnoses (opens in a new tab)"
                           className="inline-flex min-h-[44px] shrink-0 items-center text-label-sm text-on-surface-variant hover:underline"
                         >
                           Manage
@@ -3228,12 +3239,13 @@ Return to patient queue
                         >
                           Save as Template
                         </button>
-                        {/*JJQR - AI (Nov 19, 2026) - Manage certificate templates in a new tab, deep link */}
+                        {/*JJQR - AI (Nov 20, 2026) C3 — visible and accessible name are both Manage (one link) */}
                         <Link
                           href={manageTemplatesHref("certificates")}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label="Manage certificate templates (opens in a new tab)"
+                          aria-label="Manage"
+                          title="Manage certificate templates (opens in a new tab)"
                           className="text-label-sm text-on-surface-variant hover:underline"
                         >
                           Manage

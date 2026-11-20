@@ -121,6 +121,8 @@ test('F5 Charge is the editor default when pf_decision is null; view still shows
   assert.match(page, /const pfAmountShown/);
   assert.match(page, /shouldPrefillChargeAmount/);
   assert.match(page, /value=\{pfAmountShown\}/);
+  assert.match(page, /setPfAmount\(pfAmountShown\)/);
+  assert.match(page, /pfEditorAmountFromStored\(savedConsultation\?\.feeDecision\) \|\| pfAmountShown/);
   assert.match(page, /Professional fee: Decide at desk/);
   const loadStart = page.indexOf('async function load()');
   const loadEnd = page.indexOf('if (cancelled) return;', loadStart);

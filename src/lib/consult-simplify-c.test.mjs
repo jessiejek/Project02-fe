@@ -30,6 +30,10 @@ test('C1 diagnosis combobox: one input, saved then ICD-10, keyboard + a11y', () 
   assert.match(combo, /e\.key === "Escape"/);
   assert.match(combo, /onAdd\(opt\.row\.description, opt\.row\.code\)/);
   assert.match(combo, /onPickSaved\(opt\.template\)/);
+  assert.match(combo, /aria-label="Diagnosis \(search ICD-10 or saved\)"/);
+  assert.match(combo, /function commitTypedFreeText/);
+  assert.match(combo, /onClick=\{commitTypedFreeText\}/);
+  assert.match(combo, /onAdd\(trimmed, null\)/);
 });
 
 test('C2 save typed text is a list option that creates a diagnosis template then adds it', () => {
@@ -42,6 +46,7 @@ test('C2 save typed text is a list option that creates a diagnosis template then
 
 test('C3 one Manage link per section (diagnosis keeps Manage deep link, drops Manage templates)', () => {
   assert.match(dx, /manageTemplatesHref\("diagnoses"\)/);
+  assert.match(dx, /aria-label="Manage"/);
   assert.match(dx, />\s*Manage\s*</);
   assert.doesNotMatch(dx, /Manage templates/);
   assert.equal((dx.match(/manageTemplatesHref/g) ?? []).length, 1);
@@ -49,6 +54,7 @@ test('C3 one Manage link per section (diagnosis keeps Manage deep link, drops Ma
   assert.equal((soap.match(/>\s*Manage templates\s*</g) ?? []).length, 1);
   const cert = page.slice(page.indexOf('{isOpen && i === 7 &&'), page.indexOf('{isOpen && i === 8 &&'));
   assert.equal((cert.match(/>\s*Manage\s*</g) ?? []).length, 1);
+  assert.match(cert, /aria-label="Manage"/);
   assert.doesNotMatch(cert, /Manage templates/);
 });
 

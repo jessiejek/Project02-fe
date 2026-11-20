@@ -41,13 +41,19 @@ test.describe("Consultation2 simplify C1–C6", () => {
 
   test("C3 one Manage link per section", async ({ as, api }) => {
     const doctor = await openFreshConsult(as, api);
+    //JJQR - AI (Nov 20, 2026) C3 — count by visible text so a longer aria-label cannot hide the one Manage link
+    const visibleManage = doctor.getByRole("link").filter({ hasText: /Manage/ });
     await openSectionByTitle(doctor, /1\. Clinical notes/i);
-    await expect(doctor.getByRole("link", { name: /Manage/ })).toHaveCount(1);
+    await expect(visibleManage).toHaveCount(1);
     await openSectionByTitle(doctor, /3\. Diagnosis/i);
-    await expect(doctor.getByRole("link", { name: /Manage/ })).toHaveCount(1);
-    await expect(doctor.getByRole("link", { name: /^Manage$/ })).toHaveCount(1);
+    await expect(visibleManage).toHaveCount(1);
+    const diagnosisManage = doctor.getByRole("link").filter({ hasText: /^Manage$/ });
+    await expect(diagnosisManage).toHaveCount(1);
+    await expect(diagnosisManage).toHaveText("Manage");
+    await expect(diagnosisManage).toHaveAttribute("href", /tab=diagnoses/);
     await openSectionByTitle(doctor, /7\. Medical Certificate/i);
-    await expect(doctor.getByRole("link", { name: /Manage/ })).toHaveCount(1);
+    await expect(visibleManage).toHaveCount(1);
+    await expect(doctor.getByRole("link").filter({ hasText: /^Manage$/ })).toHaveCount(1);
   });
 
   test("C4 no Saved at banner on open without a change", async ({ as, api }) => {

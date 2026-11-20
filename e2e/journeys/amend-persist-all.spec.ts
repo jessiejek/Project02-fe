@@ -148,7 +148,9 @@ test.describe("amend-persist-all", () => {
     const dx2 = `E2E second dx ${tag("dx")}`;
     await gotoAmendMode(doctor, ticket.booking_id);
     await openSectionByTitle(doctor, /3\. Diagnosis/);
-    await doctor.getByRole("textbox", { name: /Diagnosis \(search ICD-10/ }).fill(dx2);
+    //JJQR - AI (Nov 20, 2026) C1 — C1 replaced the ICD textbox with a combobox; type then Add commits free text
+    const dxBox = doctor.getByRole("combobox", { name: /Diagnosis \(search ICD-10 or saved\)/ });
+    await dxBox.fill(dx2);
     await doctor.getByRole("button", { name: "Add", exact: true }).click();
     await expect(doctor.getByText(new RegExp(dx2)).first()).toBeVisible();
     await clickSaveAmendment(doctor);

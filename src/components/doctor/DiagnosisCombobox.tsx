@@ -112,14 +112,19 @@ export function DiagnosisCombobox({ saved, onAdd, onPickSaved, onSaveToMyDiagnos
     }
   }
 
+  //JJQR - AI (Nov 20, 2026) C1 — Add (and Enter with nothing highlighted) keeps typed free text + Primary/Secondary behaviour
+  function commitTypedFreeText() {
+    if (!trimmed) return;
+    onAdd(trimmed, null);
+    clearAndFocus();
+  }
+
   function commitEnter() {
     if (open && activeIndex >= 0 && options[activeIndex]) {
       void commitOption(options[activeIndex]);
       return;
     }
-    if (!trimmed) return;
-    onAdd(trimmed, null);
-    clearAndFocus();
+    commitTypedFreeText();
   }
 
   const listOpen = open && !saving && options.length > 0;
@@ -133,8 +138,10 @@ export function DiagnosisCombobox({ saved, onAdd, onPickSaved, onSaveToMyDiagnos
       <div className="relative min-w-0 flex-1">
         <input
           ref={inputRef}
+          id={`${uid}-dx-input`}
           type="text"
           role="combobox"
+          name="diagnosis"
           aria-label="Diagnosis (search ICD-10 or saved)"
           aria-expanded={listOpen}
           aria-controls={listboxId}
@@ -229,7 +236,8 @@ export function DiagnosisCombobox({ saved, onAdd, onPickSaved, onSaveToMyDiagnos
           </ul>
         )}
       </div>
-      <Button variant="secondary" className="min-h-[44px]" disabled={saving || !trimmed} onClick={commitEnter}>
+      {/*JJQR - AI (Nov 20, 2026) C1 — Add commits typed free text; Enter still takes the highlighted option */}
+      <Button variant="secondary" className="min-h-[44px]" disabled={saving || !trimmed} onClick={commitTypedFreeText}>
         Add
       </Button>
     </div>
