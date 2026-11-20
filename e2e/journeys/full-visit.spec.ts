@@ -1,6 +1,7 @@
 import { test, expect } from "../support/fixtures";
 import {
-  createPatient,
+  createTaggedPatient,
+  getDoctor,
   checkInWalkIn,
   getBooking,
   getConsultationByBooking,
@@ -10,6 +11,8 @@ import {
   getMedicalCertificate,
   getVaccinations,
 } from "../support/api";
+import { confirmReviewSectionSave as confirmDialog } from "../support/consultation-flow";
+import { settleViaApi } from "../support/visit";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -59,16 +62,29 @@ const VITALS = {
   height: "170",
 };
 
-test("walk-in visit: register → full consultation (+ med cert) → pay → prescription PDF", async ({ as, api }) => {
+test("walk-in visit: register → full consultation (+ med cert) → pay → prescription PDF", async ({ as, api, tag: tagFx, cleanup }) => {
   test.setTimeout(240_000);
   const tag = Date.now().toString(36);
 
   const staffApi = await api("staff");
   const doctorApi = await api("doctor");
 
+  //JJQR - AI (Nov 20, 2026) - batch 2: the dev doctor has no PRC / PTR / S2 numbers, and the print only shows them when set — give the doctor
+  // test numbers for this journey and put the originals back afterwards (same PUT the admin edit page uses).
+  const adminApi = await api("admin");
+  const docBefore = await getDoctor(adminApi);
+  cleanup(async () => void (await adminApi.put(`/api/doctors/${docBefore.doctor_id}`, { data: docBefore })));
+  const lic = await adminApi.put(`/api/doctors/${docBefore.doctor_id}`, { data: { ...docBefore, license_number: "LIC-E2E-FV", ptr_number: "PTR-E2E-FV", s2_number: "S2-E2E-FV" } });
+  expect(lic.ok(), `set doctor numbers → ${lic.status()}`).toBeTruthy();
+  //JJQR - END
+
   // ── setup: a fresh patient in today's queue ──────────────────────────────
-  const patient = await createPatient(staffApi, tag);
+  const patient = await createTaggedPatient(staffApi, tagFx("fv"));
   const ticket = await checkInWalkIn(staffApi, patient.patient_id, { visit_type: "New" });
+  cleanup(async () => {
+    await staffApi.put(`/api/queue/${ticket.booking_id}/complete`).catch(() => undefined);
+    await settleViaApi(staffApi, ticket.booking_id);
+  });
   const patientName = `${patient.first_name} ${patient.last_name}`;
   expect(ticket.provisional_fee).toBe(450); // standard New consultation
 
@@ -83,124 +99,112 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   // ── doctor: run the consultation ────────────────────────────────────────
   // "Start Consultation" (/doctor/appointments) and "Open Consult" (queue board)
   // both just link here — go direct so the journey doesn't hinge on list state.
+  //JJQR - AI (Nov 20, 2026) - batch 2: rewritten for the redesigned consultation screen (step bar, labelled boxes, "Review & complete")
   const doctor = await as("doctor");
   await doctor.goto(`/doctor/consultation2/${ticket.booking_id}`);
-  await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
+  await expect(doctor.getByRole("heading", { name: "Document consultation", level: 1 })).toBeVisible();
+  const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
+  const open = (re: RegExp) => steps.getByRole("button", { name: re }).first().click();
 
-  // Progress is a header dropdown now (closed by default), not a floating
-  // panel — nothing to dismiss before filling the form.
+  // ── 1. Clinical notes — all five free-text fields ──────────────────────
+  await doctor.getByRole("textbox", { name: /Chief complaint/ }).fill(SOAP.chiefComplaint);
+  await doctor.getByRole("textbox", { name: "Subjective", exact: true }).fill(SOAP.subjective);
+  await doctor.getByRole("textbox", { name: "Objective", exact: true }).fill(SOAP.objective);
+  await doctor.getByRole("textbox", { name: "Assessment", exact: true }).fill(SOAP.assessment);
+  await doctor.getByRole("textbox", { name: "Plan", exact: true }).fill(SOAP.plan);
 
-  // ── 1. SOAP — all five free-text fields ────────────────────────────────
-  await doctor.getByPlaceholder("Chief Complaint*").fill(SOAP.chiefComplaint);
-  await doctor.getByPlaceholder("Subjective", { exact: true }).fill(SOAP.subjective);
-  await doctor.getByPlaceholder("Objective", { exact: true }).fill(SOAP.objective);
-  await doctor.getByPlaceholder("Assessment", { exact: true }).fill(SOAP.assessment);
-  await doctor.getByPlaceholder("Plan", { exact: true }).fill(SOAP.plan);
-
-  // ── 2. Vital Signs — every default field, then Save → confirm ───────────
-  await doctor.getByRole("heading", { name: /2\. Vital Signs/ }).click();
+  // ── 2. Vital Signs — every default field, then Save vital signs → confirm ─
+  await open(/2\. Vital Signs/);
   for (const [field, value] of Object.entries(VITALS)) {
-    const input = doctor.getByPlaceholder(`Enter ${field}`);
+    const input = doctor.getByRole("textbox", { name: `Enter ${field}` });
     await expect(input).toBeVisible();
     await input.fill(value);
   }
-  await doctor.getByRole("button", { name: "Save", exact: true }).click();
-  await doctor.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-  await expect(doctor.getByText(/Vitals saved at/)).toBeVisible();
+  await doctor.getByRole("button", { name: "Save vital signs" }).click();
+  await confirmDialog(doctor);
 
   // ── 3. Diagnosis — a primary + a secondary line ────────────────────────
-  await doctor.getByRole("heading", { name: /3\. Diagnosis/ }).click();
-  const dx = doctor.getByPlaceholder(/Diagnosis \(/);
+  await open(/3\. Diagnosis/);
+  const dx = doctor.getByRole("textbox", { name: /Diagnosis \(search ICD-10/ });
   await expect(dx).toBeVisible();
   await dx.fill(DX_PRIMARY);
-  const addButtons = doctor.getByRole("button", { name: "Add", exact: true });
-  await (await addButtons.count()) > 1 ? addButtons.nth(1).click() : addButtons.click();
+  await doctor.getByRole("button", { name: "Add", exact: true }).click();
   await expect(doctor.getByText(`${DX_PRIMARY} (Primary)`)).toBeVisible();
   await dx.fill(DX_SECONDARY);
-  await (await addButtons.count()) > 1 ? addButtons.nth(1).click() : addButtons.click();
+  await doctor.getByRole("button", { name: "Add", exact: true }).click();
   await expect(doctor.getByText(`${DX_SECONDARY} (Secondary)`)).toBeVisible();
 
-  // ── 4. Prescription — one item, then Save (Add Item only stages it) ─────
-  await doctor.getByRole("heading", { name: /4\. Prescription/ }).click();
-  //JJQR - AI (Oct 31, 2026) — soft allergy gate blocks Add Item until acknowledged
+  // ── 4. Prescription — one item, then Save medications → confirm ────────
+  await open(/4\. Prescription/);
+  // soft allergy gate blocks Add Item until the allergies are reviewed
   const ackBtn = doctor.getByRole("button", { name: "Acknowledge" });
-  if (await ackBtn.isVisible()) {
-    await ackBtn.click();
-  }
-  //JJQR - END
-  const med = doctor.getByPlaceholder("Medication — pick from the list or just type it");
-  await expect(med).toBeVisible();
-  await med.fill("Paracetamol");
-  await doctor.getByPlaceholder("Dosage / strength").fill("500 mg");
-  await doctor.getByPlaceholder("# Quantity (e.g. 30, 1 box)").fill("20 tablets");
-  //JJQR - AI (Oct 31, 2026) — route defaults PO; timing + duration required for print sig
+  if (await ackBtn.isVisible()) await ackBtn.click();
+  await doctor.getByRole("textbox", { name: "Medication" }).fill("Paracetamol");
+  await doctor.getByRole("textbox", { name: "Dosage / strength" }).fill("500 mg");
+  await doctor.getByRole("textbox", { name: "Quantity" }).fill("20 tablets");
   await doctor.getByRole("button", { name: "Breakfast", exact: true }).click();
   await doctor.getByRole("button", { name: "Days", exact: true }).click();
   await doctor.getByPlaceholder("# days").fill("5");
-  //JJQR - END
   await doctor.getByRole("button", { name: "Add Item" }).click();
-  await expect(doctor.getByText("Paracetamol", { exact: false })).toBeVisible();
-  await doctor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(doctor.getByRole("heading", { name: "Prescription items (1)" })).toBeVisible();
+  await doctor.getByRole("button", { name: "Save medications" }).click();
   await doctor.getByRole("dialog", { name: /Confirm Prescription/ }).getByRole("button", { name: /Confirm & Save/ }).click();
-  await expect(doctor.getByText(/Prescription saved at/)).toBeVisible({ timeout: 15_000 });
+  await expect(doctor.getByRole("dialog", { name: /Confirm Prescription/ })).toHaveCount(0, { timeout: 15_000 });
 
   // ── 5. Lab Orders — one handwritten test (persists on Complete) ─────────
-  const labOrdersHeading = doctor.getByRole("heading", { name: /Lab Orders/i });
-  if (!(await labOrdersHeading.isVisible())) {
-    await doctor.getByRole("button", { name: "More", exact: true }).click();
-  }
-  await labOrdersHeading.click();
-  await doctor.getByPlaceholder("Add another test").fill(LAB_TEST);
-  await doctor.getByPlaceholder("Reason / clinical indication").fill("rule out strep");
+  await open(/5\. Lab Orders/);
+  await doctor.getByRole("textbox", { name: "Add another test" }).fill(LAB_TEST);
+  await doctor.getByRole("textbox", { name: "Reason / clinical indication" }).fill("rule out strep");
   await doctor.getByRole("button", { name: "Add test" }).click();
   await expect(doctor.getByText(LAB_TEST, { exact: false })).toBeVisible();
 
-  // ── 6. Vaccinations — stage one dose ───────────────────────────────────
-  await doctor.getByRole("heading", { name: /Vaccinations/ }).click();
-  await doctor.getByPlaceholder("Vaccine Name").fill(VAX.name);
-  await doctor.getByPlaceholder("Dose #").fill(VAX.dose);
-  await doctor.getByPlaceholder("Route").fill(VAX.route);
-  await doctor.getByPlaceholder("Site").fill(VAX.site);
-  await doctor.getByPlaceholder("Lot #").fill(VAX.lot);
-  await doctor.getByPlaceholder("Manufacturer").fill(VAX.maker);
+  // ── 6. Vaccinations (behind More) — stage one dose ─────────────────────
+  await steps.getByRole("button", { name: "More", exact: true }).click();
+  await open(/Vaccinations/);
+  await doctor.getByRole("textbox", { name: "Vaccine Name" }).fill(VAX.name);
+  await doctor.getByRole("textbox", { name: "Dose #" }).fill(VAX.dose);
+  await doctor.getByRole("textbox", { name: "Route" }).fill(VAX.route);
+  await doctor.getByRole("textbox", { name: "Site" }).fill(VAX.site);
+  await doctor.getByRole("textbox", { name: "Lot #" }).fill(VAX.lot);
+  await doctor.getByRole("textbox", { name: "Manufacturer" }).fill(VAX.maker);
   await doctor.getByRole("button", { name: "Stage Vaccination" }).click();
   await expect(doctor.getByText(`${VAX.name} — Dose #${VAX.dose}`, { exact: false })).toBeVisible();
 
   // ── 7. Follow-up — date + reason + instructions (persists on Complete) ──
-  await doctor.getByRole("heading", { name: /Follow-up/ }).click();
+  await open(/Follow-up/);
   await doctor.getByRole("button", { name: "Select date" }).click();
   await doctor.getByRole("button", { name: "Next month" }).click();
-  await doctor.getByRole("button", { name: "15", exact: true }).first().click();
+  await doctor.getByRole("dialog", { name: "Choose a date" }).getByRole("button", { name: /^[A-Za-z]+ 15, \d{4}$/ }).click(); // day cells are labelled "December 15, 2026"
   // the trigger now shows the chosen date instead of the "Select date" placeholder
   await expect(doctor.getByRole("button", { name: "Select date" })).toHaveCount(0);
-  await doctor.getByPlaceholder("Reason").fill(FOLLOWUP_REASON);
-  await doctor.getByPlaceholder("Instructions").fill(FOLLOWUP_INSTRUCTIONS);
+  await doctor.getByRole("textbox", { name: "Reason", exact: true }).fill(FOLLOWUP_REASON);
+  await doctor.getByRole("textbox", { name: "Instructions", exact: true }).fill(FOLLOWUP_INSTRUCTIONS);
 
   // ── 8. Medical Certificate — fill + save (own endpoint, persists now) ──
-  await doctor.getByRole("heading", { name: /Medical Certificate/ }).click();
-  await doctor.getByPlaceholder(/residing at/).fill(MC_ADDRESS);
-  await doctor.getByPlaceholder(/Diagnosis \/ Impressions/).fill(MC_DIAGNOSIS);
-  await doctor.getByPlaceholder(/Recommendations/).fill(MC_RECOMMENDATIONS);
+  await open(/Medical Certificate/);
+  await doctor.getByRole("textbox", { name: /Patient address/ }).fill(MC_ADDRESS);
+  await doctor.getByRole("textbox", { name: /Diagnosis \/ Impressions/ }).fill(MC_DIAGNOSIS);
+  await doctor.getByRole("textbox", { name: /Recommendations/ }).fill(MC_RECOMMENDATIONS);
   await doctor.getByRole("button", { name: "Save without printing" }).click();
   await doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ }).getByRole("button", { name: /Confirm & Save/ }).click();
-  await expect(doctor.getByText(/Certificate saved at/)).toBeVisible({ timeout: 15_000 });
+  await expect(doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ })).toHaveCount(0, { timeout: 15_000 });
 
   // ── 9. Professional Fee Decision — flag med-cert fee + record a charge ──
-  await doctor.getByRole("heading", { name: /Professional Fee Decision/ }).click();
+  await open(/Professional Fee Decision/);
   // the +₱50 med-cert line item — this checkbox DOES persist (backend recomputes the fee)
   await doctor.getByRole("checkbox", { name: /Medical certificate/ }).check();
   await doctor.getByRole("button", { name: "Charge PF" }).click();
-  await doctor.getByPlaceholder("Amount*").fill("500");
+  await doctor.getByRole("textbox", { name: "Amount" }).fill("500");
 
   // ── Complete → checklist modal → confirm ──────────────────────────────
-  // exact: true — the floating counterpart button's name also contains
-  // "Complete Consultation" (prefixed with the "N/9" progress badge).
-  await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).first().click();
-  await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
   // The "Consultation saved" screen only renders after handleComplete has
   // finished ALL its writes (row + PF → diagnoses → follow-up → lab orders →
   // vaccinations), so this is where every child record is guaranteed on the server.
+  await expect(doctor.getByRole("button", { name: "Complete Consultation" })).toBeEnabled({ timeout: 10_000 });
+  await doctor.getByRole("button", { name: "Complete Consultation" }).click();
+  await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
   await expect(doctor.getByText("Consultation saved")).toBeVisible({ timeout: 20_000 });
+  //JJQR - END
 
   // ── server-side: every field we typed actually persisted ──────────────
   await expect
@@ -277,18 +281,17 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   await expect(row2.getByText("COMPLETED")).toBeVisible();
 
   await staff.goto("/staff/payments");
-  // Unlike the same-day queue board, this list isn't date-scoped — a long-lived
-  // dev DB accumulates unpaid rows across many days, and queue numbers reset
-  // daily, so two different days' "Q-012" can both show up in here at once
-  // (the row shows doctor + appointment date + queue #, not the patient name).
-  // Pin down today's date too so the two never collide.
-  const todayManila = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const payRow = staff.locator("tr, li", { hasText: ticket.queue_number }).filter({ hasText: todayManila });
-  await payRow.getByRole("button", { name: "Confirm Payment" }).click();
-  const payDialog = staff.getByRole("dialog");
-  await payDialog.getByRole("combobox").selectOption("Cash");
-  await payDialog.getByPlaceholder("Amount Received").fill(String(expectedDue));
-  await payDialog.getByRole("button", { name: "Confirm", exact: true }).click();
+  //JJQR - AI (Nov 20, 2026) - batch 2: the payments list is a table with "Record payment" and a labelled dialog
+  const payRow = staff.getByRole("row", { name: new RegExp(patient.first_name, "i") });
+  await expect(payRow).toBeVisible({ timeout: 15_000 });
+  await expect(payRow).toContainText(`₱${expectedDue}`);
+  await payRow.getByRole("button", { name: "Record payment" }).click();
+  const payDialog = staff.getByRole("dialog", { name: /Record payment of/ });
+  await expect(payDialog.getByLabel("Amount received (₱)")).toHaveValue(String(expectedDue));
+  await payDialog.getByLabel("Method").selectOption("Cash");
+  await payDialog.getByRole("button", { name: "Record payment" }).click();
+  await expect(payRow).toHaveCount(0, { timeout: 15_000 });
+  //JJQR - END
 
   await expect
     .poll(async () => (await getBooking(staffApi, ticket.booking_id)).status, { timeout: 20_000 })

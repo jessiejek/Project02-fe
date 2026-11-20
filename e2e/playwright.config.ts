@@ -14,7 +14,16 @@ import { defineConfig, devices } from "@playwright/test";
  */
 
 export const FE_URL = process.env.E2E_FE_URL ?? "http://localhost:3000";
-export const BE_URL = process.env.E2E_BE_URL ?? "http://localhost:5000";
+//JJQR - AI (Nov 19, 2026) - API default was :5000 but .env.local's NEXT_PUBLIC_API_URL runs the API on :5055, so api(role) seeding/cleanup hit the wrong port
+export const BE_URL = process.env.E2E_BE_URL ?? "http://127.0.0.1:5055";
+//JJQR - END
+
+//JJQR - AI (Nov 19, 2026) - one run id per `playwright test` invocation; every test tags its data E2E-<runId>
+// Set on process.env so forked workers inherit the same value as the main process.
+process.env.E2E_RUN_ID ??= Date.now().toString(36).slice(-6);
+export const RUN_ID = process.env.E2E_RUN_ID;
+export const TAG = `E2E-${RUN_ID}`;
+//JJQR - END
 export const DEV_PASSWORD = "ClinicDev123!";
 
 // Watch the run: `E2E_SLOWMO=350 npm run test:e2e:headed` slows every action so
@@ -41,7 +50,9 @@ export default defineConfig({
   },
 
   projects: [
-    { name: "setup", testMatch: /global\.setup\.ts/ },
+    //JJQR - AI (Nov 19, 2026) - first login of a role cold-compiles its dashboard in `next dev` and can exceed the timeout; retry the setup once
+    { name: "setup", testMatch: /global\.setup\.ts/, retries: 2, timeout: 120_000 },
+    //JJQR - END
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"], launchOptions: { slowMo: SLOWMO } },

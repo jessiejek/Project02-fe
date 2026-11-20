@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "../support/fixtures";
-import { createPatient, checkInWalkIn, getBooking, type SeededPatient, type QueueTicket } from "../support/api";
+import { createTaggedPatient, checkInWalkIn, getBooking, type SeededPatient, type QueueTicket } from "../support/api";
+import { completeConsultFromUi, fillRequiredConsultFields } from "../support/consultation-flow";
+import { settleViaApi } from "../support/visit";
 
 /**
  * End-to-end shift simulation, per the user's own framing: "doctors make
@@ -15,87 +17,54 @@ import { createPatient, checkInWalkIn, getBooking, type SeededPatient, type Queu
  */
 const PATIENT_COUNT = 3;
 
+//JJQR - AI (Nov 20, 2026) - batch 2: rewritten for the redesigned consultation + the "Record payment" dialog on /staff/payments
 async function completeMinimalConsultation(doctor: Page, bookingId: string, label: string) {
   await doctor.goto(`/doctor/consultation2/${bookingId}`);
-  await expect(doctor.getByRole("heading", { name: /SOAP & Chief Complaint/ })).toBeVisible();
-
-  await doctor.getByPlaceholder("Chief Complaint*").fill(`E2E batch — ${label}`);
-
-  await doctor.getByRole("heading", { name: /2\. Vital Signs/ }).click();
-  const bp = doctor.getByPlaceholder("Enter blood pressure");
-  await expect(bp).toBeVisible();
-  await bp.fill("120/80");
-  await doctor.getByPlaceholder("Enter pulse rate").fill("75");
-  await doctor.getByPlaceholder("Enter temperature").fill("36.8");
-  await doctor.getByPlaceholder("Enter respiratory rate").fill("18");
-  await doctor.getByPlaceholder("Enter o2 saturation").fill("98");
-  await doctor.getByPlaceholder("Enter weight").fill("60");
-  await doctor.getByPlaceholder("Enter height").fill("160");
-  await doctor.getByRole("button", { name: "Save", exact: true }).click();
-  await doctor.getByRole("dialog").getByRole("button", { name: "Confirm" }).click();
-  await expect(doctor.getByText(/Vitals saved at/)).toBeVisible();
-
-  await doctor.getByRole("heading", { name: /3\. Diagnosis/ }).click();
-  const dxInput = doctor.getByPlaceholder(/Diagnosis \(/);
-  await dxInput.fill("Acute URTI");
-  const addButtons = doctor.getByRole("button", { name: "Add", exact: true });
-  await (await addButtons.count()) > 1 ? addButtons.nth(1).click() : addButtons.click();
-  await expect(doctor.getByText("Acute URTI (Primary)")).toBeVisible();
-
-  await doctor.getByRole("heading", { name: /4\. Prescription/ }).click();
-  await doctor.getByText(/No medicines this visit/i).click();
-
-  await doctor.locator("h3").filter({ hasText: /Follow-up/ }).click();
-  await doctor.getByRole("button", { name: "Select date" }).click();
-  await doctor.getByRole("button", { name: "Today" }).click();
-
-  await doctor.getByRole("button", { name: "Complete Consultation", exact: true }).first().click();
-  await doctor.getByRole("button", { name: "Confirm & Complete" }).click();
-  await expect(doctor.getByText("Consultation saved")).toBeVisible({ timeout: 15_000 });
+  await expect(doctor.getByRole("heading", { name: "Document consultation", level: 1 })).toBeVisible();
+  await fillRequiredConsultFields(doctor, `E2E batch — ${label}`);
+  await completeConsultFromUi(doctor);
   await expect(doctor.getByText(/Could not complete the consultation/)).toHaveCount(0);
 
-  // The patient identifier fixed earlier this session — with several patients
-  // run back to back, this is the assertion that actually matters: without
-  // it, every one of these summary screens would be visually identical.
+  // The patient identifier: with several patients run back to back, this is the assertion that actually matters —
+  // without it every one of these summary screens would look the same.
   await expect(doctor.getByText(`Patient: ${label}`, { exact: false })).toBeVisible();
 }
 
-async function confirmPaymentFor(staff: Page, queueNumber: string, patientName: string, amountDue: number) {
-  const todayManila = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const row = staff
-    .locator("tr, li", { hasText: queueNumber })
-    .filter({ hasText: todayManila })
-    .filter({ hasText: patientName });
+async function recordPaymentFor(staff: Page, patientName: string, amountDue: number) {
+  const row = staff.getByRole("row", { name: new RegExp(patientName, "i") });
   await expect(row).toBeVisible({ timeout: 15_000 });
-  await row.getByRole("button", { name: "Confirm Payment" }).click();
-
-  const dialog = staff.getByRole("dialog");
-  await expect(dialog.getByText(patientName)).toBeVisible();
-  await dialog.getByRole("combobox").selectOption("Cash");
-  await dialog.getByPlaceholder("Amount Received").fill(String(amountDue));
-  await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
-  await expect(dialog).toBeHidden();
+  await row.getByRole("button", { name: "Record payment" }).click();
+  const dialog = staff.getByRole("dialog", { name: /Record payment of/ });
+  await expect(dialog.getByLabel("Amount received (₱)")).toHaveValue(String(amountDue));
+  await dialog.getByLabel("Method").selectOption("Cash");
+  await dialog.getByRole("button", { name: "Record payment" }).click();
+  await expect(row).toHaveCount(0, { timeout: 15_000 });
 }
 
-test("a full shift: doctor completes every consultation, then staff collects every payment", async ({ as, api }) => {
-  test.setTimeout(120_000);
+test("a full shift: doctor completes every consultation, then staff collects every payment", async ({ as, api, tag, cleanup }) => {
+  test.setTimeout(180_000);
 
   const staffApi = await api("staff");
   const doctorApi = await api("doctor");
 
-  const tag = Date.now().toString(36);
   const patients: SeededPatient[] = [];
   const tickets: QueueTicket[] = [];
   for (let i = 0; i < PATIENT_COUNT; i++) {
-    const patient = await createPatient(staffApi, `${tag}${i}`);
+    const patient = await createTaggedPatient(staffApi, tag(`shift${i}`));
     patients.push(patient);
-    tickets.push(await checkInWalkIn(staffApi, patient.patient_id, { visit_type: "New" }));
+    const t = await checkInWalkIn(staffApi, patient.patient_id, { visit_type: "New" });
+    tickets.push(t);
+    cleanup(async () => {
+      await staffApi.put(`/api/queue/${t.booking_id}/complete`).catch(() => undefined);
+      await settleViaApi(staffApi, t.booking_id);
+    });
   }
+  const labelOf = (i: number) => `${patients[i].first_name} ${patients[i].last_name}`;
 
   // ── doctor: work the queue, one patient at a time ────────────────────────
   const doctor = await as("doctor");
   for (let i = 0; i < PATIENT_COUNT; i++) {
-    await completeMinimalConsultation(doctor, tickets[i].booking_id, `E2E ${tag}${i} Tester`);
+    await completeMinimalConsultation(doctor, tickets[i].booking_id, labelOf(i));
   }
 
   // Server-side: every booking — not just the consultation row — must have
@@ -111,17 +80,17 @@ test("a full shift: doctor completes every consultation, then staff collects eve
   await staff.goto("/staff/payments");
   for (let i = 0; i < PATIENT_COUNT; i++) {
     const amountDue = Number((await getBooking(staffApi, tickets[i].booking_id)).amount_due ?? 0);
-    await confirmPaymentFor(staff, tickets[i].queue_number, `E2E ${tag}${i} Tester`, amountDue);
+    await recordPaymentFor(staff, patients[i].first_name, amountDue);
   }
 
-  // Every booking should now show a Paid, non-zero-collected payment — and
-  // none of the three should still be sitting in the collection queue.
+  // Every booking should now show a Paid payment — and none should still be in the collection list.
   for (const ticket of tickets) {
     const booking = await getBooking(staffApi, ticket.booking_id);
     expect(booking.payments?.status, `${ticket.booking_id} should be paid`).toBe("Paid");
   }
   await staff.reload();
   for (let i = 0; i < PATIENT_COUNT; i++) {
-    await expect(staff.getByText(`E2E ${tag}${i} Tester`)).toHaveCount(0);
+    await expect(staff.getByText(patients[i].first_name)).toHaveCount(0);
   }
 });
+//JJQR - END

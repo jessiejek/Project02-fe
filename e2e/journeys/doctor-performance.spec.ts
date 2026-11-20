@@ -82,7 +82,10 @@ test.describe("doctor · performance", () => {
     await expect(page).toHaveURL(/\/doctor\/dashboard/);
   });
 
-  test("a failed load shows a friendly error with Retry, and Retry brings the numbers back", async ({ as }) => {
+  test("a failed load shows a friendly error with Retry, and Retry brings the numbers back", async ({ as, guard }) => {
+    //JJQR - AI (Nov 20, 2026) - this test injects a 500 on purpose; allow it here only
+    guard.allow("500 GET /api/doctor/performance");
+    //JJQR - END
     const page = await as("doctor");
     let failing = true;
     await page.route("**/api/doctor/performance**", (route) => (failing ? route.fulfill({ status: 500, contentType: "application/json", body: "{}" }) : route.continue()));
