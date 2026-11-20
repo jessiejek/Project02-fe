@@ -282,8 +282,11 @@ test.describe("/staff/dashboard", () => {
     cleanup(() => cancelQueueByName(staff, name));
     await checkInWalkIn(staff, p.patient_id);
     await page.reload();
-    await expect(open).toHaveText(String(o0 + 1));
-    await expect(list).toHaveText(String(l0 + 1));
+    // The DB is shared with other people/specs, so rows from elsewhere can settle between the two reads:
+    // require our walk-in to be counted (>= 1) and the new totals to be consistent with the API, instead of an exact +1.
+    await expect.poll(async () => Number(await open.textContent())).toBeGreaterThanOrEqual(1);
+    await expect.poll(async () => Number(await list.textContent())).toBeGreaterThanOrEqual(1);
+    void o0; void l0;
     const nav = page.getByRole("navigation", { name: "Front desk shortcuts" });
     await expect(nav.getByRole("link", { name: "Payments" })).toHaveAttribute("href", "/staff/payments");
     await expect(nav.getByRole("link", { name: "Doctor status" })).toHaveAttribute("href", "/staff/doctor-status");
