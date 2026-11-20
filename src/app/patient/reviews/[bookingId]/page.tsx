@@ -24,6 +24,7 @@ interface ReviewBooking {
   id: string;
   doctorId: string;
   doctorName: string;
+  status: string; // JJQR - AI (Nov 20, 2026) - B-04: only a Completed visit can be reviewed
 }
 
 // Stitch screen_15_leave_a_review. Per Patient.md §14: only for Completed
@@ -69,6 +70,7 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
         id: b.booking_id,
         doctorId: b.doctor_id,
         doctorName: b.doctors?.staff_accounts?.full_name ?? "",
+        status: b.status,
       });
       setAlreadyReviewed(reviewRows.length > 0);
     }
@@ -118,9 +120,11 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
         rating,
         comment: comment || null,
       });
-    } catch {
+    } catch (err) {
       setSubmitting(false);
-      setSubmitError("Could not submit your review. Please try again.");
+      //JJQR - AI (Nov 20, 2026) - B-04: show the server's reason (e.g. the visit isn't completed) instead of a generic message
+      setSubmitError(err instanceof Error && err.message && !/^API \d+$/.test(err.message) ? err.message : "Could not submit your review. Please try again.");
+      //JJQR - END
       return;
     }
     setSubmitting(false);
@@ -142,7 +146,13 @@ export default function LeaveReviewPage({ params }: { params: Promise<{ bookingI
             <p className="text-body-md text-on-surface-variant">Your rating helps other patients choose a doctor.</p>
           </header>
 
-          {alreadyReviewed ? (
+          {/* JJQR - AI (Nov 20, 2026) - B-04: no rating form for a visit that hasn't happened (or was cancelled / missed) */}
+          {booking.status !== "Completed" ? (
+            <div className="space-y-md">
+              <FormAlert tone="info">You can review this visit after it has been completed.</FormAlert>
+              <Link href={`/patient/bookings/${booking.id}`} className={buttonStyles("secondary")}>Back to booking</Link>
+            </div>
+          ) : alreadyReviewed ? (
             <div className="space-y-md">
               <FormAlert tone="info">You&apos;ve already reviewed this visit. Thank you.</FormAlert>
               <Link href={`/patient/bookings/${booking.id}`} className={buttonStyles("secondary")}>Back to booking</Link>
