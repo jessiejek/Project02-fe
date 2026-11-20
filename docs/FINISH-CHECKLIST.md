@@ -5,7 +5,7 @@ Tests: own servers FE :3100 / BE :5155 (see e2e/README.md). Full suite ONCE at t
 
 ## Phase 0
 - [x] P0-1: Merge test/e2e-full-coverage into main locally; branch finish/all in BOTH repos (FE main merge 1e978ea; BE had no e2e branch; finish/all created in both)
-- [ ] P0-2: Back up local ClinicAppDb to ~/Documents/Allyn/db-backups/
+- [x] P0-2: Back up local ClinicAppDb to ~/Documents/Allyn/db-backups/ (backup ~/Documents/Allyn/db-backups/ClinicAppDb-pre-finish-20261120-094229.bak)
 
 ## Phase 1 — security and money
 - [ ] B-32: Deactivated account can't log in; its tokens rejected
