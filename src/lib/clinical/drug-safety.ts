@@ -58,9 +58,46 @@ function namesMatchList(names: string[], token: string): boolean {
   return names.some((n) => drugMatches(n, token));
 }
 
+//JJQR - AI (Nov 22, 2026) - an allergy to a drug CLASS must block its members ("Penicillin" allergy vs "Amoxicillin": the names never contain each other). Same list as the desktop app.
+const ALLERGY_CLASSES: { cls: string; members: string[] }[] = [
+  { cls: "penicillin", members: ["penicillin", "amoxicillin", "ampicillin", "cloxacillin", "dicloxacillin", "flucloxacillin", "oxacillin", "piperacillin", "amoxiclav", "co-amoxiclav", "clavulan"] },
+  { cls: "cephalosporin", members: ["cef", "ceph"] },
+  { cls: "sulfa", members: ["sulfa", "sulfonamide", "cotrimoxazole", "co-trimoxazole", "trimethoprim"] },
+  { cls: "nsaid", members: ["ibuprofen", "mefenamic", "diclofenac", "naproxen", "ketorolac", "celecoxib", "etoricoxib", "aspirin", "indomethacin", "meloxicam"] },
+  { cls: "macrolide", members: ["azithromycin", "clarithromycin", "erythromycin"] },
+  { cls: "quinolone", members: ["ciprofloxacin", "levofloxacin", "moxifloxacin", "ofloxacin", "floxacin"] },
+];
+
+/** The recorded allergen (trimmed) that conflicts with this medicine: same name, or the medicine belongs to the allergen's drug class. */
+export function allergyConflictFor(genericName: string, patientAllergies: string[] | null | undefined): string | null {
+  const g = norm(genericName);
+  if (!g || !patientAllergies?.length) return null;
+  for (const raw of patientAllergies) {
+    const al = norm(raw);
+    if (!al) continue;
+    if (g.includes(al) || al.includes(g)) return raw.trim();
+    for (const { cls, members } of ALLERGY_CLASSES) {
+      const allergyInClass = al.includes(cls) || members.some((m) => al.includes(m));
+      if (allergyInClass && members.some((m) => g.includes(m))) return raw.trim();
+    }
+  }
+  return null;
+}
+
+//JJQR - AI (Nov 22, 2026) - child cautions (template doses are adult doses)
+const CHILD_CAUTIONS: { match: string; maxAge: number; note: string }[] = [
+  { match: "loperamide", maxAge: 12, note: "Loperamide is not for children under 12." },
+  { match: "aspirin", maxAge: 16, note: "Aspirin is avoided under 16 (Reye syndrome risk)." },
+  { match: "codeine", maxAge: 12, note: "Codeine is not for children under 12." },
+  { match: "tramadol", maxAge: 12, note: "Tramadol is not for children under 12." },
+  { match: "doxycycline", maxAge: 8, note: "Tetracyclines are avoided under 8 (teeth and bone)." },
+  { match: "tetracycline", maxAge: 8, note: "Tetracyclines are avoided under 8 (teeth and bone)." },
+  { match: "floxacin", maxAge: 18, note: "Fluoroquinolones are avoided under 18 unless specialist advice." },
+];
+
 export function checkDrugSafety(
   genericNames: string[],
-  opts?: { pregnant?: boolean; trimester?: number },
+  opts?: { pregnant?: boolean; trimester?: number; ageYears?: number | null },
 ): { level: "warn" | "block"; message: string }[] {
   const names = genericNames.map(norm).filter(Boolean);
   const out: { level: "warn" | "block"; message: string }[] = [];
@@ -99,6 +136,13 @@ export function checkDrugSafety(
       if ([...PREGNANCY_BLOCKS].some((b) => drugMatches(hit, b))) continue;
       push("warn", `Pregnancy: ${entry.note}`);
     }
+  }
+
+  if (opts?.ageYears != null && opts.ageYears < 18 && names.length > 0) {
+    for (const c of CHILD_CAUTIONS) {
+      if (opts.ageYears < c.maxAge && names.some((n) => n.includes(c.match))) push("warn", `Child patient (${opts.ageYears} y): ${c.note}`);
+    }
+    push("warn", `Child patient (${opts.ageYears} y): confirm each dose by weight. Template doses are adult doses.`);
   }
 
   return out;

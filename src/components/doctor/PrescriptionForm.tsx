@@ -25,7 +25,7 @@ import { queryPatientById } from "@/lib/data/patients";
 import { printPrescription } from "@/lib/print-forms";
 import type { PrescriptionLineItem, PrescriptionGroup, PrescriptionTemplate, Medicine } from "@/data/types";
 import type { Database } from "@/data/supabase-types";
-import { checkDrugSafety } from "@/lib/clinical/drug-safety";
+import { allergyConflictFor, checkDrugSafety } from "@/lib/clinical/drug-safety";
 import { mgPerKgDose, mlFromConcentration } from "@/lib/clinical/peds-dosing";
 //JJQR - AI (Nov 19, 2026) - Bug fix: applying an Rx template must add its medicines, or say clearly why not
 import { describeTemplateApply, planTemplateApply } from "@/lib/clinical/rx-template-apply";
@@ -845,14 +845,14 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
     () =>
       checkDrugSafety(
         items.map((i) => i.genericName),
-        { pregnant: patientPregnant },
+        { pregnant: patientPregnant, ageYears: patientAgeYears },
       ),
-    [items, patientPregnant],
+    [items, patientPregnant, patientAgeYears],
   );
 
   function safetyForProspective(extraGeneric?: string) {
     const names = [...items.map((i) => i.genericName), ...(extraGeneric ? [extraGeneric] : [])];
-    return checkDrugSafety(names, { pregnant: patientPregnant });
+    return checkDrugSafety(names, { pregnant: patientPregnant, ageYears: patientAgeYears });
   }
 
   function applySafetyBeforeAdd(genericName: string): boolean {
@@ -868,15 +868,7 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
   }
 
   function allergyBlockReason(genericName: string): string | null {
-    if (!patientAllergies?.length) return null;
-    const g = genericName.trim().toLowerCase();
-    if (!g) return null;
-    for (const raw of patientAllergies) {
-      const al = raw.trim().toLowerCase();
-      if (!al) continue;
-      if (g.includes(al) || al.includes(g)) return raw.trim();
-    }
-    return null;
+    return allergyConflictFor(genericName, patientAllergies);
   }
 
   function reportAllergyConflict(genericName: string, allergen: string) {
@@ -1053,7 +1045,7 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
     //JJQR - AI (Nov 19, 2026) - add every medicine of the template in ONE update (the old per-item loop only looked at the list as it was before the click) and report the result
     const plan = planTemplateApply(template.items, items.map((i) => i.genericName), {
       allergyConflict: allergyBlockReason,
-      safety: (name, current) => checkDrugSafety([...current, name], { pregnant: patientPregnant }),
+      safety: (name, current) => checkDrugSafety([...current, name], { pregnant: patientPregnant, ageYears: patientAgeYears }),
       newId: () => newId("rxi"),
     });
     if (plan.toAdd.length) {
