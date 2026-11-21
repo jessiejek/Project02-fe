@@ -13,7 +13,6 @@ import { Modal } from "@/components/ui/Modal";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/Icon";
-import { cn } from "@/lib/cn";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryConsultations, queryRxGroups, queryVitalReadings, deleteRxGroup } from "@/lib/data/clinical";
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
@@ -54,6 +53,7 @@ interface RealPatientHeader {
 
 interface DoctorConsultationEntry {
   id: string;
+  bookingId: string;
   appointmentDate: string;
   chiefComplaint: string;
   subjective: string;
@@ -69,6 +69,10 @@ interface ChartBooking {
   serviceNames: string[];
   status: BookingStatus;
   queueNumber: string | null;
+  totalFee: number;
+  visitType: string;
+  discount: string | null;
+  medCert: boolean;
 }
 
 interface ChartVitalReading {
@@ -96,19 +100,15 @@ interface ChartVaccination {
   status: string;
 }
 
-// 44x44 minimum touch target for every icon-only action (WCAG 2.5.8).
-const ICON_BTN = "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-container-low";
 
+//JJQR - AI (Nov 22, 2026) - matched to the desktop chart: Timeline, Appointments, Consultations, Vitals and Prescriptions are ONE "Visits" tab (each visit opens to show everything)
 const TABS = [
-  { id: "timeline", label: "Timeline" },
-  { id: "appointments", label: "Appointments" },
-  { id: "consultations", label: "Consultations" },
-  { id: "vitals", label: "Vitals" },
-  { id: "prescriptions", label: "Prescriptions" },
+  { id: "timeline", label: "Visits" },
   { id: "labs", label: "Lab Results" },
   { id: "documents", label: "Documents" },
   { id: "vaccinations", label: "Vaccinations" },
 ];
+const TAB_ALIASES: Record<string, string> = { appointments: "timeline", consultations: "timeline", vitals: "timeline", prescriptions: "timeline" };
 
 // Stitch patient_detail_doctor_view — all tabs read-only per Doctor.md §6,
 // except Vitals' "+ " add action, which per clinic-vitals-fe.md's
@@ -131,11 +131,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   const [patientLabResults, setPatientLabResults] = useState<ChartLab[]>([]);
   const [patientDocuments, setPatientDocuments] = useState<ChartDocument[]>([]);
   const [patientVaccinations, setPatientVaccinations] = useState<ChartVaccination[]>([]);
-  const [tab, setTab] = useState(searchParams.get("tab") ?? "timeline");
+  const requestedTab = searchParams.get("tab") ?? "timeline";
+  const [tab, setTab] = useState(TAB_ALIASES[requestedTab] ?? requestedTab);
   const [expandedConsultationId, setExpandedConsultationId] = useState<string | null>(null);
-  const [vitalsView, setVitalsView] = useState<"list" | "table">("list");
-  const [vitalsSort, setVitalsSort] = useState<"desc" | "asc">("desc");
-  const [rxSort, setRxSort] = useState<"desc" | "asc">("desc");
   const [printPreviewGroup, setPrintPreviewGroup] = useState<PrescriptionGroup | null>(null);
   const [deleteRxGroupId, setDeleteRxGroupId] = useState<string | null>(null);
 
@@ -177,6 +175,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
       const consults = consultsRes
         .map((c) => ({
           id: c.consultation_id,
+          bookingId: c.booking_id,
           appointmentDate: c.bookings?.appointment_date ?? "",
           chiefComplaint: c.chief_complaint ?? "",
           subjective: c.subjective ?? "",
@@ -224,6 +223,10 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           appointmentDate: b.appointment_date,
           status: b.status as BookingStatus,
           queueNumber: b.queue_number,
+          totalFee: b.total_fee,
+          visitType: b.visit_type,
+          discount: b.discount_category,
+          medCert: b.med_cert_requested,
           serviceNames: b.booking_services.map((s) => s.services?.name ?? "").filter(Boolean),
         })),
       );
@@ -294,379 +297,225 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   if (!patient) notFound();
 
   const defaultVitalTemplates = vitalTemplates.filter((t) => t.isDefault);
-  const vitalBookingIds = Array.from(new Set(patientVitalReadings.map((r) => r.bookingId)));
-  const vitalBookings = vitalBookingIds
-    .map((bookingId) => patientBookings.find((b) => b.id === bookingId))
-    .filter((b): b is ChartBooking => !!b)
-    .sort((a, b) =>
-      vitalsSort === "desc" ? b.appointmentDate.localeCompare(a.appointmentDate) : a.appointmentDate.localeCompare(b.appointmentDate),
-    );
-
-  const patientPrescriptionGroups = [...prescriptionGroups].sort((a, b) =>
-    rxSort === "desc" ? b.createdAt.localeCompare(a.createdAt) : a.createdAt.localeCompare(b.createdAt),
-  );
+  const vitalLabel = (tplId: string) => defaultVitalTemplates.find((t) => t.id === tplId);
+  const visits = [...patientBookings]
+    .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate))
+    .map((booking) => {
+      const consult = patientConsultations.find((c) => c.bookingId === booking.id) ?? null;
+      const vitals = patientVitalReadings
+        .filter((r) => r.bookingId === booking.id)
+        .map((r) => ({ r, t: vitalLabel(r.templateId) }))
+        .filter((x) => x.t)
+        .map(({ r, t }) => ({ id: r.id, label: t!.description, value: r.value, unit: t!.unit ?? "" }));
+      const rx = prescriptionGroups.filter((g) => g.bookingId === booking.id);
+      const dxList = consult?.diagnosisDescriptions.length ? consult.diagnosisDescriptions : consult?.assessment.trim() ? [consult.assessment.trim().split("\n")[0].slice(0, 90)] : [];
+      return { booking, consult, vitals, rx, dxList, dx: dxList.join(" · ") };
+    });
+  const latestVisit = visits.find((v) => v.consult || v.vitals.length > 0) ?? null;
 
   return (
     <AppShell role="doctor">
-      <div className="mx-auto max-w-6xl space-y-lg">
+      <div className="mx-auto max-w-[1400px] space-y-md">
         <Link
           href="/doctor/patients"
-          className="inline-flex items-center gap-xs text-label-md text-on-surface-variant transition-colors hover:text-on-surface"
+          className="inline-flex items-center gap-xs text-label-md text-primary transition-colors hover:underline"
         >
           <Icon name="chevron_left" className="text-[14px]" />
           Back to Patients
         </Link>
 
-        <Card>
-          <div className="flex flex-wrap items-center gap-md">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-body-lg font-semibold text-primary">
-              {initials(patient.fullName)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-baseline gap-sm">
-                <h1 className="text-balance text-headline-lg font-semibold text-on-surface">{patient.fullName}</h1>
-                <span className="font-mono text-label-md text-on-surface-variant">{patient.patientCode}</span>
+        <div className="grid items-start gap-md lg:grid-cols-[300px_minmax(0,1fr)]">
+          {/* LEFT RAIL: who the patient is + the latest record (desktop chart) */}
+          <aside className="space-y-md">
+            <Card>
+              <div className="flex flex-col items-start gap-sm">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-body-lg font-semibold text-primary">
+                  {initials(patient.fullName)}
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-balance text-headline-md font-semibold text-on-surface">{patient.fullName}</h1>
+                  <span className="font-mono text-label-sm text-on-surface-variant">{patient.patientCode}</span>
+                </div>
               </div>
-              <p className="mt-xs text-body-md text-on-surface-variant">
-                {patient.sex} · {computeAge(patient.dateOfBirth)} yrs · Born {patient.dateOfBirth}
-              </p>
-            </div>
-            {patient.contactNumber && (
-              <a
-                href={`tel:${patient.contactNumber}`}
-                className="inline-flex items-center gap-sm rounded-lg border border-outline-variant px-md py-sm text-label-md text-on-surface-variant transition-colors hover:bg-surface-container-low hover:text-on-surface"
-              >
-                <Icon name="call" className="text-[16px]" />
-                {patient.contactNumber}
-              </a>
+              <dl className="mt-md space-y-xs border-t border-outline-variant pt-md text-body-sm">
+                {[
+                  ["Sex", patient.sex],
+                  ["Age", `${computeAge(patient.dateOfBirth)} years`],
+                  ["Born", patient.dateOfBirth],
+                  ["Phone", patient.contactNumber || "—"],
+                  ["Visits with you", String(patientBookings.length)],
+                ].map(([k, v]) => (
+                  <div key={k} className="flex justify-between gap-md">
+                    <dt className="text-on-surface-variant">{k}</dt>
+                    <dd className="font-medium text-on-surface">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
+
+            {latestVisit && (
+              <div className="space-y-sm rounded-lg border border-primary/40 bg-primary/5 p-md">
+                <div className="flex items-center justify-between gap-sm">
+                  <p className="text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Latest record</p>
+                  <span className="rounded-full bg-primary px-sm py-[2px] text-[12px] font-semibold text-on-primary">{latestVisit.booking.appointmentDate}</span>
+                </div>
+                <p className="text-body-md font-semibold text-on-surface">{latestVisit.consult?.chiefComplaint || "Consultation"}</p>
+                {latestVisit.dx && <p className="text-body-sm text-on-surface-variant">{latestVisit.dx}</p>}
+                {latestVisit.vitals.length > 0 && (
+                  <>
+                    <p className="pt-xs text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Vitals</p>
+                    <div className="grid grid-cols-2 gap-xs">
+                      {latestVisit.vitals.map((v) => (
+                        <div key={v.id} className="rounded-md border border-outline-variant bg-surface-container-lowest px-sm py-xs">
+                          <p className="text-[12px] text-on-surface-variant">{v.label}</p>
+                          <p className="text-body-md font-semibold text-on-surface">{v.value}<span className="ml-[2px] text-[12px] font-normal text-on-surface-variant">{v.unit}</span></p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {latestVisit.dxList.length > 0 && (
+                  <>
+                    <p className="pt-xs text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Diagnosis</p>
+                    <div className="flex flex-wrap gap-xs">
+                      {latestVisit.dxList.map((d, i) => (
+                        <span key={i} className="rounded-md border border-primary/40 bg-surface-container-lowest px-sm py-xs text-label-sm font-semibold text-primary">{d}</span>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {latestVisit.rx.length > 0 && (
+                  <>
+                    <p className="pt-xs text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Prescribed</p>
+                    <div className="space-y-xs">
+                      {latestVisit.rx.flatMap((g) => g.items).map((item) => (
+                        <div key={item.id} className="rounded-md border border-outline-variant bg-surface-container-lowest px-sm py-xs">
+                          <p className="text-body-sm font-semibold text-on-surface">{item.genericName}</p>
+                          <p className="text-[12px] text-on-surface-variant">{item.dosage} · {item.quantity}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-          </div>
-        </Card>
+          </aside>
 
-        <Card>
-          <div className="mb-md flex flex-wrap items-center justify-between gap-md">
-            <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="flex-1" />
-          </div>
+          {/* RIGHT: tabs */}
+          <Card>
+            <div className="mb-md">
+              <Tabs tabs={TABS.map((t) => t.id === "timeline" ? { ...t, label: `Visits ${visits.length}` } : t.id === "labs" ? { ...t, label: patientLabResults.length ? `Lab Results ${patientLabResults.length}` : t.label } : t.id === "documents" ? { ...t, label: patientDocuments.length ? `Documents ${patientDocuments.length}` : t.label } : t.id === "vaccinations" ? { ...t, label: patientVaccinations.length ? `Vaccinations ${patientVaccinations.length}` : t.label } : t)} activeId={tab} onChange={setTab} />
+            </div>
 
-          {tab === "timeline" && (
-            <div className="space-y-sm">
-              {patientBookings.length === 0 ? (
+            {tab === "timeline" && (
+              visits.length === 0 ? (
                 <EmptyState icon="event" message="No appointments with you yet." />
               ) : (
-                patientBookings.map((b) => (
-                  <div
-                    key={b.id}
-                    className="flex items-center gap-md rounded-xl border border-outline-variant p-md"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <Icon name="event" className="text-[16px]" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-body-md text-on-surface">{b.serviceNames.join(", ") || "Consultation"}</p>
-                      <p className="text-label-sm text-on-surface-variant">{b.appointmentDate}</p>
-                    </div>
-                    <StatusPill status={b.status} />
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-          {tab === "appointments" && (
-            patientBookings.length === 0 ? (
-              <EmptyState icon="event" message="No appointments with you yet." />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-body-md">
-                  <thead>
-                    <tr className="text-left text-label-md text-on-surface-variant">
-                      <th className="py-sm">Date</th><th className="py-sm">Service</th><th className="py-sm">Status</th><th className="py-sm text-center">Queue #</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {patientBookings.map((b) => (
-                      <tr key={b.id} className="border-t border-outline-variant/40">
-                        <td className="py-sm">{b.appointmentDate}</td>
-                        <td className="py-sm">{b.serviceNames.join(", ") || "—"}</td>
-                        <td className="py-sm"><StatusPill status={b.status} /></td>
-                        <td className="py-sm text-center">{b.queueNumber ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
-          )}
-          {tab === "consultations" && (
-            <div className="space-y-md">
-              {patientConsultations.length === 0 ? (
-                <EmptyState icon="clinical_notes" message="No consultations recorded yet." />
-              ) : (
-                patientConsultations.map((c) => {
-                  const expanded = expandedConsultationId === c.id;
-                  const hasSoap = [c.subjective, c.objective, c.assessment, c.plan].some((f) => f.trim() !== "");
-                  return (
-                    <div key={c.id} className="rounded-xl border border-outline-variant p-md">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedConsultationId(expanded ? null : c.id)}
-                        className="flex w-full flex-wrap items-baseline justify-between gap-sm text-left"
-                        aria-expanded={expanded}
-                      >
-                        <span className="flex items-center gap-xs">
-                          <Icon name={expanded ? "expand_less" : "expand_more"} className="text-[18px] text-on-surface-variant" />
-                          <span className="text-body-md font-medium text-on-surface">{c.chiefComplaint || "Consultation"}</span>
-                        </span>
-                        <span className="text-label-sm text-on-surface-variant">{c.appointmentDate}</span>
-                      </button>
-                      {c.diagnosisDescriptions.length > 0 && (
-                        <div className="mt-sm flex flex-wrap gap-xs">
-                          {c.diagnosisDescriptions.map((d, i) => (
-                            <span
-                              key={i}
-                              className="rounded-full bg-surface-container-high px-sm py-xs text-label-sm text-on-surface-variant"
-                            >
-                              {d}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {expanded && (
-                        <div className="mt-md space-y-sm border-t border-outline-variant pt-md text-body-md text-on-surface-variant">
-                          {hasSoap ? (
-                            <>
-                              <p><strong className="text-on-surface">Subjective:</strong> {c.subjective || "Not recorded."}</p>
-                              <p><strong className="text-on-surface">Objective:</strong> {c.objective || "Not recorded."}</p>
-                              <p><strong className="text-on-surface">Assessment:</strong> {c.assessment || "Not recorded."}</p>
-                              <p><strong className="text-on-surface">Plan:</strong> {c.plan || "Not recorded."}</p>
-                            </>
-                          ) : (
-                            <p>No SOAP notes recorded for this visit.</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-          {tab === "vitals" && (
-            <div className="space-y-md">
-              <div className="flex flex-wrap items-center justify-between gap-md">
-                <div className="flex gap-xs rounded-lg border border-outline-variant p-1">
-                  <button
-                    type="button"
-                    onClick={() => setVitalsView("list")}
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-md transition-colors",
-                      vitalsView === "list" ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-low",
-                    )}
-                    title="List view"
-                    aria-label="List view"
-                    aria-pressed={vitalsView === "list"}
-                  >
-                    <Icon name="view_list" className="text-[18px]" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVitalsView("table")}
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-md transition-colors",
-                      vitalsView === "table" ? "bg-primary text-on-primary" : "text-on-surface-variant hover:bg-surface-container-low",
-                    )}
-                    title="Table view"
-                    aria-label="Table view"
-                    aria-pressed={vitalsView === "table"}
-                  >
-                    <Icon name="table_rows" className="text-[18px]" />
-                  </button>
-                </div>
-                <div className="flex items-center gap-sm">
-                  {vitalBookings.length > 0 && (
-                    <select
-                      value={vitalsSort}
-                      onChange={(e) => setVitalsSort(e.target.value as "desc" | "asc")}
-                      className="rounded-lg border border-outline-variant px-sm py-xs text-label-sm"
-                    >
-                      <option value="desc">Newest first</option>
-                      <option value="asc">Oldest first</option>
-                    </select>
-                  )}
-                  {referredBookingId && (
-                    <Link href={`/doctor/consultation/${referredBookingId}/vitals`} className={buttonStyles("primary", "")}>
-
-                        <Icon name="add_circle" className="text-[16px]" />
-                        Add Vitals
-
-</Link>
-                  )}
-                </div>
-              </div>
-
-              {vitalBookings.length === 0 ? (
-                <EmptyState icon="monitoring" message="No vital signs recorded yet." />
-              ) : vitalsView === "list" ? (
-                <div className="space-y-md">
-                  {vitalBookings.map((b) => {
-                    const readingsForBooking = patientVitalReadings.filter((r) => r.bookingId === b.id);
+                <div className="space-y-sm">
+                  {visits.map((v) => {
+                    const open = (expandedConsultationId ?? visits[0]?.booking.id) === v.booking.id;
+                    const c = v.consult;
+                    const hasSoap = !!c && [c.subjective, c.objective, c.assessment, c.plan].some((f) => f.trim() !== "");
                     return (
-                      <Link key={b.id} href={`/doctor/consultation/${b.id}/vitals`} className="block">
-                      <Card hoverable>
-                        <p className="mb-md text-label-md font-medium text-on-surface">{b.appointmentDate}</p>
-                        <div className="grid grid-cols-2 gap-md sm:grid-cols-4">
-                          {defaultVitalTemplates.map((t) => {
-                            const reading = readingsForBooking.find((r) => r.templateId === t.id);
-                            return (
-                              <div key={t.id} className="flex items-center gap-sm text-body-md text-on-surface-variant">
-                                <Icon name={t.icon} className="text-[16px] text-primary" />
-                                <span>
-                                  {reading?.value ?? "—"}
-                                  {reading && t.unit ? ` ${t.unit}` : ""}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </Card>
-                      </Link>
+                      <div key={v.booking.id} className="rounded-lg border border-outline-variant">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedConsultationId(open ? "" : v.booking.id)}
+                          aria-expanded={open}
+                          className="flex w-full flex-wrap items-start justify-between gap-sm p-md text-left"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-baseline gap-sm">
+                              <span className="text-label-md tabular-nums text-on-surface-variant">{v.booking.appointmentDate}</span>
+                              {v.booking.queueNumber && <span className="font-mono text-label-sm text-on-surface-variant">{v.booking.queueNumber}</span>}
+                              <span className="text-body-md font-semibold text-on-surface">{c?.chiefComplaint || v.booking.serviceNames.join(", ") || "Consultation"}</span>
+                            </span>
+                            {v.dx && <span className="mt-xs block text-body-sm text-on-surface-variant">{v.dx}</span>}
+                            <span className="mt-xs flex flex-wrap gap-xs">
+                              {v.rx.length > 0 && <span className="rounded-md bg-status-info-surface px-sm py-[2px] text-[12px] font-semibold text-status-info">RX {v.rx.flatMap((g) => g.items).length}</span>}
+                              {v.booking.medCert && <span className="rounded-md bg-status-info-surface px-sm py-[2px] text-[12px] font-semibold text-status-info">MED CERT</span>}
+                            </span>
+                          </span>
+                          <span className="flex items-center gap-sm">
+                            <StatusPill status={v.booking.status} />
+                            <Icon name={open ? "expand_less" : "expand_more"} className="text-[18px] text-on-surface-variant" />
+                          </span>
+                        </button>
+                        {open && (
+                          <div className="grid gap-md border-t border-outline-variant p-md md:grid-cols-2">
+                            <div className="space-y-sm text-body-sm">
+                              <p className="text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Notes</p>
+                              {hasSoap && c ? (
+                                <>
+                                  <p><strong className="text-primary">Subjective</strong><br />{c.subjective || "Not recorded."}</p>
+                                  <p><strong className="text-primary">Objective</strong><br />{c.objective || "Not recorded."}</p>
+                                  <p><strong className="text-primary">Assessment</strong><br />{c.assessment || "Not recorded."}</p>
+                                  <p><strong className="text-primary">Plan</strong><br />{c.plan || "Not recorded."}</p>
+                                </>
+                              ) : (
+                                <p className="text-on-surface-variant">No SOAP notes recorded for this visit.</p>
+                              )}
+                              {v.vitals.length > 0 && (
+                                <>
+                                  <p className="pt-sm text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Vitals</p>
+                                  <div className="grid grid-cols-3 gap-xs">
+                                    {v.vitals.map((vt) => (
+                                      <div key={vt.id} className="rounded-md border border-outline-variant px-sm py-xs">
+                                        <p className="text-[12px] text-on-surface-variant">{vt.label}</p>
+                                        <p className="text-body-sm font-semibold text-on-surface">{vt.value}<span className="ml-[2px] text-[12px] font-normal text-on-surface-variant">{vt.unit}</span></p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            <div className="space-y-sm text-body-sm">
+                              <p className="text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Prescription</p>
+                              {v.rx.length === 0 ? (
+                                <p className="text-on-surface-variant">None prescribed.</p>
+                              ) : (
+                                v.rx.map((group) => (
+                                  <div key={group.id} className="space-y-xs">
+                                    {group.items.map((item) => (
+                                      <div key={item.id} className="rounded-md border border-outline-variant px-sm py-xs">
+                                        <p className="font-semibold text-on-surface">{item.genericName}</p>
+                                        <p className="text-[12px] text-on-surface-variant">{item.dosage} · {item.quantity}</p>
+                                        {item.instruction && <p className="text-[12px] text-on-surface-variant">{item.instruction}</p>}
+                                      </div>
+                                    ))}
+                                    <div className="flex flex-wrap gap-xs pt-xs">
+                                      <button type="button" onClick={() => setPrintPreviewGroup(group)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Print prescription</button>
+                                      {referredBookingId && (
+                                        <>
+                                          <Link href={`/doctor/patients/${patient.id}/prescriptions/${group.id}`} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Edit</Link>
+                                          <Link href={`/doctor/patients/${patient.id}/prescriptions/create?copyFrom=${group.id}&bookingId=${referredBookingId}`} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Copy</Link>
+                                          <button type="button" onClick={() => setDeleteRxGroupId(group.id)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px] !text-error")}>Delete</button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                              {referredBookingId && v.booking.id === referredBookingId && (
+                                <Link href={`/doctor/patients/${patient.id}/prescriptions/create?bookingId=${referredBookingId}`} className={buttonStyles("primary", "!min-h-8 !px-sm !text-[13px]")}>New Prescription</Link>
+                              )}
+                              <p className="pt-sm text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Visit &amp; fee</p>
+                              <p className="text-on-surface">
+                                {v.booking.visitType === "FollowUp" ? "Follow-up visit" : "New visit"}
+                                {v.booking.discount ? ` · ${v.booking.discount} discount` : ""} · ₱{v.booking.totalFee}
+                              </p>
+                              {referredBookingId === v.booking.id && (
+                                <Link href={`/doctor/consultation/${v.booking.id}/vitals`} className="text-label-md text-primary hover:underline">Add vitals</Link>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
-              ) : (
-                <div className="overflow-x-auto rounded-xl border border-outline-variant">
-                  <table className="w-full text-body-md">
-                    <thead>
-                      <tr className="border-b border-outline-variant bg-surface-container-low text-left text-label-md text-on-surface-variant">
-                        <th className="sticky left-0 z-10 bg-surface-container-low px-lg py-md">Vital</th>
-                        {vitalBookings.map((b) => (
-                          <th key={b.id} className="px-lg py-md text-center">{b.appointmentDate}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {defaultVitalTemplates.map((t) => (
-                        <tr key={t.id} className="border-t border-outline-variant/40">
-                          <td className="sticky left-0 z-10 flex items-center gap-sm bg-surface-container-lowest px-lg py-md text-on-surface">
-                            <Icon name={t.icon} className="text-[16px] text-primary" />
-                            {t.description}
-                          </td>
-                          {vitalBookings.map((b) => {
-                            const reading = patientVitalReadings.find((r) => r.bookingId === b.id && r.templateId === t.id);
-                            return (
-                              <td key={b.id} className="px-lg py-md text-center text-on-surface-variant">
-                                {reading ? `${reading.value}${t.unit ? ` ${t.unit}` : ""}` : "—"}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-          {tab === "prescriptions" && (
-            <div className="space-y-md">
-              <div className="flex flex-wrap items-center justify-between gap-md">
-                {patientPrescriptionGroups.length > 0 ? (
-                  <select
-                    value={rxSort}
-                    onChange={(e) => setRxSort(e.target.value as "desc" | "asc")}
-                    className="rounded-lg border border-outline-variant px-sm py-xs text-label-sm"
-                  >
-                    <option value="desc">Newest first</option>
-                    <option value="asc">Oldest first</option>
-                  </select>
-                ) : (
-                  <span />
-                )}
-                {referredBookingId && (
-                  <Link href={`/doctor/patients/${patient.id}/prescriptions/create?bookingId=${referredBookingId}`} className={buttonStyles("primary", "")}>
-
-                      <Icon name="add_circle" className="text-[16px]" />
-                      New Prescription
-
-</Link>
-                )}
-              </div>
-
-              {patientPrescriptionGroups.length === 0 ? (
-                <EmptyState icon="prescriptions" message="No prescriptions recorded yet." />
-              ) : (
-                <div className="space-y-md">
-                  {patientPrescriptionGroups.map((group) => (
-                    <Card key={group.id}>
-                      <div className="flex items-start justify-between gap-md border-b border-outline-variant pb-md">
-                        <div className="flex items-center gap-sm">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                            <Icon name="prescriptions" className="text-[18px]" />
-                          </div>
-                          <div>
-                            <p className="text-body-md font-medium text-on-surface">
-                              {group.items.length} {group.items.length === 1 ? "medicine" : "medicines"}
-                            </p>
-                            <p className="text-label-sm text-on-surface-variant">{group.createdAt}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-xs">
-                          <button
-                            type="button"
-                            onClick={() => setPrintPreviewGroup(group)}
-                            aria-label="Print prescription"
-                            title="Print prescription"
-                            className={cn(ICON_BTN, "text-on-surface-variant hover:text-primary")}
-                          >
-                            <Icon name="print" className="text-[18px]" />
-                          </button>
-                          {referredBookingId && (
-                            <>
-                              <Link
-                                href={`/doctor/patients/${patient.id}/prescriptions/${group.id}`}
-                                aria-label="Edit prescription"
-                                title="Edit prescription"
-                                className={cn(ICON_BTN, "text-on-surface-variant hover:text-primary")}
-                              >
-                                <Icon name="edit" className="text-[18px]" />
-                              </Link>
-                              <Link
-                                href={`/doctor/patients/${patient.id}/prescriptions/create?copyFrom=${group.id}&bookingId=${referredBookingId}`}
-                                aria-label="Copy prescription"
-                                title="Copy prescription"
-                                className={cn(ICON_BTN, "text-on-surface-variant hover:text-primary")}
-                              >
-                                <Icon name="copy" className="text-[18px]" />
-                              </Link>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteRxGroupId(group.id)}
-                                aria-label="Delete prescription"
-                                title="Delete prescription"
-                                className={cn(ICON_BTN, "text-error hover:bg-error-container")}
-                              >
-                                <Icon name="delete" className="text-[18px]" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="mt-md space-y-sm">
-                        {group.items.map((item, i) => (
-                          <p key={item.id} className="text-body-md text-on-surface-variant">
-                            <span className="text-on-surface">
-                              {i + 1}. {item.genericName} #{item.quantity}
-                            </span>
-                            <br />
-                            Sig. {item.dosage} {item.instruction}
-                          </p>
-                        ))}
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+              )
+            )}
           {tab === "labs" && (
             patientLabResults.length === 0 ? (
               <EmptyState icon="science" message="No lab results yet." />
@@ -724,7 +573,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               </div>
             )
           )}
-        </Card>
+          </Card>
+        </div>
       </div>
 
       <Modal
