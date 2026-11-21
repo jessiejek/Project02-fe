@@ -133,7 +133,7 @@ export function Topbar({ onMenuClick, roleBadge }: TopbarProps) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-outline-variant bg-surface px-lg shadow-sm">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-lg">
       <div className="flex min-w-0 flex-1 items-center gap-md">
         <button
           type="button"

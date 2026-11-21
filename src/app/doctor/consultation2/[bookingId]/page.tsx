@@ -2822,7 +2822,7 @@ Return to patient queue
                 className={cn(
                   //JJQR - AI (Nov 20, 2026)
                   "flex min-h-9 shrink-0 cursor-pointer items-center gap-xs rounded-md border px-sm py-xs text-left text-label-md transition-colors motion-reduce:transition-none lg:w-full",
-                  openSection === i ? "border-primary bg-primary font-semibold text-on-primary" : "border-outline-variant text-on-surface-variant hover:bg-surface-container lg:border-transparent",
+                  openSection === i ? "border-primary bg-primary font-semibold text-on-primary [&_*]:!text-on-primary" : "border-outline-variant text-on-surface-variant hover:bg-surface-container lg:border-transparent",
                 )}
               >
                 {renderSectionIndicator(i, "mt-0.5 shrink-0 text-[16px]")}
@@ -2853,7 +2853,7 @@ Return to patient queue
                 aria-controls={openSection === FEE_SECTION_INDEX ? `consultation-section-${FEE_SECTION_INDEX}` : undefined}
                 className={cn(
                   "flex min-h-9 shrink-0 cursor-pointer items-center gap-xs rounded-md border px-sm py-xs text-left text-label-md transition-colors motion-reduce:transition-none lg:w-full",
-                  openSection === FEE_SECTION_INDEX ? "border-primary bg-primary font-semibold text-on-primary" : "border-outline-variant text-on-surface-variant hover:bg-surface-container lg:border-transparent",
+                  openSection === FEE_SECTION_INDEX ? "border-primary bg-primary font-semibold text-on-primary [&_*]:!text-on-primary" : "border-outline-variant text-on-surface-variant hover:bg-surface-container lg:border-transparent",
                 )}
               >
                 {renderSectionIndicator(FEE_SECTION_INDEX, "mt-0.5 shrink-0 text-[16px]")}
