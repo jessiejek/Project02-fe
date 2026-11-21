@@ -139,7 +139,7 @@ export function ConsultPatientBanner({
       : null;
 
   const allergyChipClassName = cn(
-    "inline-flex min-h-11 max-w-full items-center gap-sm rounded-lg border px-md py-xs text-left text-label-md",
+    "inline-flex min-h-9 max-w-full items-center gap-sm rounded-[6px] border px-sm py-xs text-left text-label-sm font-medium",
     allergyChipStrong
       ? "border-status-danger-border bg-status-danger-surface text-status-danger"
       : allergyInfo.amber
@@ -152,7 +152,7 @@ export function ConsultPatientBanner({
       <div
         className={cn(
           //JJQR - AI (Oct 31, 2026) — stick below AppShell Topbar (h-16 / top-16)
-          "sticky top-16 z-20 border-b border-outline-variant bg-surface px-md py-xs shadow-sm",
+          "sticky top-16 z-20 border-b border-outline-variant bg-surface-container-lowest px-md py-xs",
           className,
         )}
       >
@@ -171,12 +171,12 @@ export function ConsultPatientBanner({
           </p>
           <div className="flex min-w-0 flex-wrap items-center gap-sm">
             {isPregnant && obAog && (
-              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-xs py-[2px] text-label-sm leading-normal text-primary">
+              <span className="shrink-0 rounded-full border border-primary/40 bg-surface-container-lowest px-sm py-[2px] text-label-sm font-semibold leading-normal text-primary">
                 Preg {obAog.weeks}w
               </span>
             )}
             {!isPregnant && showObStrip && obAog && (
-              <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-xs py-[2px] text-label-sm leading-normal text-primary">
+              <span className="shrink-0 rounded-full border border-primary/40 bg-surface-container-lowest px-sm py-[2px] text-label-sm font-semibold leading-normal text-primary">
                 LMP {obAog.weeks}w
               </span>
             )}
@@ -212,13 +212,22 @@ export function ConsultPatientBanner({
               <button
                 type="button"
                 onClick={() => setAllergyEditorOpen(true)}
-                className="inline-flex min-h-11 items-center rounded-lg bg-primary px-md py-xs text-label-md font-medium text-on-primary hover:opacity-90"
+                className="inline-flex min-h-9 items-center rounded-[6px] border border-outline-variant bg-surface-container-lowest px-sm py-xs text-label-sm font-medium text-on-surface hover:bg-surface-container"
               >
                 Record allergies / NKDA
               </button>
             )}
             {/*JJQR - END */}
-            <span className="text-label-sm text-on-surface-variant">Payment: {paymentStatus || "Not recorded"}</span>
+            <span
+              className={cn(
+                "inline-flex min-h-9 items-center rounded-[6px] border px-sm py-xs text-label-sm font-medium",
+                /paid|waived/i.test(paymentStatus || "") && !/unpaid/i.test(paymentStatus || "")
+                  ? "border-status-success-border bg-status-success-surface text-status-success"
+                  : "border-status-warning-border bg-status-warning-surface text-status-warning",
+              )}
+            >
+              Payment: {paymentStatus || "Not recorded"}
+            </span>
           </div>
         </div>
         {/* JJQR - END */}

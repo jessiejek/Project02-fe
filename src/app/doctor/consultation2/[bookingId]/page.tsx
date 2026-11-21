@@ -2764,22 +2764,23 @@ Return to patient queue
                 check-in drives the fee, so the doctor needs to see it without
                 digging into §9, and can flip it right here if it's wrong. */}
             <div className="flex flex-wrap items-center gap-sm">
-              {(["New", "FollowUp"] as const).map((vt) => (
-                <button
-                  key={vt}
-                  type="button"
-                  aria-pressed={visitType === vt}
-                  onClick={() => { setVisitType(vt); followTotal(); }}
-                  className={cn(
-                    "min-h-[44px] rounded-nav border px-md py-xs text-label-md font-medium",
-                    visitType === vt
-                      ? "border-primary bg-primary text-on-primary"
-                      : "border-outline-variant text-on-surface-variant",
-                  )}
-                >
-                  {vt === "New" ? "New visit" : "Follow-up visit"}
-                </button>
-              ))}
+              {/*JJQR - AI (Nov 22, 2026) - segmented control like the desktop app */}
+              <div role="group" aria-label="Visit type" className="inline-flex rounded-lg border border-outline-variant bg-surface-container p-[3px]">
+                {(["New", "FollowUp"] as const).map((vt) => (
+                  <button
+                    key={vt}
+                    type="button"
+                    aria-pressed={visitType === vt}
+                    onClick={() => { setVisitType(vt); followTotal(); }}
+                    className={cn(
+                      "min-h-8 rounded-[6px] px-md py-xs text-label-md font-medium transition-colors",
+                      visitType === vt ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
+                    )}
+                  >
+                    {vt === "New" ? "New visit" : "Follow-up visit"}
+                  </button>
+                ))}
+              </div>
               {staffVisitType && visitType !== staffVisitType && (
                 <span className="text-label-sm text-on-surface-variant">
                   (staff tagged this {staffVisitType === "New" ? "New" : "Follow-up"} at check-in)
@@ -2788,7 +2789,7 @@ Return to patient queue
             </div>
           </div>
           <div className="flex w-full flex-wrap gap-sm lg:w-auto">
-            <Button variant="secondary" className="!h-11 !min-h-11 !w-11 !px-0 !py-0" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts help">
+            <Button variant="secondary" className="!h-9 !min-h-9 !w-9 !px-0 !py-0" onClick={() => setHelpOpen(true)} aria-label="Keyboard shortcuts help">
               <Icon name="help" className="text-[18px]" />
             </Button>
             <Button variant="secondary" className="!px-sm !py-sm" onClick={() => setHistoryOpen(true)}>
@@ -2803,12 +2804,14 @@ Return to patient queue
         {/*JJQR - END */}
 
         {/*JJQR - AI (Nov 20, 2026) C6 - wrap section pills (no h-scroll); Vaccinations + Fee behind More */}
-        <div className="space-y-lg">
+        {/*JJQR - AI (Nov 22, 2026) - wide screens: steps become a left rail beside the form (desktop layout); narrow screens keep the wrapping pills above it */}
+        <div className="space-y-lg lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start lg:gap-md lg:space-y-0">
           <nav
             aria-label="Consultation sections"
             data-testid="consult-section-nav"
-            className="flex flex-wrap gap-sm border-b border-outline-variant pb-md"
+            className="flex flex-wrap gap-sm border-b border-outline-variant pb-md lg:sticky lg:top-[7.5rem] lg:flex-col lg:flex-nowrap lg:gap-xs lg:rounded-lg lg:border lg:bg-surface-container-lowest lg:p-sm"
           >
+            <p className="hidden px-sm pb-xs text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant lg:block">Steps</p>
             {visibleSectionOrder.map((i, displayIdx) => i === FEE_SECTION_INDEX ? null : (
               <button
                 key={SECTIONS[i]}
@@ -2818,8 +2821,8 @@ Return to patient queue
                 aria-controls={openSection === i ? `consultation-section-${i}` : undefined}
                 className={cn(
                   //JJQR - AI (Nov 20, 2026)
-                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
-                  openSection === i ? "border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/30" : "border-outline-variant text-on-surface-variant hover:bg-surface-container-low",
+                  "flex min-h-9 shrink-0 cursor-pointer items-center gap-xs rounded-md border px-sm py-xs text-left text-label-md transition-colors motion-reduce:transition-none lg:w-full",
+                  openSection === i ? "border-primary bg-primary font-semibold text-on-primary" : "border-outline-variant text-on-surface-variant hover:bg-surface-container lg:border-transparent",
                 )}
               >
                 {renderSectionIndicator(i, "mt-0.5 shrink-0 text-[16px]")}
@@ -2833,7 +2836,7 @@ Return to patient queue
               type="button"
               onClick={() => setShowOccasional((v) => !v)}
               aria-expanded={showOccasional}
-              className="flex min-h-11 shrink-0 cursor-pointer items-center gap-xs rounded-nav border border-dashed border-outline-variant px-sm py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low"
+              className="flex min-h-9 shrink-0 cursor-pointer items-center gap-xs rounded-md border border-dashed border-outline-variant px-sm py-xs text-label-md text-on-surface-variant hover:bg-surface-container lg:w-full lg:border-transparent"
             >
               {showOccasional ? "Less" : "More"}
               <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
@@ -2849,8 +2852,8 @@ Return to patient queue
                 aria-pressed={openSection === FEE_SECTION_INDEX}
                 aria-controls={openSection === FEE_SECTION_INDEX ? `consultation-section-${FEE_SECTION_INDEX}` : undefined}
                 className={cn(
-                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
-                  openSection === FEE_SECTION_INDEX ? "border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/30" : "border-outline-variant text-on-surface-variant hover:bg-surface-container-low",
+                  "flex min-h-9 shrink-0 cursor-pointer items-center gap-xs rounded-md border px-sm py-xs text-left text-label-md transition-colors motion-reduce:transition-none lg:w-full",
+                  openSection === FEE_SECTION_INDEX ? "border-primary bg-primary font-semibold text-on-primary" : "border-outline-variant text-on-surface-variant hover:bg-surface-container lg:border-transparent",
                 )}
               >
                 {renderSectionIndicator(FEE_SECTION_INDEX, "mt-0.5 shrink-0 text-[16px]")}
@@ -3839,6 +3842,7 @@ Return to patient queue
             </Button>
             <Button
               loading={completing}
+              disabled={!canComplete}
               onClick={async () => {
                 setCompleting(true);
                 await handleComplete();
@@ -3850,6 +3854,13 @@ Return to patient queue
           </>
         }
       >
+        {/*JJQR - AI (Nov 22, 2026) - Review & complete is always clickable (the desktop does the same): say what is still missing instead of a silently disabled button */}
+        {!canComplete && missingRequiredSections.length > 0 && (
+          <p role="alert" className="mb-md rounded-lg border border-status-danger-border bg-status-danger-surface px-md py-sm text-label-md text-status-danger">
+            Not ready to complete yet. Still needed: {missingSectionNames}.
+          </p>
+        )}
+        {/*JJQR - END */}
         <ul className="max-h-[60vh] space-y-md overflow-y-auto text-body-md" data-testid="completion-checklist">
           {/* //JJQR Nov 20, 2026 — only visible sections in the completion checklist */}
           {visibleSectionOrder.map((i) => (
@@ -4060,10 +4071,10 @@ Return to patient queue
             <div className="flex items-center gap-sm">
               {/* //JJQR Nov 20, 2026 - compact Prev / Next: navigation only, never saves or validates */}
               <div className="flex items-center gap-xs" role="group" aria-label="Previous or next section">
-                <Button type="button" variant="secondary" className="!min-h-11 !gap-xs !px-sm !py-xs" disabled={prevSection === null} onClick={() => stepSection(prevSection)} aria-label="Previous section" data-testid="consult-prev-section">
+                <Button type="button" variant="secondary" className="!gap-xs !px-sm !py-xs" disabled={prevSection === null} onClick={() => stepSection(prevSection)} aria-label="Previous section" data-testid="consult-prev-section">
                   <Icon name="chevron_left" className="h-4 w-4" aria-hidden />Prev
                 </Button>
-                <Button type="button" variant="secondary" className="!min-h-11 !gap-xs !px-sm !py-xs" disabled={nextSection === null} onClick={() => stepSection(nextSection)} aria-label="Next section" data-testid="consult-next-section">
+                <Button type="button" variant="secondary" className="!gap-xs !px-sm !py-xs" disabled={nextSection === null} onClick={() => stepSection(nextSection)} aria-label="Next section" data-testid="consult-next-section">
                   Next<Icon name="chevron_right" className="h-4 w-4" aria-hidden />
                 </Button>
               </div>
@@ -4071,7 +4082,7 @@ Return to patient queue
               <Button variant={mode === "complete" && canComplete ? "secondary" : "primary"} loading={mode === "complete" ? savingDraft : savingChanges} disabled={mode === "amend" && !canComplete} data-testid="consult-save" onClick={mode === "complete" ? async () => { const saved = await handleSaveDraft(); if (saved && nextSection !== null) stepSection(nextSection); } : handleSaveChanges}>{mode === "complete" ? (nextSection !== null ? "Save & next" : "Save draft") : "Save amendment"}</Button>
               {/*JJQR - AI (Nov 21, 2026) - "Save & next": save the draft, then open the next section (on the last section it stays "Save draft"; a failed save keeps you here). Prev / Next still never save. */}
               {/*JJQR - AI (Nov 21, 2026) - Review & complete is the FINAL action, so it sits last (far right), after Save & next */}
-              {mode === "complete" && <Button variant={canComplete ? "primary" : "secondary"} disabled={!canComplete || savingDraft} onClick={() => { setCompleteAttempted(true); setChecklistOpen(true); }} aria-label="Complete Consultation">Review &amp; complete</Button>}
+              {mode === "complete" && <Button variant="primary" disabled={savingDraft} onClick={() => { setCompleteAttempted(true); setChecklistOpen(true); }} aria-label="Complete Consultation">Review &amp; complete</Button>}
             </div>
           </div>
         </div>
