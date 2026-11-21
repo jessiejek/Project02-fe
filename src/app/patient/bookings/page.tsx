@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { AppShell } from "@/components/shell/AppShell";
 import { Tabs } from "@/components/ui/Tabs";
 import { DataTable } from "@/components/ui/DataTable";
@@ -183,14 +184,7 @@ export default function MyBookingsPage() {
           >
             <div className="min-w-0 flex-1 space-y-xs sm:max-w-[16rem]">
               <label htmlFor="bookDate" className={labelStyles}>Visit date</label>
-              <input
-                id="bookDate"
-                type="date"
-                value={bookDate}
-                min={todayStr}
-                onChange={(e) => setBookDate(e.target.value || todayStr)}
-                className={inputStyles("tabular-nums")}
-              />
+              <DatePicker id="bookDate" value={bookDate} minDate={todayStr} onChange={(v) => setBookDate(v || todayStr)} />
             </div>
             <Button type="submit" loading={booking} disabled={Boolean(closedReason)}>
               {booking ? "Booking…" : bookDate === todayStr ? "Join today’s queue" : "Book this day"}

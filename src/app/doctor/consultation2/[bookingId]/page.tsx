@@ -3462,11 +3462,11 @@ Return to patient queue
                         {/*JJQR - END */}
                         <label className="text-label-sm text-on-surface-variant">
                           Examination from
-                          <input type="date" value={mcExamFrom} onChange={(e) => { setMcExamFrom(e.target.value); setMcComeBackStale(true); }} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
+                          <DatePicker className="mt-1" value={mcExamFrom} onChange={(v) => { setMcExamFrom(v); setMcComeBackStale(true); }} />
                         </label>
                         <label className="text-label-sm text-on-surface-variant">
                           Examination until
-                          <input type="date" value={mcExamTo} onChange={(e) => { setMcExamTo(e.target.value); setMcComeBackStale(true); }} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
+                          <DatePicker className="mt-1" value={mcExamTo} onChange={(v) => { setMcExamTo(v); setMcComeBackStale(true); }} />
                         </label>
                       </div>
                       {/*JJQR - AI (Nov 20, 2026) E1 */}
@@ -3499,17 +3499,13 @@ Return to patient queue
                         <div>
                           <label className="text-label-sm text-on-surface-variant">
                             Please come back on
-                            <input
-                              type="date"
+                            <DatePicker
+                              className={cn("mt-1 rounded-[6px]", mcComeBackNeedsReview && "ring-2 ring-status-warning/40")}
                               value={mcComeBackOn}
-                              onChange={(e) => { setMcComeBackOn(e.target.value); setMcComeBackStale(false); }}
+                              onChange={(v) => { setMcComeBackOn(v); setMcComeBackStale(false); }}
                               data-testid="mc-comeback"
                               aria-invalid={mcComeBackNeedsReview || undefined}
-                              aria-describedby={mcComeBackNeedsReview ? "mc-comeback-hint" : undefined}
-                              className={cn(
-                                "mt-1 w-full rounded-lg border px-md py-sm text-body-md",
-                                mcComeBackNeedsReview ? "border-status-warning-border bg-status-warning-surface ring-2 ring-status-warning/40" : "border-outline-variant",
-                              )}
+                              placeholder="Choose a date"
                             />
                           </label>
                           {mcComeBackNeedsReview && (

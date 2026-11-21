@@ -1,6 +1,7 @@
 "use client";
 
 import { friendlyError } from "@/lib/api/friendly-error";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { futureDateProblem, lengthProblem, phoneProblem } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -450,8 +451,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
             ))}
             <div className="space-y-xs">
               <label htmlFor="qr-dob" className={labelStyles}>Date of birth</label>
-              <input id="qr-dob" type="date" required max={todayManila()} value={quickRegister.dateOfBirth}
-                onChange={(e) => setQuickRegister((prev) => ({ ...prev, dateOfBirth: e.target.value }))} className={inputStyles()} />
+              <DatePicker id="qr-dob" required maxDate={todayManila()} value={quickRegister.dateOfBirth} onChange={(v) => setQuickRegister((prev) => ({ ...prev, dateOfBirth: v }))} placeholder="Select date of birth" />
             </div>
             <div className="space-y-xs">
               <label htmlFor="qr-sex" className={labelStyles}>Sex</label>

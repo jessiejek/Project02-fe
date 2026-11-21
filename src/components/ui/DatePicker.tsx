@@ -14,6 +14,14 @@ export interface DatePickerProps {
   className?: string;
   /** ISO "YYYY-MM-DD" — days before this are shown but not selectable. */
   minDate?: string;
+  //JJQR - AI (Nov 22, 2026) - replaces every native <input type="date"> (its OS calendar looked out of place and had no quick year jump for birth dates)
+  /** ISO "YYYY-MM-DD" — days after this are shown but not selectable. */
+  maxDate?: string;
+  id?: string;
+  /** Blocks form submit while empty (the native input did this with `required`). */
+  required?: boolean;
+  "aria-invalid"?: boolean;
+  "data-testid"?: string;
 }
 
 const MONTH_NAMES = [
@@ -48,7 +56,7 @@ function formatDisplay(value: string): string {
  * popup (OS-styled, inconsistent with the rest of the app) with one built from
  * the same design tokens as every other control.
  */
-export function DatePicker({ value, onChange, placeholder = "Select date", disabled, className, minDate }: DatePickerProps) {
+export function DatePicker({ value, onChange, placeholder = "Select date", disabled, className, minDate, maxDate, id, required, "aria-invalid": ariaInvalid, "data-testid": testId }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const selected = parseISO(value);
   const [viewDate, setViewDate] = useState(selected ?? new Date());
@@ -96,18 +104,26 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
   }
 
   const minD = minDate ? parseISO(minDate) : null;
+  const maxD = maxDate ? parseISO(maxDate) : null;
+  const thisYear = new Date().getFullYear();
+  const firstYear = Math.min(1900, year);
+  const lastYear = Math.max(maxD ? maxD.getFullYear() : thisYear + 10, year);
+  const years = Array.from({ length: lastYear - firstYear + 1 }, (_, i) => lastYear - i);
   const today = manilaTodayAsLocalDate(); // the clinic's "today", not the visitor's
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
       <button
+        id={id}
+        data-testid={testId}
+        aria-invalid={ariaInvalid || undefined}
         type="button"
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={togglePicker}
         disabled={disabled}
         className={cn(
-          "flex w-full items-center justify-between gap-sm rounded-lg border border-outline-variant bg-surface px-md py-sm text-left text-body-md transition-colors",
+          "flex min-h-[38px] w-full items-center justify-between gap-sm rounded-[6px] border border-outline-variant bg-surface-container-lowest px-md py-sm text-left text-body-md transition-colors",
           disabled ? "cursor-not-allowed opacity-60" : "hover:border-primary/60",
           open && "border-primary ring-2 ring-primary/20",
         )}
@@ -117,9 +133,10 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
         </span>
         <Icon name="calendar_today" className="text-[18px] text-on-surface-variant" />
       </button>
+      {required && <input tabIndex={-1} aria-hidden="true" required value={value} onChange={() => {}} className="pointer-events-none absolute bottom-0 left-0 h-px w-px opacity-0" />}
 
       {open && (
-        <div role="dialog" aria-label="Choose a date" className="absolute left-0 z-40 mt-xs w-[min(280px,calc(100vw-2rem))] rounded-xl border border-outline-variant bg-surface-container-lowest p-md shadow-lg">
+        <div role="dialog" aria-label="Choose a date" className="absolute left-0 z-40 mt-xs w-[min(280px,calc(100vw-2rem))] rounded-lg border border-outline-variant bg-surface-container-lowest p-md shadow-lg">
           <div className="mb-sm flex items-center justify-between">
             <button
               type="button"
@@ -129,8 +146,23 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
             >
               <Icon name="chevron_left" className="text-[18px]" />
             </button>
-            <span className="text-label-md font-medium text-on-surface">
-              {MONTH_NAMES[month]} {year}
+            <span className="flex items-center gap-xs">
+              <select
+                aria-label="Month"
+                value={month}
+                onChange={(e) => setViewDate(new Date(year, Number(e.target.value), 1))}
+                className="rounded-md border border-outline-variant bg-surface-container-lowest px-xs py-[2px] text-label-md font-medium text-on-surface"
+              >
+                {MONTH_NAMES.map((m, i) => <option key={m} value={i}>{m.slice(0, 3)}</option>)}
+              </select>
+              <select
+                aria-label="Year"
+                value={year}
+                onChange={(e) => setViewDate(new Date(Number(e.target.value), month, 1))}
+                className="rounded-md border border-outline-variant bg-surface-container-lowest px-xs py-[2px] text-label-md font-medium text-on-surface"
+              >
+                {years.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
             </span>
             <button
               type="button"
@@ -150,7 +182,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
             {cells.map(({ date, inMonth }, i) => {
               const isSelected = isSameDay(date, selected);
               const isToday = isSameDay(date, today);
-              const isDisabled = !!minD && date < minD;
+              const isDisabled = (!!minD && date < minD) || (!!maxD && date > maxD);
               return (
                 <button
                   key={i}
@@ -178,6 +210,7 @@ export function DatePicker({ value, onChange, placeholder = "Select date", disab
           </div>
           <button
             type="button"
+            disabled={(!!minD && today < minD) || (!!maxD && today > maxD)}
             onClick={() => {
               onChange(toISO(today));
               setOpen(false);

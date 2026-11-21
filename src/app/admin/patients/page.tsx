@@ -1,6 +1,7 @@
 "use client";
 
 import { friendlyError } from "@/lib/api/friendly-error";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { futureDateProblem, lengthProblem, phoneProblem } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
@@ -238,7 +239,7 @@ export default function AdminPatientsPage() {
             </label>
             <label className="space-y-xs">
               <span className={labelStyles}>Date of birth</span>
-              <input type="date" required max={todayManila()} value={newPatient.dateOfBirth} onChange={(e) => setNewPatient({ ...newPatient, dateOfBirth: e.target.value })} className={inputStyles()} />
+              <DatePicker required maxDate={todayManila()} value={newPatient.dateOfBirth} onChange={(v) => setNewPatient({ ...newPatient, dateOfBirth: v })} placeholder="Select date of birth" />
             </label>
             <label className="space-y-xs">
               <span className={labelStyles}>Sex</span>

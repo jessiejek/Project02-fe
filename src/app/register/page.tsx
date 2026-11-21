@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
@@ -112,8 +113,7 @@ function RegisterPageForm() {
           <div className="grid gap-md sm:grid-cols-2">
             <div className="space-y-xs">
               <label htmlFor="dateOfBirth" className={labelStyles}>Date of birth</label>
-              <input id="dateOfBirth" type="date" autoComplete="bday" required max={todayManila()} value={dateOfBirth}
-                onChange={(e) => setDateOfBirth(e.target.value)} className={inputStyles()} />
+              <DatePicker id="dateOfBirth" required maxDate={todayManila()} value={dateOfBirth} onChange={setDateOfBirth} placeholder="Select date of birth" />
             </div>
             <div className="space-y-xs">
               <label htmlFor="sex" className={labelStyles}>Sex</label>
