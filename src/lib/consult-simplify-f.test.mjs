@@ -40,12 +40,13 @@ test('F1 completed view is a read-only Professional fee line; Edit opens section
   assert.doesNotMatch(view, /Waived —/);
 });
 
-test('F2 labels are Charge, Waive, Decide at desk (no Charge PF / Waive PF)', () => {
+//JJQR - AI (Nov 21, 2026) - "Decide at desk" is no longer offered when documenting a visit (old stored ones still display it in the completed view)
+test('F2 labels are Charge and Waive (no Charge PF / Waive PF, no Decide at desk button)', () => {
   assert.doesNotMatch(page, /Charge PF/);
   assert.doesNotMatch(page, /Waive PF/);
   assert.match(page, /setPfDecision\("charge"\)[\s\S]{0,800}Charge\s*<\/button>/);
   assert.match(page, /setPfDecision\("waive"\)[\s\S]{0,400}Waive\s*<\/button>/);
-  assert.match(page, /setPfDecision\(null\)[\s\S]{0,400}Decide at desk\s*<\/button>/);
+  assert.doesNotMatch(page, /Decide at desk\s*<\/button>/);
   const fullVisit = readFileSync(new URL('../../e2e/journeys/full-visit.spec.ts', import.meta.url), 'utf8');
   const matrix = readFileSync(new URL('../../e2e/journeys/consultation-regression-matrix.spec.ts', import.meta.url), 'utf8');
   assert.doesNotMatch(fullVisit, /Charge PF|Waive PF/);
@@ -57,7 +58,9 @@ test('F3 section 9 shows one Total line from computeClinicFee; Charge prefills e
   assert.match(page, /computeClinicFee\(feeSchedule, visitType, discountCategory, medCertRequested\)/);
   assert.match(page, /feePreview\.summary/);
   assert.match(page, /discountPct: s\.discount_pct/);
-  assert.match(page, /if \(!pfAmount\.trim\(\) && previewFee !== null\) setPfAmount\(String\(previewFee\)\)/);
+  //JJQR - AI (Nov 21, 2026) - the Amount FOLLOWS the computed total (never baked into editor state / saved as the doctor's amount)
+  assert.doesNotMatch(page, /if \(!pfAmount\.trim\(\) && previewFee !== null\) setPfAmount\(String\(previewFee\)\)/);
+  assert.match(page, /pfDecision === "charge" && !pfAmountEdited && previewFee !== null\s*\?\s*String\(previewFee\)/);
   const format = load('lib/format.ts');
   const { computeClinicFee, clinicFeePartsSum } = load('lib/clinical/preview-fee.ts', (id) => {
     if (String(id).includes('format')) return format;
@@ -83,7 +86,7 @@ test('F4 stored PF decisions load as-is (no totalFee overwrite); Charge with nul
   assert.doesNotMatch(page, /feeDecision\?\.amount \?\? booking\?\.totalFee/);
   assert.match(page, /pfEditorAmountFromStored\(fd\)/);
   assert.match(page, /consultRes\.data\.pf_amount \?\? undefined/);
-  assert.match(page, /pfAmountShown\.trim\(\) === "" \? undefined : Number\(pfAmountShown\)/);
+  assert.match(page, /pfAmountEdited && pfAmount\.trim\(\) !== "" \? Number\(pfAmount\) : undefined/); //JJQR - AI (Nov 21, 2026) - only a typed amount is the doctor's
   assert.match(page, /\(Total: \$\{formatPeso\(opts\.computedTotal\)\}\)/);
   assert.match(page, /computedTotal: previewFee/);
 });
@@ -119,10 +122,11 @@ test('F5 Charge is the editor default when pf_decision is null; view still shows
   assert.match(page, /pfEditorDecisionFromStored/);
   assert.match(page, /pfViewDecisionFromStored\(sc\.feeDecision\)/);
   assert.match(page, /const pfAmountShown/);
-  assert.match(page, /shouldPrefillChargeAmount/);
+  assert.match(page, /const \[pfAmountEdited, setPfAmountEdited\]/); //JJQR - AI (Nov 21, 2026) - replaces the old prefill-then-bake helper
   assert.match(page, /value=\{pfAmountShown\}/);
-  assert.match(page, /setPfAmount\(pfAmountShown\)/);
-  assert.match(page, /pfEditorAmountFromStored\(savedConsultation\?\.feeDecision\) \|\| pfAmountShown/);
+  //JJQR - AI (Nov 21, 2026) - the auto-filled total is no longer baked into the editor; the just-completed line falls back to the amount actually charged (booking total)
+  assert.doesNotMatch(page, /setPfAmount\(pfAmountShown\)/);
+  assert.match(page, /pfEditorAmountFromStored\(savedConsultation\?\.feeDecision\) \|\| \(booking\?\.totalFee \? String\(booking\.totalFee\) : pfAmountShown\)/);
   assert.match(page, /Professional fee: Decide at desk/);
   const loadStart = page.indexOf('async function load()');
   const loadEnd = page.indexOf('if (cancelled) return;', loadStart);

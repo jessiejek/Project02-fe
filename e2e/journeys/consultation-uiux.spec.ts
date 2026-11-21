@@ -24,7 +24,8 @@ test.describe("Consultation2 UI/UX", () => {
     const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
     await expect(steps.getByRole("button", { name: "More", exact: true })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
-    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toHaveCount(0);
+    //JJQR - AI (Nov 21, 2026) - the fee decision is required and always the LAST step: visible without opening More
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
     await steps.getByRole("button", { name: "More", exact: true }).click();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();

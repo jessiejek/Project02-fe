@@ -12,6 +12,10 @@ import { api } from "@/lib/api/client";
 export interface QueueTicket {
   booking_id: string;
   queue_number: string;
+  //JJQR - AI (Nov 21, 2026) - priority lane
+  lane?: "R" | "S";
+  is_priority?: boolean;
+  //JJQR - END
   sequence: number;
   patient_name: string;
   patient_code: string;
@@ -26,6 +30,7 @@ export interface QueueTicket {
 export interface QueueEntry {
   booking_id: string;
   queue_number: string;
+  is_priority?: boolean; //JJQR - AI (Nov 21, 2026) - priority lane
   patient_id: string;
   patient_name: string;
   patient_code: string;

@@ -16,7 +16,8 @@ test('clinical notes are full-width, labelled editors without pre-filled clinica
  assert.doesNotMatch(page,/lg:grid-cols-\[15rem_minmax/);assert.match(page,/sm:grid-cols-2/);
 });
 test('clinical completion, allergy and prescription review requirements are preserved',()=>{
- assert.match(page,/const REQUIRED_SECTIONS = \[0, 1, 2, 3, 6\]/);
+ //JJQR - AI (Nov 21, 2026) - the Professional Fee decision (8) is now required too
+ assert.match(page,/const REQUIRED_SECTIONS = \[0, 1, 2, 3, 6, 8\]/);
  //JJQR Nov 20, 2026
  assert.doesNotMatch(page,/rx-allergy-review-banner/);
  assert.match(page,/noMedsConfirmed/);assert.match(page,/disabled=\{!canComplete \|\| savingDraft\}/);

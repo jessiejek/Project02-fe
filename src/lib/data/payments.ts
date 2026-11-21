@@ -38,6 +38,27 @@ export async function confirmPayment(
   });
 }
 
+//JJQR - AI (Nov 21, 2026) - visits the doctor waived stay on the front desk's list (₱0 to collect) until staff confirm them
+export interface WaivedVisit {
+  booking_id: string;
+  payment_id: string;
+  patient_name: string;
+  patient_code: string | null;
+  queue_number: string | null;
+  appointment_date: string;
+  waived_reason: string | null;
+}
+
+export async function queryWaivedAwaitingConfirmation(): Promise<WaivedVisit[]> {
+  return api.get<WaivedVisit[]>("/api/payments/waived-awaiting-confirmation");
+}
+
+/** The front desk confirms it has seen the waiver: ₱0 is collected and the visit is closed. */
+export async function confirmWaiver(paymentId: string): Promise<void> {
+  await api.post(`/api/payments/${paymentId}/confirm-waiver`, {});
+}
+//JJQR - END
+
 export async function waivePayment(
   _supabase: unknown,
   bookingId: string,

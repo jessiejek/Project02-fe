@@ -9,11 +9,15 @@ export const ACCESS_COOKIE = "clinic_at";
 export const REFRESH_COOKIE = "clinic_rt";
 
 const isProd = process.env.NODE_ENV === "production";
+//JJQR - AI (Nov 21, 2026) - the desktop "clinic node" serves the UI over plain http://localhost; Safari/WebKit (the Mac window) refuses `Secure` cookies over http, so login would silently fail there.
+// Only the desktop app sets CLINIC_LOCAL_NODE=1; the hosted site stays Secure-only.
+export const COOKIE_SECURE = isProd && process.env.CLINIC_LOCAL_NODE !== "1";
+//JJQR - END
 
 const base = {
   httpOnly: true,
   sameSite: "lax" as const,
-  secure: isProd,
+  secure: COOKIE_SECURE,
   path: "/",
 };
 

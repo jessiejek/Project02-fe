@@ -32,7 +32,7 @@ for (const role of ["staff", "admin"] as const) {
       await pickPatient(page, name);
       await page.getByRole("button", { name: "Check in and get queue number" }).click();
       await expect(page.getByRole("heading", { name: `${fullName} is checked in` })).toBeVisible();
-      await expect(page.getByText(/^Q-\d+$/).first()).toBeVisible();
+      await expect(page.getByText(/^[RSQ]-\d+$/).first()).toBeVisible();
       const entries = await queueFor(staff, name);
       expect(entries).toHaveLength(1);
       expect(entries[0]).toMatchObject({ status: "CheckedIn", visit_type: "New", is_walk_in: true });

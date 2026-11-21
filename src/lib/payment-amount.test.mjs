@@ -3,10 +3,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { checkAmountReceived } from "./payment-amount.ts";
 
-test("exact fee and more (cash with change) are accepted", () => {
+//JJQR - AI (Nov 21, 2026) - EXACT: the amount the doctor set, nothing more, nothing less
+test("only the exact amount due is accepted", () => {
   assert.deepEqual(checkAmountReceived("450", 450), { ok: true, value: 450 });
-  assert.deepEqual(checkAmountReceived("₱1,000", 450), { ok: true, value: 1000 });
-  assert.deepEqual(checkAmountReceived("450.50", 450), { ok: true, value: 450.5 });
+  assert.deepEqual(checkAmountReceived("₱450.00", 450), { ok: true, value: 450 });
+  assert.deepEqual(checkAmountReceived("450.50", 450.5), { ok: true, value: 450.5 });
+});
+
+test("one peso more or less, or cash with change, is refused with the exact amount in the message", () => {
+  for (const bad of ["449", "449.99", "451", "450.01", "500", "₱1,000"]) {
+    const r = checkAmountReceived(bad, 450);
+    assert.equal(r.ok, false, `"${bad}" must be refused`);
+    assert.match(r.error, /exactly ₱450/);
+  }
 });
 
 test("blank / not a number / zero / negative / too small / huge are all refused with a message", () => {
@@ -17,7 +26,7 @@ test("blank / not a number / zero / negative / too small / huge are all refused 
   }
 });
 
-test("a free visit (due ₱0) still needs a real number, but 0 is not a payment", () => {
+test("a free visit (due ₱0) is never 'collected' (a doctor's waiver is confirmed separately)", () => {
   assert.equal(checkAmountReceived("0", 0).ok, false);
-  assert.equal(checkAmountReceived("1", 0).ok, true);
+  assert.equal(checkAmountReceived("1", 0).ok, false);
 });

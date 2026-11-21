@@ -263,6 +263,9 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
           <div className="mb-lg rounded-lg border border-outline-variant bg-surface-container-low p-lg">
             <p className="text-label-md text-on-surface-variant">Queue number</p>
             <p className="text-display-sm tabular-nums text-primary">{ticket.queue_number}</p>
+            {/*JJQR - AI (Nov 21, 2026) - priority lane: S- = senior citizen / PWD, served ahead of the regular (R-) line */}
+            {ticket.is_priority && <p className="mt-xs inline-flex rounded-full bg-primary/10 px-md py-xs text-label-md font-medium text-primary">Priority lane · Senior / PWD</p>}
+            {/*JJQR - END */}
             <p className="font-mono text-body-sm text-on-surface-variant">{ticket.patient_code}</p>
             <p className="mt-sm text-label-md text-on-surface-variant">
               {ticket.visit_type === "FollowUp" ? "Follow-up" : "New visit"} · provisional fee <span className="tabular-nums">{formatPeso(ticket.provisional_fee)}</span>
@@ -279,6 +282,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                     <div class="brand">${escapeHtml(ticket.clinic_name)}</div>
                     <p class="muted">${escapeHtml(ticket.clinic_address)}</p>
                     <div class="queue">${escapeHtml(ticket.queue_number)}</div>
+                    ${ticket.is_priority ? `<p><strong>PRIORITY LANE · Senior / PWD</strong></p>` : ""}
                     <p><strong>${escapeHtml(ticket.patient_name)}</strong> (${escapeHtml(ticket.patient_code)})</p>
                     <p class="muted">${escapeHtml(ticket.doctor_name)}</p>
                     <p class="muted">${escapeHtml(ticket.visit_type === "FollowUp" ? "Follow-up" : "New")} · provisional ₱${ticket.provisional_fee}</p>
@@ -532,6 +536,13 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                   {discountCategory === "Senior" && patient?.dateOfBirth && isSeniorCitizen(patient.dateOfBirth) && (
                     <span className={hintStyles}>Set automatically: patient is 60 or older.</span>
                   )}
+                  {/*JJQR - AI (Nov 21, 2026) - priority lane: the server also gives a 60+ patient or one with a Senior/PWD ID on file the S- (priority) number even with "None" */}
+                  <span className={hintStyles}>
+                    {discountCategory || (patient?.dateOfBirth && isSeniorCitizen(patient.dateOfBirth))
+                      ? "Gets a priority (S-) queue number, served before the regular line."
+                      : "Senior citizens and PWD get a priority (S-) queue number."}
+                  </span>
+                  {/*JJQR - END */}
                 </div>
               </div>
 

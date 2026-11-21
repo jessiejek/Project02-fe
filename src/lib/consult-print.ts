@@ -86,7 +86,9 @@ export function diagnosisLabelsFromConsult(
 
 export function clinicalNotesFromConsult(consult: Awaited<ReturnType<typeof queryConsultationByBooking>>): string {
   if (!consult) return "";
-  return [consult.assessment, consult.plan].filter(Boolean).join("\n");
+  //JJQR - AI (Nov 21, 2026) - impression only: the Plan (diet, medicines, return advice) does not belong in the Dx box of a lab request
+  return (consult.assessment ?? "").trim();
+  //JJQR - END
 }
 
 export async function loadBookingPrintAvailability(bookingId: string): Promise<{ hasRx: boolean; hasLabs: boolean }> {

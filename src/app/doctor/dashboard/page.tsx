@@ -25,6 +25,7 @@ import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/schedu
 import { queryQueue, type QueueBoard } from "@/lib/data/queue";
 import { queryConsultations, type ConsultationRow } from "@/lib/data/clinical";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
+import { compareQueueNumbers, isPriorityQueueNumber } from "@/lib/queue-lane"; //JJQR - AI (Nov 21, 2026) - priority lane
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
 
@@ -330,7 +331,10 @@ export default function DoctorDashboardPage() {
   // queue number so "who's actually next" reads the same as the physical line.
   const upNext = board.items
     .filter((e) => e.status === "CheckedIn" || e.status === "InProgress")
-    .sort((a, b) => String(a.queue_number ?? "").localeCompare(String(b.queue_number ?? ""), "en", { numeric: true }))
+    //JJQR - AI (Nov 21, 2026) - seniors / PWD (S-) first, then arrival order inside each lane
+    // someone already with the doctor stays on top (a senior who arrives later never bumps them), then the priority lane, then arrival order
+    .sort((a, b) => Number(b.status === "InProgress") - Number(a.status === "InProgress") || compareQueueNumbers(a.queue_number, b.queue_number))
+    //JJQR - END
     .slice(0, 3);
   const unpaidCompleted = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
   //JJQR - AI (Nov 20, 2026) - the consultation list has no patient names; the queue board does, keyed by booking, so every "Needs attention" row can say WHO
@@ -402,6 +406,7 @@ export default function DoctorDashboardPage() {
                     </p>
                     <p className="text-label-sm text-on-surface-variant">
                       {e.visit_type === "FollowUp" ? "Follow-up" : "New"}
+                      {isPriorityQueueNumber(e.queue_number) ? " · Priority (Senior/PWD)" : ""}
                       {e.status === "CheckedIn" ? ` · Waiting ${elapsedMinutes(e.checked_in_at)}m` : " · In progress"}
                     </p>
                   </div>

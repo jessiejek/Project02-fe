@@ -37,6 +37,10 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  //JJQR - AI (Nov 21, 2026) - desktop "clinic node": an opt-in self-contained build (NEXT_OUTPUT=standalone, own folder via NEXT_DIST_DIR) so it never touches the normal build or a running dev server
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
+  //JJQR - END
   // Pins the workspace root to this project. Without this, Next.js infers
   // the root from the nearest lockfile and picks up a stray
   // package-lock.json in the parent CLINIC/ folder (an unrelated project),

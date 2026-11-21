@@ -114,13 +114,13 @@ import {
 import { formatConsultationDiagnosisLabel } from "@/lib/data/clinical";
 //JJQR - AI (Nov 20, 2026)
 import { formatClinicDateShort, formatPeso } from "@/lib/format";
+import { isVoidBooking } from "@/lib/paymentDisplay"; //JJQR - AI (Nov 21, 2026)
 //JJQR - END
 import {
   computeClinicFee,
   pfEditorAmountFromStored,
   pfEditorDecisionFromStored,
   pfViewDecisionFromStored,
-  shouldPrefillChargeAmount,
   type ClinicFeeSchedule,
 } from "@/lib/clinical/preview-fee";
 import type {
@@ -208,7 +208,11 @@ const SECTIONS = [
 // optional/recommended (the code previously also gated on PF Decision, which
 // contradicted that explicit section).
 /** Consult2 / Grace clinic: always chart Rx + follow-up as well as SOAP/vitals/Dx. */
-const REQUIRED_SECTIONS = [0, 1, 2, 3, 6];
+//JJQR - AI (Nov 21, 2026) - owner request: the Professional Fee decision is REQUIRED and is always the LAST step, so the doctor consciously charges or waives (e.g. a friend) before finishing. The older note above that called it optional no longer applies.
+const REQUIRED_SECTIONS = [0, 1, 2, 3, 6, 8];
+/** The fee decision is always the last step. */
+const FEE_SECTION_INDEX = 8;
+//JJQR - END
 //JJQR Nov 20, 2026
 /** When false, Diagnosis stays in SECTIONS/index 2 for saves but is hidden from nav and completion gates. */
 const SHOW_DIAGNOSIS_STEP = false;
@@ -221,8 +225,8 @@ const effectiveRequiredSections = REQUIRED_SECTIONS.filter(
   (i) => SHOW_DIAGNOSIS_STEP || i !== DIAGNOSIS_SECTION_INDEX,
 );
 //JJQR - END
-/** Vaccinations + PF — last in SECTION_ORDER so the first 7 tab numbers stay 1–7. */
-const OCCASIONAL_SECTIONS = [5, 8] as const;
+/** Vaccinations stay behind "More" (PF is no longer hidden there: it is required and always the last visible step). */
+const OCCASIONAL_SECTIONS = [5] as const;
 const SECTION_ORDER = [0, 1, 2, 3, 4, 6, 7, 5, 8] as const;
 
 //JJQR - AI (Nov 20, 2026) C6
@@ -878,7 +882,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           }),
         )
         .filter(Boolean),
-      clinicalNotes: [assessment, plan].filter(Boolean).join("\n"),
+      //JJQR - AI (Nov 21, 2026) - the Dx on a lab request is the impression only; it used to append the whole Plan (diet, paracetamol, return advice) onto a form handed to the lab
+      clinicalNotes: assessment.trim(),
+      //JJQR - END
       date: booking?.appointmentDate,
     };
   }
@@ -1038,6 +1044,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Nov 20, 2026) F5 — Charge is the editor default until a stored decision loads
   const [pfDecision, setPfDecision] = useState<"charge" | "waive" | null>("charge");
   const [pfAmount, setPfAmount] = useState("");
+  //JJQR - AI (Nov 21, 2026) - the Charge amount FOLLOWS the computed total (consultation + medical certificate + discount …) until the doctor deliberately types a different number.
+  // Only a typed number is saved as the doctor's amount; the auto-filled total is never saved, so a later fee change (e.g. a certificate) is not ignored.
+  const [pfAmountEdited, setPfAmountEdited] = useState(false);
+  //JJQR - AI (Nov 21, 2026) - the computed total when the doctor typed her amount: if the total changes afterwards (certificate, discount, visit type) the amount follows it again automatically — never asks
+  const [pfOverrideBase, setPfOverrideBase] = useState<number | null | undefined>(undefined);
+  /** Back to "follow the computed total": drops any typed amount. Called whenever something that changes the fee is changed. */
+  const followTotal = () => { setPfAmount(""); setPfAmountEdited(false); setPfOverrideBase(undefined); };
+  //JJQR - AI (Nov 21, 2026) - medical certificate fee: null = follows the certificate (ticked automatically once it is filled / saved); true/false = ticked or unticked by hand (staff can also request it at check-in)
+  const [medCertManual, setMedCertManual] = useState<boolean | null>(null);
+  //JJQR - END
+  //JJQR - END
   const [pfWaiveReason, setPfWaiveReason] = useState("");
   // §16.6 — doctor picks the fee line; the backend recomputes the booking total
   // on consultation save. Seeded from the booking row in the load effect.
@@ -1199,6 +1216,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [mcRecommendations, setMcRecommendations] = useState("");
   const [mcPurposeException, setMcPurposeException] = useState("");
   const [mcComeBackOn, setMcComeBackOn] = useState("");
+  //JJQR - AI (Nov 21, 2026) - when the examination dates are changed, "Please come back on" is highlighted until the doctor edits or confirms it (also flagged if it falls before the last examination day)
+  const [mcComeBackStale, setMcComeBackStale] = useState(false);
+  //JJQR - END
   const [certExists, setCertExists] = useState(false);
   const [issuingCert, setIssuingCert] = useState(false);
   const [certSavedAt, setCertSavedAt] = useState<string | null>(null);
@@ -1207,7 +1227,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [saveMcTplTitle, setSaveMcTplTitle] = useState("");
 
   //JJQR - AI (Nov 20, 2026) E4 — add-on follows a filled/issued certificate
-  const medCertRequested = medCertFeeAddOn({
+  const medCertRequested = medCertManual ?? medCertFeeAddOn({
     certExists,
     recommendations: mcRecommendations,
     purposeException: mcPurposeException,
@@ -1221,13 +1241,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     : null;
   const previewFee = feePreview?.total ?? null;
   //JJQR - END
+  //JJQR - AI (Nov 21, 2026) - the total changed after the doctor typed her amount (e.g. a medical certificate was filled in): the amount updates by itself, she can still edit it before completing
+  if (pfAmountEdited && pfOverrideBase != null && previewFee !== null && previewFee !== pfOverrideBase) {
+    setPfAmount("");
+    setPfAmountEdited(false);
+    setPfOverrideBase(undefined);
+  }
+  //JJQR - END
 
   //JJQR - AI (Nov 20, 2026) F5 — show/persist the Total as Charge amount when nothing is stored; editor state stays empty until she types or saves
+  //JJQR - AI (Nov 21, 2026) - follows the live total unless the doctor typed an amount (was: auto-filled once, then frozen after the first save)
   const pfAmountShown =
-    previewFee !== null &&
-    shouldPrefillChargeAmount(pfDecision, pfAmount, savedConsultation?.feeDecision?.type ?? null)
+    pfDecision === "charge" && !pfAmountEdited && previewFee !== null
       ? String(previewFee)
       : pfAmount;
+  //JJQR - END
   //JJQR - END
 
   //JJQR - AI (Nov 20, 2026) E1 — diagnosis on the certificate follows diagnoses, then Assessment (no sync effect)
@@ -1319,7 +1347,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         doctorName: bookingRow.doctors?.staff_accounts?.full_name ?? "",
         appointmentDate: bookingRow.appointment_date,
         totalFee: Number(bookingRow.total_fee),
-        paymentStatus: bookingRow.payments?.status ?? "Not recorded",
+        //JJQR - AI (Nov 21, 2026) - cancelled / no-show / expired: nothing is owed, so "—" instead of "Unpaid"
+        paymentStatus: isVoidBooking(bookingRow.status) ? "—" : bookingRow.payments?.status ?? "Not recorded",
+        //JJQR - END
         visitType: bookingRow.visit_type ?? "New",
         discountCategory: bookingRow.discount_category ?? "",
         medCertRequested: bookingRow.med_cert_requested ?? false,
@@ -1487,6 +1517,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setVisitType(realBooking.visitType);
       setStaffVisitType(realBooking.visitType);
       setDiscountCategory(realBooking.discountCategory);
+      setMedCertManual(realBooking.medCertRequested ? true : null); //JJQR - AI (Nov 21, 2026) - a certificate the front desk requested at check-in stays ticked
       queryClinicSettings(supabase)
         .then((s) => {
           if (!cancelled && s) {
@@ -1536,6 +1567,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         //JJQR - AI (Nov 20, 2026) F4 F5 — restore Charge/Waive as stored; null becomes Charge in the editor only
         setPfDecision(pfEditorDecisionFromStored(fd));
         setPfAmount(pfEditorAmountFromStored(fd));
+        setPfAmountEdited(pfEditorAmountFromStored(fd) !== ""); //JJQR - AI (Nov 21, 2026) - a stored amount is the doctor's own; none stored = follow the total
         setPfWaiveReason(fd?.type === "Waive" ? (fd.waiveReason ?? "") : "");
         //JJQR - END
       }
@@ -1641,7 +1673,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     vaccinations.length > 0,
     false,
     certExists,
-    pfDecision !== null && (pfDecision === "charge" ? pfAmountShown.trim() !== "" : pfWaiveReason.trim().length >= 5),
+    //JJQR - AI (Nov 21, 2026) - a Charge needs an amount the server accepts (more than ₱0, at most ₱100,000), not just a non-empty box
+    pfDecision !== null && (pfDecision === "charge" ? Number.isFinite(Number(pfAmountShown)) && pfAmountShown.trim() !== "" && Number(pfAmountShown) > 0 && Number(pfAmountShown) <= 100_000 : pfWaiveReason.trim().length >= 5),
+    //JJQR - END
   ];
   const rxSatisfied = sectionSatisfied[3] || noMedsConfirmed;
   //JJQR Nov 20, 2026
@@ -1660,6 +1694,52 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - END
   //JJQR - AI (Nov 20, 2026) - B-40: say WHICH section is missing wherever Save / Review / Complete is disabled
   const missingSectionNames = missingRequiredSections.map((i) => SECTIONS[i]).join(", ");
+  //JJQR - END
+  //JJQR - AI (Nov 21, 2026) - medical certificate: is "Please come back on" in need of a second look?
+  const mcComeBackBeforeUntil = mcComeBackOn !== "" && mcExamTo !== "" && mcComeBackOn < mcExamTo;
+  const mcComeBackNeedsReview = mcComeBackStale || mcComeBackBeforeUntil;
+  //JJQR - END
+  //JJQR - AI (Nov 21, 2026) - the Completion Checklist used to show only section names + ticks; this is what was actually entered, so the doctor can review before confirming
+  const clipText = (s: string, n = 120) => {
+    const t = s.replace(/\s+/g, " ").trim();
+    return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+  };
+  function sectionSummary(i: number): string {
+    switch (i) {
+      case 0:
+        return [
+          chiefComplaint.trim() && `Chief complaint: ${clipText(chiefComplaint)}`,
+          subjective.trim() && `Subjective: ${clipText(subjective)}`,
+          objective.trim() && `Objective: ${clipText(objective)}`,
+          assessment.trim() && `Assessment: ${clipText(assessment)}`,
+          plan.trim() && `Plan: ${clipText(plan)}`,
+        ].filter(Boolean).join("\n") || "Nothing entered.";
+      case 1:
+        return defaultVitalTemplates
+          .map((t) => { const v = (filledVitals[t.formKey] ?? "").trim(); return v ? `${t.description} ${v}${t.unit ? ` ${t.unit}` : ""}` : ""; })
+          .filter(Boolean).join(" · ") || "Nothing recorded.";
+      case 3:
+        return effectiveRxItems.length > 0
+          ? effectiveRxItems.map((rx) => `${rx.genericName}${rx.dosage ? ` ${rx.dosage}` : ""}${rx.quantity ? ` #${rx.quantity}` : ""}`).join("\n")
+          : noMedsConfirmed ? "No medicines this visit." : "Nothing entered.";
+      case 4:
+        return labOrders.map((l) => l.testName.trim()).filter(Boolean).join(", ") || "None ordered.";
+      case 5:
+        return vaccinations.map((v) => `${v.vaccineName.trim()}${v.doseNumber.trim() ? ` (dose ${v.doseNumber.trim()})` : ""}`).filter((x) => x.trim()).join(", ") || "None recorded.";
+      case 6:
+        return followUpMode === "none" ? "No follow-up."
+          : followUpMode === "prn" ? "PRN — return if needed."
+          : followUpDate ? `${formatClinicDateShort(followUpDate, followUpDate)}${followUpReason.trim() ? ` — ${clipText(followUpReason, 80)}` : ""}` : "No date chosen yet.";
+      case 7:
+        return certExists ? `Certificate prepared${mcDiagnosis.trim() ? `: ${clipText(mcDiagnosis, 80)}` : ""}.` : "No certificate.";
+      case 8:
+        return pfDecision === "charge" ? `Charge ${formatPeso(Number(pfAmountShown) || 0)}`
+          : pfDecision === "waive" ? `Waive — ${clipText(pfWaiveReason, 80) || "no reason given"}`
+          : "Not decided yet.";
+      default:
+        return "";
+    }
+  }
   //JJQR - END
   const sectionHasDraft = [
     false,
@@ -1797,7 +1877,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       vaccinationsAdministered: vaccinations,
       feeDecision:
         pfDecision === "charge"
-          ? { type: "Charge", amount: pfAmountShown.trim() === "" ? undefined : Number(pfAmountShown) }
+          ? { type: "Charge", amount: pfAmountEdited && pfAmount.trim() !== "" ? Number(pfAmount) : undefined }
           : pfDecision === "waive"
             ? { type: "Waive", waiveReason: pfWaiveReason }
             : undefined,
@@ -1838,7 +1918,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         // §16.6 — the doctor's PF call travels on the consultation row.
         //JJQR - AI (Nov 20, 2026) F5 — Charge default + Total amount persist on Save/Complete even if section 9 was never opened
         pf_decision: pfDecision === "charge" ? "Charge" : pfDecision === "waive" ? "Waive" : null,
-        pf_amount: pfDecision === "charge" ? Number(pfAmountShown) || null : null,
+        //JJQR - AI (Nov 21, 2026) - only a typed amount is sent; otherwise the server uses the computed fee (so it follows later changes)
+        pf_amount: pfDecision === "charge" && pfAmountEdited && pfAmount.trim() !== "" ? Number(pfAmount) || null : null,
+        //JJQR - END
         pf_waive_reason: pfDecision === "waive" ? pfWaiveReason || null : null,
       });
     } catch {
@@ -1846,10 +1928,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     }
     const savedId = saved.consultation_id;
     setConsultationId(savedId);
-    //JJQR - AI (Nov 20, 2026) F5 — bake the prefilled Total into editor state so the completed line and later Edit keep Charge ₱<total>
-    if (pfDecision === "charge" && pfAmount.trim() === "" && pfAmountShown.trim() !== "") {
-      setPfAmount(pfAmountShown);
-    }
+    //JJQR - AI (Nov 21, 2026) - the auto-filled total is NO LONGER baked into the editor / saved as the doctor's amount (that froze the fee: a certificate added later was never charged)
 
     await replaceDiagnoses(
       supabase,
@@ -1932,8 +2011,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
 
   const [savedDraftSnapshot, setSavedDraftSnapshot] = useState("");
   const draftSaveInFlight = useRef(false);
-  async function handleSaveDraft() {
-    if (draftSaveInFlight.current || consultationFinalizedRef.current) return;
+  //JJQR - AI (Nov 21, 2026) - returns true when the draft is saved (or there was nothing new to save) so "Save & next" only moves on after a good save
+  async function handleSaveDraft(): Promise<boolean> {
+    if (draftSaveInFlight.current || consultationFinalizedRef.current) return false;
+    //JJQR - END
     draftSaveInFlight.current = true;
     const snapshotBeingSaved = currentFormSnapshot();
     //JJQR - AI (Nov 20, 2026) C4
@@ -1942,7 +2023,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       draftSaveInFlight.current = false;
       setSavingDraft(false);
       setInlineSaved(false);
-      return;
+      return true; //JJQR - AI (Nov 21, 2026) - nothing new to save counts as saved
     }
     //JJQR - END
     setSaveError("");
@@ -1958,8 +2039,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       setSavedDraftSnapshot(snapshotBeingSaved);
       setDraftSavedAt(new Date().toLocaleTimeString("en-PH", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit", second: "2-digit" }) + " PHT");
       setInlineSaved(true);
+      return true; //JJQR - AI (Nov 21, 2026)
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Could not save the draft. Try again.");
+      return false; //JJQR - AI (Nov 21, 2026)
     } finally {
       draftSaveInFlight.current = false;
       setSavingDraft(false);
@@ -2044,6 +2127,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       if (!consultId) return;
       const cert = await saveMedCertRow(consultId);
       setCertExists(true);
+      followTotal(); //JJQR - AI (Nov 21, 2026) - certificate issued: the fee page ticks it and the amount updates by itself
       setCertSavedAt(new Date().toLocaleTimeString());
       if (mode === "amend") setAmendSnapshot(currentFormSnapshot());
       if (!printAfter) return;
@@ -2087,6 +2171,8 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
         await deleteMedicalCertificateByConsultation(supabase, consultationId);
       }
       setCertExists(false);
+      setMedCertManual(null); //JJQR - AI (Nov 21, 2026) - the certificate is gone: back to following it
+      followTotal();
       setMcRecommendations("");
       setMcPurposeException("");
       setMcComeBackOn("");
@@ -2167,6 +2253,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setPfDecision(pfEditorDecisionFromStored(source?.feeDecision));
     //JJQR - AI (Nov 20, 2026) F4 — cancel-amend restores the stored amount, not booking.totalFee
     setPfAmount(pfEditorAmountFromStored(source?.feeDecision));
+    setPfAmountEdited(pfEditorAmountFromStored(source?.feeDecision) !== ""); //JJQR - AI (Nov 21, 2026)
     setPfWaiveReason(source?.feeDecision?.type === "Waive" ? (source.feeDecision.waiveReason ?? "") : "");
   }
 
@@ -2404,7 +2491,7 @@ Return to patient queue
           <p className="text-body-md text-on-surface">
             {formatProfessionalFeeLine({
               decision: pfViewDecisionFromStored(savedConsultation?.feeDecision) ?? pfDecision,
-              amount: pfEditorAmountFromStored(savedConsultation?.feeDecision) || pfAmountShown,
+              amount: pfEditorAmountFromStored(savedConsultation?.feeDecision) || (booking?.totalFee ? String(booking.totalFee) : pfAmountShown), //JJQR - AI (Nov 21, 2026)
               waiveReason: savedConsultation?.feeDecision?.type === "Waive" ? (savedConsultation.feeDecision.waiveReason ?? "") : pfWaiveReason,
               computedTotal: previewFee,
             })}{" "}
@@ -2569,7 +2656,7 @@ Return to patient queue
               <p className="text-body-md text-on-surface">
                 {formatProfessionalFeeLine({
                   decision: pfViewDecisionFromStored(sc.feeDecision),
-                  amount: pfEditorAmountFromStored(sc.feeDecision),
+                  amount: pfEditorAmountFromStored(sc.feeDecision) || (booking?.totalFee ? String(booking.totalFee) : ""), //JJQR - AI (Nov 21, 2026) - no amount typed = the computed total that was charged
                   waiveReason: sc.feeDecision?.type === "Waive" ? (sc.feeDecision.waiveReason ?? "") : "",
                   computedTotal: previewFee,
                 })}{" "}
@@ -2682,7 +2769,7 @@ Return to patient queue
                   key={vt}
                   type="button"
                   aria-pressed={visitType === vt}
-                  onClick={() => setVisitType(vt)}
+                  onClick={() => { setVisitType(vt); followTotal(); }}
                   className={cn(
                     "min-h-[44px] rounded-nav border px-md py-xs text-label-md font-medium",
                     visitType === vt
@@ -2722,7 +2809,7 @@ Return to patient queue
             data-testid="consult-section-nav"
             className="flex flex-wrap gap-sm border-b border-outline-variant pb-md"
           >
-            {visibleSectionOrder.map((i, displayIdx) => (
+            {visibleSectionOrder.map((i, displayIdx) => i === FEE_SECTION_INDEX ? null : (
               <button
                 key={SECTIONS[i]}
                 type="button"
@@ -2751,6 +2838,27 @@ Return to patient queue
               {showOccasional ? "Less" : "More"}
               <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
             </button>
+            {/*JJQR - END */}
+            {/*JJQR - AI (Nov 21, 2026) - the Professional Fee decision is always the LAST step: after "More" so opening Vaccinations never pushes it into the middle */}
+            {visibleSectionOrder.includes(FEE_SECTION_INDEX) && (
+              <button
+                key={SECTIONS[FEE_SECTION_INDEX]}
+                type="button"
+                data-testid="consult-fee-step"
+                onClick={() => goToSection(FEE_SECTION_INDEX)}
+                aria-pressed={openSection === FEE_SECTION_INDEX}
+                aria-controls={openSection === FEE_SECTION_INDEX ? `consultation-section-${FEE_SECTION_INDEX}` : undefined}
+                className={cn(
+                  "flex min-h-11 shrink-0 cursor-pointer items-center gap-xs rounded-nav border px-sm py-sm text-left text-label-md transition-colors motion-reduce:transition-none",
+                  openSection === FEE_SECTION_INDEX ? "border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/30" : "border-outline-variant text-on-surface-variant hover:bg-surface-container-low",
+                )}
+              >
+                {renderSectionIndicator(FEE_SECTION_INDEX, "mt-0.5 shrink-0 text-[16px]")}
+                <span className="min-w-0 flex-1 whitespace-normal leading-snug">
+                  {visibleSectionOrder.indexOf(FEE_SECTION_INDEX) + 1}. {SECTIONS[FEE_SECTION_INDEX]}
+                </span>
+              </button>
+            )}
             {/*JJQR - END */}
           </nav>
           {/*JJQR - END */}
@@ -3354,11 +3462,11 @@ Return to patient queue
                         {/*JJQR - END */}
                         <label className="text-label-sm text-on-surface-variant">
                           Examination from
-                          <input type="date" value={mcExamFrom} onChange={(e) => setMcExamFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
+                          <input type="date" value={mcExamFrom} onChange={(e) => { setMcExamFrom(e.target.value); setMcComeBackStale(true); }} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
                         </label>
                         <label className="text-label-sm text-on-surface-variant">
                           Examination until
-                          <input type="date" value={mcExamTo} onChange={(e) => setMcExamTo(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
+                          <input type="date" value={mcExamTo} onChange={(e) => { setMcExamTo(e.target.value); setMcComeBackStale(true); }} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
                         </label>
                       </div>
                       {/*JJQR - AI (Nov 20, 2026) E1 */}
@@ -3387,10 +3495,39 @@ Return to patient queue
                           placeholder="Purpose exception (the &ldquo;except ___&rdquo; blank)"
                           className="rounded-lg border border-outline-variant px-md py-sm text-body-md"
                         /></label>
-                        <label className="text-label-sm text-on-surface-variant">
-                          Please come back on
-                          <input type="date" value={mcComeBackOn} onChange={(e) => setMcComeBackOn(e.target.value)} className="mt-1 w-full rounded-lg border border-outline-variant px-md py-sm text-body-md" />
-                        </label>
+                        {/*JJQR - AI (Nov 21, 2026) - highlight "Please come back on" after the examination dates change, or when it is before the last examination day */}
+                        <div>
+                          <label className="text-label-sm text-on-surface-variant">
+                            Please come back on
+                            <input
+                              type="date"
+                              value={mcComeBackOn}
+                              onChange={(e) => { setMcComeBackOn(e.target.value); setMcComeBackStale(false); }}
+                              data-testid="mc-comeback"
+                              aria-invalid={mcComeBackNeedsReview || undefined}
+                              aria-describedby={mcComeBackNeedsReview ? "mc-comeback-hint" : undefined}
+                              className={cn(
+                                "mt-1 w-full rounded-lg border px-md py-sm text-body-md",
+                                mcComeBackNeedsReview ? "border-status-warning-border bg-status-warning-surface ring-2 ring-status-warning/40" : "border-outline-variant",
+                              )}
+                            />
+                          </label>
+                          {mcComeBackNeedsReview && (
+                            <p id="mc-comeback-hint" role="status" data-testid="mc-comeback-hint" className="mt-xs text-label-md text-status-warning">
+                              {mcComeBackBeforeUntil
+                                ? "This date is before the last examination day — please check it."
+                                : mcComeBackOn
+                                  ? "You changed the examination dates — please check or update this date. "
+                                  : "You changed the examination dates — please choose when the patient should come back."}
+                              {!mcComeBackBeforeUntil && mcComeBackOn && (
+                                <button type="button" onClick={() => setMcComeBackStale(false)} className="underline">
+                                  Keep {formatClinicDateShort(mcComeBackOn, mcComeBackOn)}
+                                </button>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                        {/*JJQR - END */}
                       </div>
                     </div>
                   )}
@@ -3398,6 +3535,18 @@ Return to patient queue
                   {isOpen && i === 8 && (
                     <div className="mt-md space-y-md">
                       {renderSectionSaveHeader()}
+                      {/*JJQR - AI (Nov 21, 2026) - final step: say plainly whether this patient is being charged or waived (e.g. a friend) before the visit is completed */}
+                      <div role="status" data-testid="fee-decision-banner" className="rounded-lg border border-primary/30 bg-primary/5 p-md">
+                        <p className="text-body-md font-medium text-on-surface">Final step — decide the professional fee for this visit.</p>
+                        <p className="text-body-md text-on-surface-variant">
+                          {pfDecision === "charge"
+                            ? (pfAmountShown.trim() === "" ? "This patient will be charged — enter the amount below." : `This patient will be charged ${formatPeso(Number(pfAmountShown) || 0)}.`)
+                            : pfDecision === "waive"
+                              ? (pfWaiveReason.trim().length >= 5 ? `The professional fee will be waived: ${pfWaiveReason.trim()}` : "The professional fee will be waived — add a reason (at least 5 characters).")
+                              : "Choose Charge or Waive."}
+                        </p>
+                      </div>
+                      {/*JJQR - END */}
                       {/* §16.6 — fee line the doctor selects; backend recomputes the booking total on save. */}
                       <div className="space-y-sm rounded-lg bg-surface-container-low p-md">
                         <div className="flex flex-wrap items-center gap-sm">
@@ -3406,7 +3555,7 @@ Return to patient queue
                             <button
                               key={vt}
                               type="button"
-                              onClick={() => setVisitType(vt)}
+                              onClick={() => { setVisitType(vt); followTotal(); }}
                               className={cn(
                                 "rounded-full border px-md py-xs text-label-md",
                                 visitType === vt
@@ -3422,7 +3571,7 @@ Return to patient queue
                           <span className="text-label-md text-on-surface-variant">Discount</span>
                           <select
                             value={discountCategory}
-                            onChange={(e) => setDiscountCategory(e.target.value as "Senior" | "PWD" | "")}
+                            onChange={(e) => { setDiscountCategory(e.target.value as "Senior" | "PWD" | ""); followTotal(); }}
                             className="rounded-lg border border-outline-variant px-md py-xs text-label-md"
                           >
                             <option value="">None</option>
@@ -3431,23 +3580,22 @@ Return to patient queue
                           </select>
                         </div>
                         {/*JJQR - AI (Nov 20, 2026) E4 E5 — add-on is read-only; name the Medical Certificate section, no numbers */}
-                        {medCertRequested ? (
-                          <p className="text-body-md text-on-surface">
-                            Medical certificate +₱{feeSchedule?.medCert ?? 50} — included because a certificate was issued
-                          </p>
-                        ) : (
-                          <p className="text-body-md text-on-surface-variant">
-                            Issue it in the{" "}
-                            <button
-                              type="button"
-                              onClick={() => goToSection(7)}
-                              className="text-primary underline"
-                            >
-                              Medical Certificate
-                            </button>
-                            {" "}section
-                          </p>
-                        )}
+                        {/*JJQR - AI (Nov 21, 2026) - a real checkbox: ticked automatically once the Medical Certificate is filled in / saved (or if the front desk requested it); the amount below updates by itself */}
+                        <label className="flex min-h-11 cursor-pointer items-center gap-sm text-body-md text-on-surface">
+                          <input
+                            type="checkbox"
+                            data-testid="pf-medcert-checkbox"
+                            checked={medCertRequested}
+                            onChange={(e) => { setMedCertManual(e.target.checked); followTotal(); }}
+                            className="h-5 w-5"
+                          />
+                          <span>Medical certificate +{formatPeso(feeSchedule?.medCert ?? 50)}</span>
+                        </label>
+                        <p className="text-label-md text-on-surface-variant">
+                          Ticks by itself when you fill in and save the{" "}
+                          <button type="button" onClick={() => goToSection(7)} className="text-primary underline">Medical Certificate</button>
+                          {" "}section; the amount updates automatically and you can still change it before completing.
+                        </p>
                         {/*JJQR - END */}
                         {/*JJQR - AI (Nov 20, 2026) F3 — one Total line from computeClinicFee */}
                         {feePreview && (
@@ -3461,9 +3609,7 @@ Return to patient queue
                         <button
                           type="button"
                           onClick={() => {
-                            setPfDecision("charge");
-                            //JJQR - AI (Nov 20, 2026) F3 — prefill Amount with the clinic total when empty
-                            if (!pfAmount.trim() && previewFee !== null) setPfAmount(String(previewFee));
+                            setPfDecision("charge"); //JJQR - AI (Nov 21, 2026) - the amount follows the total by itself; nothing is saved until the doctor types one
                           }}
                           className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === "charge" ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
                         >
@@ -3477,21 +3623,19 @@ Return to patient queue
                         >
                           Waive
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPfDecision(null);
-                            setPfAmount("");
-                            setPfWaiveReason("");
-                          }}
-                          className={cn("border-b-2 px-xs py-sm text-label-md", pfDecision === null ? "border-primary text-primary" : "border-transparent text-on-surface-variant")}
-                        >
-                          Decide at desk
-                        </button>
+                        {/*JJQR - AI (Nov 21, 2026) - "Decide at desk" removed: the doctor now chooses Charge or Waive */}
                       </div>
                       {pfDecision === "charge" && (
                         <div className="space-y-md">
-                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmountShown} onChange={(e) => setPfAmount(e.target.value)} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+                          <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Amount</span><input placeholder="Amount*" value={pfAmountShown} onChange={(e) => { setPfAmount(e.target.value); setPfAmountEdited(true); setPfOverrideBase(previewFee); }} className="w-full rounded-lg border border-outline-variant px-md py-sm" /></label>
+                          {/*JJQR - AI (Nov 21, 2026) - the doctor typed a different amount than the computed total: say so, and offer to go back to it */}
+                          {pfAmountEdited && previewFee !== null && Number(pfAmount) !== previewFee && (
+                            <p className="text-label-md text-status-warning" data-testid="pf-amount-differs">
+                              You set {pfAmount.trim() === "" ? "no amount" : formatPeso(Number(pfAmount) || 0)}; the computed total for this visit is {formatPeso(previewFee)}.{" "}
+                              <button type="button" className="underline" onClick={followTotal}>Use {formatPeso(previewFee)}</button>
+                            </p>
+                          )}
+                          {/*JJQR - END */}
                           <select className="w-full rounded-lg border border-outline-variant px-md py-sm">
                             <option>Pay at Clinic</option>
                             <option>Online</option>
@@ -3508,7 +3652,7 @@ Return to patient queue
                           rows={3}
                         /></label>
                       )}
-                      {pfDecision === null && <p className="text-label-md text-on-surface-variant">Optional — choose Charge or Waive if a decision has been made.</p>}
+                      {pfDecision === null && <p className="text-label-md text-on-surface-variant">Choose Charge or Waive to continue.</p>}
                     </div>
                   )}
                 </Card>
@@ -3710,12 +3854,17 @@ Return to patient queue
           </>
         }
       >
-        <ul className="space-y-sm text-body-md">
+        <ul className="max-h-[60vh] space-y-md overflow-y-auto text-body-md" data-testid="completion-checklist">
           {/* //JJQR Nov 20, 2026 — only visible sections in the completion checklist */}
           {visibleSectionOrder.map((i) => (
-            <li key={SECTIONS[i]} className="flex items-center gap-sm">
-              {renderSectionIndicator(i, "text-[18px]")}
-              {SECTIONS[i]}
+            <li key={SECTIONS[i]} className="space-y-xs">
+              <div className="flex items-center gap-sm">
+                {renderSectionIndicator(i, "text-[18px]")}
+                {SECTIONS[i]}
+              </div>
+              {/*JJQR - AI (Nov 21, 2026) - what was entered, so it can be reviewed before Confirm & Complete */}
+              <p className="whitespace-pre-line pl-[26px] text-label-md text-on-surface-variant">{sectionSummary(i)}</p>
+              {/*JJQR - END */}
             </li>
           ))}
           {/* //JJQR - END */}
@@ -3923,8 +4072,10 @@ Return to patient queue
                 </Button>
               </div>
               {/* //JJQR - END */}
+              <Button variant={mode === "complete" && canComplete ? "secondary" : "primary"} loading={mode === "complete" ? savingDraft : savingChanges} disabled={mode === "amend" && !canComplete} data-testid="consult-save" onClick={mode === "complete" ? async () => { const saved = await handleSaveDraft(); if (saved && nextSection !== null) stepSection(nextSection); } : handleSaveChanges}>{mode === "complete" ? (nextSection !== null ? "Save & next" : "Save draft") : "Save amendment"}</Button>
+              {/*JJQR - AI (Nov 21, 2026) - "Save & next": save the draft, then open the next section (on the last section it stays "Save draft"; a failed save keeps you here). Prev / Next still never save. */}
+              {/*JJQR - AI (Nov 21, 2026) - Review & complete is the FINAL action, so it sits last (far right), after Save & next */}
               {mode === "complete" && <Button variant={canComplete ? "primary" : "secondary"} disabled={!canComplete || savingDraft} onClick={() => { setCompleteAttempted(true); setChecklistOpen(true); }} aria-label="Complete Consultation">Review &amp; complete</Button>}
-              <Button variant={mode === "complete" && canComplete ? "secondary" : "primary"} loading={mode === "complete" ? savingDraft : savingChanges} disabled={mode === "amend" && !canComplete} onClick={mode === "complete" ? handleSaveDraft : handleSaveChanges}>{mode === "complete" ? "Save draft" : "Save amendment"}</Button>
             </div>
           </div>
         </div>

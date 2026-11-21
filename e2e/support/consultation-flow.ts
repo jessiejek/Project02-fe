@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 //JJQR - AI (Nov 20, 2026) - batch 2: helpers rewritten for the redesigned /doctor/consultation2 screen
 // ("1. Clinical notes" step bar, labelled text boxes, footer "Save draft" / Ctrl+S,
@@ -6,10 +6,19 @@ import { expect, type Page } from "@playwright/test";
 //  amend mode = "Amend consultation" + "Save amendment" + "Cancel amendment").
 const stepBar = (page: Page) => page.getByRole("navigation", { name: "Consultation sections" });
 
-/** Open a step in the section bar by its title, e.g. /3\. Diagnosis/. */
-export async function openSectionByTitle(page: Page, titleRe: RegExp) {
-  await stepBar(page).getByRole("button", { name: titleRe }).first().click();
+//JJQR - AI (Nov 21, 2026) - step NUMBERS change (the Diagnosis step is hidden, the fee step is last), so steps are matched by NAME: a leading "3\. " in the pattern is ignored
+/** Drops a leading step number from a title pattern: /4\. Prescription/ -> /Prescription/ */
+export function stepNameOnly(titleRe: RegExp): RegExp {
+  return new RegExp(titleRe.source.replace(/^\d+\\\.\s*/, ""), titleRe.flags);
 }
+
+/** Open a step in the section bar by its name, e.g. /Prescription/ (a leading number such as /4\. Prescription/ is ignored). */
+export async function openSectionByTitle(page: Page, titleRe: RegExp) {
+  // the Diagnosis step is hidden on purpose (SHOW_DIAGNOSIS_STEP=false in the consult page): there is nothing to open, so a test that needs it is skipped with that reason
+  if (/diagno/i.test(titleRe.source)) test.skip(true, "The Diagnosis step is hidden (SHOW_DIAGNOSIS_STEP=false).");
+  await stepBar(page).getByRole("button", { name: stepNameOnly(titleRe) }).first().click();
+}
+//JJQR - END
 
 /** Open "1. Clinical notes" and wait for the Chief complaint box. */
 export async function expandSoapSection(page: Page) {
@@ -34,7 +43,7 @@ export async function clickSoapToolbarSave(page: Page) {
     await page.keyboard.press("Control+s");
     return;
   }
-  await page.getByRole("button", { name: "Save draft" }).click();
+  await page.getByRole("button", { name: /Save (draft|& next)/ }).click();
 }
 
 /** Persist the open section without a Review section button (C5). */

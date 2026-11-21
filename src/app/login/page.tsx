@@ -23,6 +23,10 @@ const ROLE_TO_SEGMENT: Record<string, string> = {
 };
 
 // Shared entry point before any portal.
+//JJQR - AI (Nov 21, 2026)
+const REMEMBERED_EMAIL_KEY = "clinic.rememberedEmail";
+//JJQR - END
+
 function LoginPageForm() {
   const router = useRouter();
   const next = safeNext(useSearchParams().get("next"));
@@ -36,6 +40,19 @@ function LoginPageForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  //JJQR - AI (Nov 21, 2026) - desktop "clinic node" only: remember the EMAIL on this computer (never the password) so the doctor / front desk only types the password. The web login is unchanged.
+  const isDesktop = process.env.NEXT_PUBLIC_LOCAL_NODE === "1";
+  const [rememberEmail, setRememberEmail] = useState(true);
+  useEffect(() => {
+    if (!isDesktop) return;
+    queueMicrotask(() => {
+      try {
+        const saved = window.localStorage.getItem(REMEMBERED_EMAIL_KEY);
+        if (saved) { setEmail(saved); setRememberEmail(true); }
+      } catch { /* storage blocked: just no prefill */ }
+    });
+  }, [isDesktop]);
+  //JJQR - END
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +66,14 @@ function LoginPageForm() {
       setSubmitting(false);
       return;
     }
+    //JJQR - AI (Nov 21, 2026) - keep or forget the email once the login worked (never the password)
+    if (isDesktop) {
+      try {
+        if (rememberEmail) window.localStorage.setItem(REMEMBERED_EMAIL_KEY, email.trim());
+        else window.localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+      } catch { /* storage blocked: nothing to remember */ }
+    }
+    //JJQR - END
     router.push(segment === "patient" && next ? next : `/${segment}/dashboard`);
     router.refresh();
   }
@@ -84,6 +109,17 @@ function LoginPageForm() {
           <input id="email" type="email" autoComplete="email" required value={email}
             onChange={(e) => setEmail(e.target.value)} className={inputStyles()} />
         </div>
+        {/*JJQR - AI (Nov 21, 2026) - desktop only: remember the email on this computer (the password is never stored) */}
+        {isDesktop && (
+          <div className="space-y-xs">
+            <label className="flex min-h-11 cursor-pointer items-center gap-sm text-body-md text-on-surface">
+              <input type="checkbox" checked={rememberEmail} onChange={(e) => setRememberEmail(e.target.checked)} data-testid="remember-email" className="h-5 w-5" />
+              <span>Remember my email on this computer</span>
+            </label>
+            <p className="text-label-md text-on-surface-variant">For safety the password is never saved. You stay signed in on this computer for up to 7 days of use.</p>
+          </div>
+        )}
+        {/*JJQR - END */}
         <div className="space-y-xs">
           <div className="flex items-baseline justify-between gap-md">
             <label htmlFor="password" className={labelStyles}>Password</label>

@@ -7,6 +7,8 @@ import { StatCard } from "@/components/ui/Card";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { Toast } from "@/components/ui/Toast";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal"; //JJQR - AI (Nov 21, 2026) - cancel dialog
+import { ApiError } from "@/lib/api/client"; //JJQR - AI (Nov 21, 2026)
 import { Icon } from "@/components/ui/Icon";
 import { AnnouncementsPanel } from "@/components/ui/AnnouncementsPanel";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -41,6 +43,12 @@ export default function StaffDashboardPage() {
   const [board, setBoard] = useState<QueueBoard>(EMPTY_BOARD);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  //JJQR - AI (Nov 21, 2026) - cancel a booking that has not been checked in (reason required, same as the Queue page)
+  const [cancelTarget, setCancelTarget] = useState<QueueRow | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  //JJQR - END
 
   const loadBookings = useCallback(async () => {
     // JJQR - AI (Nov 20, 2026) - B-42: live rows only + the server's true total
@@ -127,6 +135,41 @@ export default function StaffDashboardPage() {
     }
   }
 
+  //JJQR - AI (Nov 21, 2026) - Cancel is offered only for a booking that has NOT been checked in and is not already paid (cancelling a paid booking would lose money: refund it first)
+  const canCancel = (b: QueueRow) => b.status === "Confirmed" && b.paymentStatus !== "Paid";
+
+  function closeCancel() {
+    if (cancelling) return;
+    setCancelTarget(null);
+    setCancelReason("");
+    setCancelError("");
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      setCancelError("Please enter a reason.");
+      return;
+    }
+    setCancelError("");
+    setCancelling(true);
+    try {
+      await updateBookingStatus(null as never, cancelTarget.id, "Cancelled", { reason });
+      const id = cancelTarget.id;
+      setBookings((prev) => prev.filter((b) => b.id !== id));
+      setCancelTarget(null);
+      setCancelReason("");
+      loadBookings().catch(() => {});
+      loadQueue();
+    } catch (err) {
+      setCancelError(err instanceof ApiError ? String((err.body as { message?: string })?.message ?? err.message) : "Could not cancel the booking. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
+  }
+  //JJQR - END
+
   async function retry() {
     setRetrying(true);
     await loadAll();
@@ -206,6 +249,13 @@ export default function StaffDashboardPage() {
                         <Button variant="secondary" className="w-full" loading={pendingId === b.id} onClick={() => toggleCheckIn(b.id, b.status)}>
                           {checkInLabel(b.status)}
                         </Button>
+                        {/*JJQR - AI (Nov 21, 2026) - not checked in yet? staff can cancel it */}
+                        {canCancel(b) && (
+                          <Button variant="ghost" className="w-full text-error" disabled={pendingId === b.id} onClick={() => { setCancelError(""); setCancelTarget(b); }}>
+                            Cancel booking
+                          </Button>
+                        )}
+                        {/*JJQR - END */}
                       </li>
                     ))}
                   </ul>
@@ -228,9 +278,18 @@ export default function StaffDashboardPage() {
                             <td className="px-lg py-md text-right tabular-nums">{b.queueNumber ?? "—"}</td>
                             <td className="px-lg py-md"><StatusPill status={b.status} /></td>
                             <td className="px-lg py-md text-right">
-                              <Button variant="secondary" loading={pendingId === b.id} onClick={() => toggleCheckIn(b.id, b.status)}>
-                                {checkInLabel(b.status)}
-                              </Button>
+                              <div className="flex flex-wrap items-center justify-end gap-sm">
+                                {/*JJQR - AI (Nov 21, 2026) - not checked in yet? staff can cancel it */}
+                                {canCancel(b) && (
+                                  <Button variant="ghost" className="text-error" disabled={pendingId === b.id} onClick={() => { setCancelError(""); setCancelTarget(b); }}>
+                                    Cancel
+                                  </Button>
+                                )}
+                                {/*JJQR - END */}
+                                <Button variant="secondary" loading={pendingId === b.id} onClick={() => toggleCheckIn(b.id, b.status)}>
+                                  {checkInLabel(b.status)}
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -243,6 +302,44 @@ export default function StaffDashboardPage() {
           </>
         )}
       </div>
+      {/*JJQR - AI (Nov 21, 2026) - cancel dialog: a reason is required and the row is kept as Cancelled (never deleted) for the audit trail */}
+      <Modal
+        isOpen={cancelTarget !== null}
+        onClose={closeCancel}
+        title="Cancel this booking?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeCancel} disabled={cancelling}>
+              Keep booking
+            </Button>
+            <Button variant="danger" onClick={confirmCancel} loading={cancelling}>
+              {cancelling ? "Cancelling…" : "Cancel booking"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-md text-body-md text-on-surface">
+          {cancelError && <FormAlert>{cancelError}</FormAlert>}
+          <p>
+            Cancel the booking for <span className="font-medium">{cancelTarget?.patientName || "this patient"}</span>
+            {cancelTarget?.queueNumber ? <> (queue <span className="font-medium">{cancelTarget.queueNumber}</span>)</> : null}? They will be removed from today&apos;s list.
+          </p>
+          <div className="space-y-xs">
+            <label htmlFor="dashboardCancelReason" className="text-label-md text-on-surface-variant">
+              Reason
+            </label>
+            <textarea
+              id="dashboardCancelReason"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g. Patient did not come, changed their mind, duplicate entry"
+              rows={3}
+              className="w-full rounded-lg border border-outline-variant bg-surface-container-lowest p-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+        </div>
+      </Modal>
+      {/*JJQR - END */}
     </AppShell>
   );
 }

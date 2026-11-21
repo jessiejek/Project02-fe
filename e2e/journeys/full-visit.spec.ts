@@ -189,7 +189,7 @@ test("walk-in visit: register → full consultation (+ med cert) → pay → pre
   // ── 9. Professional Fee Decision — med-cert add-on follows the issued certificate ──
   await steps.getByRole("button", { name: "More", exact: true }).click();
   await open(/Professional Fee Decision/);
-  await expect(doctor.getByText(/Medical certificate \+₱50 — included because a certificate was issued/)).toBeVisible();
+  await expect(doctor.getByTestId("pf-medcert-checkbox")).toBeChecked(); //JJQR - AI (Nov 21, 2026) - ticks by itself once the certificate is issued
   await doctor.getByRole("button", { name: "Charge", exact: true }).click();
   await doctor.getByRole("textbox", { name: "Amount" }).fill("500");
 

@@ -7,8 +7,8 @@ const peso = (n: number) => `₱${n.toLocaleString("en-PH", { maximumFractionDig
 
 /**
  * Validates what the cashier typed in "Amount received (₱)".
- * Blank, not a number, zero/negative, below the fee or absurdly large → an error message (nothing is sent).
- * More than the fee is fine (cash, change is handed back). Mirrors PaymentsController.Confirm on the server.
+ * Blank, not a number, zero/negative, or ANYTHING other than the exact amount due → an error message (nothing is sent).
+ * //JJQR - AI (Nov 21, 2026) - exact: not less, and not more with change handed back; the amount is the one the doctor set. Mirrors PaymentsController.Confirm on the server.
  */
 export function checkAmountReceived(raw: string, amountDue: number): AmountCheck {
   const text = raw.replace(/[₱,\s]/g, "");
@@ -17,8 +17,7 @@ export function checkAmountReceived(raw: string, amountDue: number): AmountCheck
   const value = Number(text);
   if (!Number.isFinite(value)) return { ok: false, error: "Amount received must be a number, like 450 or 450.50." };
   if (value <= 0) return { ok: false, error: "Amount received must be more than ₱0." };
-  if (value < amountDue) return { ok: false, error: `Amount received is less than the ${peso(amountDue)} due.` };
-  if (value > MAX_AMOUNT_RECEIVED) return { ok: false, error: `Amount received can't be more than ${peso(MAX_AMOUNT_RECEIVED)}.` };
+  if (value !== amountDue) return { ok: false, error: `Amount must be exactly ${peso(amountDue)} — the amount the doctor set.` };
   return { ok: true, value };
 }
 // JJQR - END

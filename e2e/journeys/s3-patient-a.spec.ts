@@ -220,9 +220,9 @@ test.describe("/patient/bookings", () => {
     await page.goto("/patient/bookings");
     await page.getByRole("button", { name: "Join today’s queue" }).click();
     await expect(page.getByText("You’re in today’s queue. Your number is in the list below.")).toBeVisible();
-    const row = page.getByRole("row").filter({ hasText: /Q-\d+/ });
+    const row = page.getByRole("row").filter({ hasText: /[RSQ]-\d+/ });
     await expect(row).toHaveCount(1);
-    const q = (await row.innerText()).match(/Q-\d+/)![0];
+    const q = (await row.innerText()).match(/[RSQ]-\d+/)![0];
     await page.reload();
     await expect(page.getByRole("row").filter({ hasText: q })).toHaveCount(1);
     const list = await (await me.api.get("/api/bookings/me")).json();
@@ -316,7 +316,7 @@ test.describe("/patient/bookings", () => {
     const page = await loginAs(me.email, me.password);
     await page.goto("/patient/bookings");
     await expect(page.getByRole("heading", { name: "Your bookings" })).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: /Q-\d+/ })).toHaveCount(0);
+    await expect(page.getByRole("row").filter({ hasText: /[RSQ]-\d+/ })).toHaveCount(0);
   });
 });
 

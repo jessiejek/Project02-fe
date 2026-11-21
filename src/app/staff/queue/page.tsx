@@ -18,6 +18,7 @@ import { formatPeso } from "@/lib/format";
 import { queryQueue, updateQueueEntry, cancelQueueEntry, type QueueBoard, type QueueEntry } from "@/lib/data/queue";
 import { ApiError } from "@/lib/api/client";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
+import { isPriorityQueueNumber } from "@/lib/queue-lane"; //JJQR - AI (Nov 21, 2026) - priority lane
 
 // §16.3 — today's walk-in FCFS queue board.
 export default function StaffQueuePage() {
@@ -161,7 +162,7 @@ export default function StaffQueuePage() {
       <div className="space-y-lg">
         <PageHeader
           title="Today’s queue"
-          description="First come, first served. Call the next patient, hold, or mark a no-show."
+          description="Senior citizens and PWD are served first, then first come, first served. Call the next patient, hold, or mark a no-show."
           actions={
             <Link href="/staff/walk-in" className={buttonStyles("primary")}>
               <Icon name="add_circle" className="text-[16px]" />
@@ -206,6 +207,9 @@ export default function StaffQueuePage() {
                   <div className="flex items-start justify-between gap-md">
                     <div className="flex min-w-0 items-start gap-md">
                       <span className="whitespace-nowrap text-headline-sm tabular-nums text-on-surface">{e.queue_number}</span>
+                      {/*JJQR - AI (Nov 21, 2026) - priority lane chip */}
+                      {isPriorityQueueNumber(e.queue_number) && <span className="rounded-full bg-primary/10 px-sm py-xs text-label-sm font-medium text-primary">Priority</span>}
+                      {/*JJQR - END */}
                       <div className="min-w-0">
                         <Link href={`/staff/bookings/${e.booking_id}`} className="break-words text-body-md font-medium text-primary hover:underline">{e.patient_name}</Link>
                         <p className="text-label-md text-on-surface-variant">
@@ -236,7 +240,12 @@ export default function StaffQueuePage() {
                     const busy = busyId === e.booking_id;
                     return (
                     <tr key={e.booking_id} className="align-middle" aria-busy={busy || undefined}>
-                      <td className="whitespace-nowrap px-lg py-md text-right text-headline-sm tabular-nums">{e.queue_number}</td>
+                      <td className="whitespace-nowrap px-lg py-md text-right text-headline-sm tabular-nums">
+                        {e.queue_number}
+                        {/*JJQR - AI (Nov 21, 2026) - priority lane chip */}
+                        {isPriorityQueueNumber(e.queue_number) && <span className="ml-sm rounded-full bg-primary/10 px-sm py-xs align-middle text-label-sm font-medium text-primary">Priority</span>}
+                        {/*JJQR - END */}
+                      </td>
                       <td className="px-lg py-md">
                         <Link href={`/staff/bookings/${e.booking_id}`} className="font-medium text-primary hover:underline">
                           {e.patient_name}

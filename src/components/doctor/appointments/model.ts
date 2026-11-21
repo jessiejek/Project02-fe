@@ -1,20 +1,29 @@
 import type { BookingRow } from "@/lib/data/bookings";
 
+//JJQR - AI (Nov 21, 2026) - priority lane: seniors / PWD (S-) are listed before the regular line. Kept inline (same rule as lib/queue-lane.ts) because
+// doctor-portal.test.mjs runs this file in a bare VM sandbox where imports are not available.
+const collator = new Intl.Collator("en", { numeric: true });
+const lane = (q: string) => (q.startsWith("S-") ? 0 : 1);
+const compareQueueNumbers = (a: string, b: string) => lane(a) - lane(b) || collator.compare(a, b);
+//JJQR - END
 export type AppointmentScope = "today" | "all";
 export type AppointmentFilter = "all" | "active" | "waiting" | "in-progress" | "completed";
 export interface Appointment {
   id: string; patientName: string; patientCode: string | null; appointmentDate: string;
   queueNumber: string | null; status: string; paymentStatus: string | null; visitType: string;
 }
-const collator = new Intl.Collator("en", { numeric: true });
 export function mapAppointments(rows: BookingRow[]): Appointment[] {
   return rows.map(b => ({ id: b.booking_id, patientName: [b.patients?.first_name, b.patients?.last_name].filter(Boolean).join(" ") || "Patient name unavailable",
     patientCode: b.patients?.patient_code ?? null, appointmentDate: b.appointment_date, queueNumber: b.queue_number,
-    status: b.status, paymentStatus: b.payments?.status ?? null, visitType: b.visit_type === "FollowUp" ? "Follow-up" : "Consultation" }));
+    status: b.status,
+    //JJQR - AI (Nov 21, 2026) - a cancelled / no-show / expired visit owes nothing: show "—", never "Unpaid" (same rule as lib/paymentDisplay.ts isVoidBooking; inline because this file runs in a bare VM sandbox in tests)
+    paymentStatus: ["Cancelled", "NoShow", "Expired"].includes(b.status) ? "—" : b.payments?.status ?? null,
+    //JJQR - END
+    visitType: b.visit_type === "FollowUp" ? "Follow-up" : "Consultation" }));
 }
 export function orderedAppointments(rows: Appointment[], scope: AppointmentScope): Appointment[] {
   return [...rows].sort((a,b) => (scope === "all" ? b.appointmentDate.localeCompare(a.appointmentDate) : 0) ||
-    (a.queueNumber === b.queueNumber ? 0 : a.queueNumber === null ? 1 : b.queueNumber === null ? -1 : collator.compare(a.queueNumber, b.queueNumber)) || a.patientName.localeCompare(b.patientName));
+    (a.queueNumber === b.queueNumber ? 0 : a.queueNumber === null ? 1 : b.queueNumber === null ? -1 : compareQueueNumbers(a.queueNumber, b.queueNumber)) || a.patientName.localeCompare(b.patientName));
 }
 export function filterAppointments(rows: Appointment[], filter: AppointmentFilter, search: string): Appointment[] {
   const statuses: Record<AppointmentFilter, string[] | null> = { all: null, active: ["CheckedIn", "InProgress"], waiting: ["CheckedIn"], "in-progress": ["InProgress"], completed: ["Completed"] };

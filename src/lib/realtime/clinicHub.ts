@@ -25,6 +25,34 @@ let connection: signalR.HubConnection | null = null;
 let starting = false;
 let retryAttempt = 0;
 
+//JJQR - AI (Nov 21, 2026) - catch-up after a gap. SignalR does not replay events sent while the connection was down (a sleeping laptop, wifi blip,
+// backend restart), so a screen would stay stale until its 60s poll. Every queue screen registers a "resync" (= its normal refetch) here and we
+// run them all the moment the connection is back, the tab becomes visible again, or the browser comes back online.
+const resyncHandlers = new Set<() => void>();
+let everConnected = false;
+let browserHooksInstalled = false;
+
+function resyncAll() {
+  resyncHandlers.forEach((run) => {
+    try { run(); } catch { /* one screen's refetch failing must not stop the others */ }
+  });
+}
+
+function installBrowserHooks() {
+  if (browserHooksInstalled || typeof window === "undefined") return;
+  browserHooksInstalled = true;
+  const wake = () => {
+    if (document.visibilityState === "hidden") return;
+    // A laptop that slept or lost wifi: bring the connection back now (don't wait out the 30s retry backoff) and refresh what we missed.
+    retryAttempt = 0;
+    attemptStart();
+    resyncAll();
+  };
+  window.addEventListener("online", wake);
+  document.addEventListener("visibilitychange", wake);
+}
+//JJQR - END
+
 // withAutomaticReconnect() only covers a connection that was established and
 // then dropped. It does nothing if the *initial* .start() call itself fails
 // (cold backend start, a momentary network blip, a transient CORS/negotiate
@@ -52,6 +80,10 @@ function attemptStart() {
     .start()
     .then(() => {
       starting = false;
+      //JJQR - AI (Nov 21, 2026) - a successful start after earlier failures / a permanent close = we may have missed events
+      if (everConnected || retryAttempt > 0) resyncAll();
+      everConnected = true;
+      //JJQR - END
       retryAttempt = 0;
     })
     .catch(() => {
@@ -79,12 +111,16 @@ function getConnection(): signalR.HubConnection {
     // attempts and permanently closes the connection — hand it back to our
     // retry loop instead of leaving it dead for the rest of the page's life.
     connection.onclose(() => scheduleRetry());
+    //JJQR - AI (Nov 21, 2026) - automatic reconnect succeeded: refetch what was missed while down
+    connection.onreconnected(() => resyncAll());
+    //JJQR - END
   }
   return connection;
 }
 
 /** Idempotent — safe to call from every component that wants the connection up. Fire-and-forget: the retry loop above is what actually guarantees forward progress, not this call's return value. */
 function ensureStarted(): void {
+  installBrowserHooks(); //JJQR - AI (Nov 21, 2026)
   attemptStart();
 }
 
@@ -106,6 +142,10 @@ export function useClinicHubEvent(event: ClinicHubEvent, onEvent: () => void) {
     const conn = getConnection();
     const handler = () => handlerRef.current();
     conn.on(event, handler);
+    //JJQR - AI (Nov 21, 2026) - one resync per screen: every queue screen listens to QueueUpdated, so register there only (no 3-5x refetch)
+    const resync = () => handlerRef.current();
+    if (event === "QueueUpdated") resyncHandlers.add(resync);
+    //JJQR - END
     // Fire-and-forget — the retry loop in ensureStarted keeps trying in the
     // background regardless of this call. Real-time is still a convenience
     // layer over the existing request-based data: every page that uses this
@@ -114,6 +154,7 @@ export function useClinicHubEvent(event: ClinicHubEvent, onEvent: () => void) {
     ensureStarted();
     return () => {
       conn.off(event, handler);
+      resyncHandlers.delete(resync); //JJQR - AI (Nov 21, 2026)
     };
   }, [event]);
 }

@@ -10,12 +10,13 @@ import { SkeletonStats, SkeletonTable } from "@/components/ui/Skeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FormAlert } from "@/components/ui/FormAlert";
+import { StatusPill } from "@/components/ui/StatusPill"; //JJQR - AI (Nov 21, 2026)
 import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { formatClinicDateShort, formatPeso } from "@/lib/format";
 import { todayManila } from "@/lib/clock";
 import { queryQueue } from "@/lib/data/queue";
 import { queryStaffBookings } from "@/lib/data/bookings";
-import { confirmPayment as confirmPaymentApi } from "@/lib/data/payments";
+import { confirmPayment as confirmPaymentApi, confirmWaiver, queryWaivedAwaitingConfirmation } from "@/lib/data/payments";
 import { checkAmountReceived } from "@/lib/payment-amount";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
@@ -26,6 +27,10 @@ interface QueueRow {
   appointmentDate: string;
   queueNumber: string | null;
   amountDue: number;
+  //JJQR - AI (Nov 21, 2026) - set for a visit the doctor WAIVED: shown with ₱0 due until the front desk confirms it
+  paymentId?: string;
+  waivedReason?: string;
+  //JJQR - END
 }
 
 function newOrNumber(bookingId: string) {
@@ -62,9 +67,35 @@ export default function PaymentsQueuePage() {
   const [retrying, setRetrying] = useState(false);
   const [confirmError, setConfirmError] = useState("");
   const [lastPaid, setLastPaid] = useState("");
-  const activeBooking = useMemo(() => queue.find((q) => q.id === activeId) ?? null, [queue, activeId]);
+  //JJQR - AI (Nov 21, 2026) - a visit that turns into a "waived" row has nothing to record: the Record payment dialog never shows for it (it used to stay open, titled "₱0")
+  const activeBooking = useMemo(() => {
+    const row = queue.find((q) => q.id === activeId) ?? null;
+    return row && row.waivedReason === undefined ? row : null;
+  }, [queue, activeId]);
+  //JJQR - END
 
   const totalDue = queue.reduce((sum, b) => sum + b.amountDue, 0);
+  //JJQR - AI (Nov 21, 2026) - "waiting to pay" counts only visits that still owe; waived ones are counted separately
+  const waitingToPay = queue.filter((b) => b.waivedReason === undefined).length;
+  const waivedToConfirm = queue.length - waitingToPay;
+  const [confirmingWaiverId, setConfirmingWaiverId] = useState<string | null>(null);
+  const [waiverError, setWaiverError] = useState("");
+  async function handleConfirmWaiver(r: QueueRow) {
+    if (!r.paymentId) return;
+    setConfirmingWaiverId(r.id);
+    setWaiverError("");
+    setLastPaid("");
+    try {
+      await confirmWaiver(r.paymentId);
+      setQueue((prev) => prev.filter((x) => x.id !== r.id));
+      setLastPaid(`${r.patientName}: waiver confirmed — ₱0 collected.`);
+    } catch (e) {
+      setWaiverError(e instanceof Error && e.message ? e.message : "Could not confirm the waiver. Please try again.");
+    } finally {
+      setConfirmingWaiverId(null);
+    }
+  }
+  //JJQR - END
 
   async function load() {
     const supabase = null as never;
@@ -115,7 +146,27 @@ export default function PaymentsQueuePage() {
       older = [];
     }
 
-    setQueue([...today, ...older]);
+    //JJQR - AI (Nov 21, 2026) - visits the doctor waived stay on this list marked "Waived", ₱0 due, until staff confirm them (they used to just disappear)
+    let waived: QueueRow[] = [];
+    try {
+      const known = new Set([...today, ...older].map((r) => r.id));
+      waived = (await queryWaivedAwaitingConfirmation())
+        .filter((w) => !known.has(w.booking_id))
+        .map((w) => ({
+          id: w.booking_id,
+          paymentId: w.payment_id,
+          patientName: w.patient_name?.trim() || "—",
+          patientCode: w.patient_code ?? "",
+          appointmentDate: w.appointment_date,
+          queueNumber: w.queue_number,
+          amountDue: 0,
+          waivedReason: w.waived_reason ?? "",
+        }));
+    } catch {
+      waived = []; // the money list above is still right without it
+    }
+    //JJQR - END
+    setQueue([...today, ...older, ...waived]);
     setLoading(false);
   }
 
@@ -210,18 +261,25 @@ export default function PaymentsQueuePage() {
           />
         ) : (
           <>
-            <dl className="grid grid-cols-2 gap-md sm:max-w-[32rem]">
+            <dl className="grid grid-cols-2 gap-md sm:max-w-[48rem] sm:grid-cols-3">
               <Card className="flex flex-col-reverse gap-xs">
                 <dt className="text-label-md text-on-surface-variant">Waiting to pay</dt>
-                <dd className="text-headline-lg tabular-nums text-on-surface">{queue.length}</dd>
+                <dd className="text-headline-lg tabular-nums text-on-surface">{waitingToPay}</dd>
               </Card>
               <Card className="flex flex-col-reverse gap-xs">
                 <dt className="text-label-md text-on-surface-variant">Total due</dt>
                 <dd className="text-headline-lg tabular-nums text-primary">{formatPeso(totalDue)}</dd>
               </Card>
+              {/*JJQR - AI (Nov 21, 2026) */}
+              <Card className="flex flex-col-reverse gap-xs">
+                <dt className="text-label-md text-on-surface-variant">Waived — to confirm</dt>
+                <dd className="text-headline-lg tabular-nums text-on-surface" data-testid="waived-to-confirm-count">{waivedToConfirm}</dd>
+              </Card>
+              {/*JJQR - END */}
             </dl>
 
             {lastPaid && <FormAlert tone="success">{lastPaid}</FormAlert>}
+            {waiverError && <FormAlert>{waiverError}</FormAlert>}
 
             <DataTable
               columns={[
@@ -236,11 +294,26 @@ export default function PaymentsQueuePage() {
                 },
                 { header: "Visit date", render: (r) => <span className="tabular-nums">{formatClinicDateShort(r.appointmentDate)}</span> },
                 { header: "Queue", align: "right", render: (r) => <span className="tabular-nums">{r.queueNumber ?? "—"}</span> },
-                { header: "Amount due", align: "right", render: (r) => <span className="font-medium tabular-nums">{formatPeso(r.amountDue)}</span> },
+                {
+                  header: "Amount due",
+                  align: "right",
+                  render: (r) => r.waivedReason === undefined
+                    ? <span className="font-medium tabular-nums">{formatPeso(r.amountDue)}</span>
+                    : (
+                      //JJQR - AI (Nov 21, 2026) - waived by the doctor: ₱0 to collect, with the reason, so the desk KNOWS
+                      <span className="flex flex-col items-end gap-xs" data-testid="waived-row">
+                        <span className="font-medium tabular-nums">{formatPeso(0)}</span>
+                        <span className="inline-flex items-center gap-xs"><StatusPill status="Waived" /><span className="text-label-sm text-on-surface-variant">by doctor</span></span>
+                        {r.waivedReason && <span className="max-w-[16rem] break-words text-right text-label-sm text-on-surface-variant">{r.waivedReason}</span>}
+                      </span>
+                    ),
+                },
                 {
                   header: "",
                   align: "right",
-                  render: (r) => <Button variant="secondary" onClick={() => openPayment(r)}>Record payment</Button>,
+                  render: (r) => r.waivedReason === undefined
+                    ? <Button variant="secondary" onClick={() => openPayment(r)}>Record payment</Button>
+                    : <Button variant="secondary" loading={confirmingWaiverId === r.id} onClick={() => handleConfirmWaiver(r)}>Confirm waiver</Button>,
                 },
               ]}
               rows={queue}
@@ -258,15 +331,24 @@ export default function PaymentsQueuePage() {
                     </div>
                     <p className="text-body-md font-medium tabular-nums text-on-surface">{formatPeso(r.amountDue)}</p>
                   </div>
+                  {/*JJQR - AI (Nov 21, 2026) - waived by the doctor: say so, ₱0 to collect */}
+                  {r.waivedReason !== undefined && (
+                    <p className="flex flex-wrap items-center gap-xs text-label-md text-on-surface-variant" data-testid="waived-row">
+                      <StatusPill status="Waived" /> by doctor{r.waivedReason ? ` — ${r.waivedReason}` : ""}
+                    </p>
+                  )}
+                  {/*JJQR - END */}
                   <Button
                     variant="secondary"
                     className="w-full"
+                    loading={confirmingWaiverId === r.id}
                     onClick={(e) => {
                       e.stopPropagation();
-                      openPayment(r);
+                      if (r.waivedReason === undefined) openPayment(r);
+                      else void handleConfirmWaiver(r);
                     }}
                   >
-                    Record payment
+                    {r.waivedReason === undefined ? "Record payment" : "Confirm waiver"}
                   </Button>
                 </div>
               )}
@@ -276,7 +358,7 @@ export default function PaymentsQueuePage() {
       </div>
 
       <Modal
-        isOpen={activeId !== null}
+        isOpen={activeBooking !== null} //JJQR - AI (Nov 21, 2026) - closes by itself if the visit turns into a waived row
         onClose={closePayment}
         title={activeBooking ? `Record payment of ${formatPeso(activeBooking.amountDue)}` : "Record payment"}
         footer={
@@ -309,6 +391,9 @@ export default function PaymentsQueuePage() {
           </div>
           <div className="space-y-xs">
             <label htmlFor="payAmount" className={labelStyles}>Amount received (₱)</label>
+            {/*JJQR - AI (Nov 21, 2026) - exact amount: what the doctor set, nothing more, nothing less */}
+            {activeBooking && <p className="text-label-md text-on-surface-variant">Collect exactly {formatPeso(activeBooking.amountDue)} — the amount the doctor set.</p>}
+            {/*JJQR - END */}
             <input id="payAmount" inputMode="decimal" value={amountReceived} onChange={(e) => { setAmountReceived(e.target.value); setConfirmError(""); }} aria-invalid={confirmError ? true : undefined} className={inputStyles("tabular-nums")} />
           </div>
           <div className="space-y-xs">

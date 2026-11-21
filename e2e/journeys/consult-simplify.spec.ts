@@ -74,12 +74,13 @@ test.describe("Consultation2 simplify C1–C6", () => {
     await expect(doctor.getByRole("button", { name: /Review section/ })).toHaveCount(0);
   });
 
-  test("C6 Vaccinations and Professional Fee sit behind More; tab bar does not scroll", async ({ as, api }) => {
+  test("C6 Vaccinations sit behind More, the Professional Fee step is always visible; tab bar does not scroll", async ({ as, api }) => {
     const doctor = await openFreshConsult(as, api);
     await doctor.setViewportSize({ width: 1280, height: 800 });
     const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
-    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toHaveCount(0);
+    //JJQR - AI (Nov 21, 2026) - the fee decision is required and always the LAST step: visible without opening More
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
     await steps.getByRole("button", { name: "More", exact: true }).click();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
@@ -111,17 +112,19 @@ test.describe("Consultation2 simplify F1–F5 professional fee", () => {
     const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
     await expect(doctor.getByText("Appointment type")).toBeVisible();
-    await expect(doctor.getByRole("button", { name: "Decide at desk" })).toBeVisible();
+    //JJQR - AI (Nov 21, 2026) - "Decide at desk" removed: Charge or Waive only
+    await expect(doctor.getByRole("button", { name: "Decide at desk" })).toHaveCount(0);
   });
 
-  test("F2 section 9 labels are Charge, Waive, Decide at desk", async ({ as, api }) => {
+  test("F2 fee step labels are Charge and Waive (no Decide at desk)", async ({ as, api }) => {
     const doctor = await openFreshConsult(as, api);
     const steps = doctor.getByRole("navigation", { name: "Consultation sections" });
     await steps.getByRole("button", { name: "More", exact: true }).click();
     await openSectionByTitle(doctor, /Professional Fee/i);
     await expect(doctor.getByRole("button", { name: "Charge", exact: true })).toBeVisible();
     await expect(doctor.getByRole("button", { name: "Waive", exact: true })).toBeVisible();
-    await expect(doctor.getByRole("button", { name: "Decide at desk", exact: true })).toBeVisible();
+    await expect(doctor.getByRole("button", { name: "Decide at desk", exact: true })).toHaveCount(0);
+    await expect(doctor.getByTestId("fee-decision-banner")).toContainText("Final step");
     await expect(doctor.getByRole("button", { name: "Charge PF" })).toHaveCount(0);
     await expect(doctor.getByRole("button", { name: "Waive PF" })).toHaveCount(0);
   });
@@ -247,12 +250,12 @@ test.describe("Consultation2 simplify E1–E5 medical certificate", () => {
     await expect(doctor.getByRole("dialog", { name: /Confirm Medical Certificate/ })).toHaveCount(0, { timeout: 15_000 });
     await openSectionByTitle(doctor, /Professional Fee/i);
     await expect(doctor.getByText("Total: ₱400 (Follow-up ₱350 + Medical certificate ₱50)")).toBeVisible();
-    await expect(doctor.getByText(/Medical certificate \+₱50 — included because a certificate was issued/)).toBeVisible();
+    await expect(doctor.getByTestId("pf-medcert-checkbox")).toBeChecked(); //JJQR - AI (Nov 21, 2026)
     await openSectionByTitle(doctor, /7\. Medical Certificate/i);
     await doctor.getByRole("button", { name: "Remove certificate" }).click();
     await openSectionByTitle(doctor, /Professional Fee/i);
     await expect(doctor.getByText("Total: ₱350 (Follow-up ₱350)")).toBeVisible();
-    await expect(doctor.getByText(/included because a certificate was issued/)).toHaveCount(0);
+    await expect(doctor.getByTestId("pf-medcert-checkbox")).not.toBeChecked(); //JJQR - AI (Nov 21, 2026) - removing the certificate unticks it
   });
 
   test("E5 Medical Certificate link in professional fee opens that section", async ({ as, api }) => {

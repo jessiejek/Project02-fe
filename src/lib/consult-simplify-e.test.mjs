@@ -72,14 +72,16 @@ test('E3 patient address is a clean field; print builds a single residing-at sen
   assert.equal(cleanMedCertAddress(''), '');
 });
 
-test('E4 med-cert fee add-on follows a filled/issued certificate; checkbox is gone', () => {
+//JJQR - AI (Nov 21, 2026) - there IS a checkbox now: it ticks by itself once the certificate is filled in / saved (or when the front desk requested it), and the amount updates automatically
+test('E4 med-cert fee add-on follows a filled/issued certificate AND is a checkbox that ticks by itself', () => {
   assert.match(page, /medCertFeeAddOn/);
-  assert.match(page, /included because a certificate was issued/);
+  assert.match(page, /const medCertRequested = medCertManual \?\? medCertFeeAddOn\(/);
+  assert.match(page, /data-testid="pf-medcert-checkbox"/);
+  assert.match(page, /checked=\{medCertRequested\}/);
   assert.match(page, /Remove certificate/);
   assert.match(page, /deleteMedicalCertificateByConsultation/);
   assert.doesNotMatch(page, /issue it in section 8/);
   assert.doesNotMatch(page, /setMedCertRequested/);
-  assert.doesNotMatch(page, /type="checkbox"[\s\S]{0,180}Medical certificate \(\+₱/);
   assert.equal(medCertFeeAddOn({ certExists: true, recommendations: '', purposeException: '', comeBackOn: '' }), true);
   assert.equal(medCertFeeAddOn({ certExists: false, recommendations: 'Rest', purposeException: '', comeBackOn: '' }), true);
   assert.equal(medCertFeeAddOn({ certExists: false, recommendations: '', purposeException: '', comeBackOn: '' }), false);
@@ -88,7 +90,7 @@ test('E4 med-cert fee add-on follows a filled/issued certificate; checkbox is go
 test('E5 professional fee names the Medical Certificate section (no section numbers)', () => {
   assert.doesNotMatch(page, /issue it in section 8/);
   assert.doesNotMatch(page, /section 8/);
-  assert.match(page, /Issue it in the/);
+  assert.match(page, /Ticks by itself when you fill in and save the/);
   assert.match(page, /goToSection\(7\)/);
   assert.match(page, />\s*Medical Certificate\s*</);
 });

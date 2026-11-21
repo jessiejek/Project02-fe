@@ -76,8 +76,9 @@ test('C5 Review section / Review notes buttons are gone (save stays on footer / 
   assert.match(page, /Save amendment/);
 });
 
-test('C6 Vaccinations and Professional Fee sit behind More; tab bar wraps with no overflow-x', () => {
-  assert.match(page, /OCCASIONAL_SECTIONS = \[5, 8\]/);
+//JJQR - AI (Nov 21, 2026) - only Vaccinations sit behind More now; the Professional Fee decision is required and always the last step
+test('C6 Vaccinations sit behind More (Professional Fee does not); tab bar wraps with no overflow-x', () => {
+  assert.match(page, /OCCASIONAL_SECTIONS = \[5\] as const/);
   assert.match(page, /\{showOccasional \? "Less" : "More"\}/);
   assert.match(nav, /flex-wrap/);
   assert.doesNotMatch(nav, /overflow-x-auto/);

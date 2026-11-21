@@ -39,7 +39,7 @@ test.describe("Product decisions regression", () => {
   });
 
   //JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Fee behind More; tab bar wraps with no h-scroll
-  test("vaccinations and professional fee sit behind More and the step bar does not scroll horizontally", async ({ as, api }) => {
+  test("vaccinations sit behind More, the professional fee step is always visible, and the step bar does not scroll horizontally", async ({ as, api }) => {
     const staffApi = await api("staff");
     const tag = Date.now().toString(36);
     const patient = await createPatient(staffApi, tag);
@@ -50,7 +50,8 @@ test.describe("Product decisions regression", () => {
     await expect(steps.getByRole("button", { name: /1\. Clinical notes/ })).toBeVisible({ timeout: 15_000 });
     await expect(steps.getByRole("button", { name: "More", exact: true })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toHaveCount(0);
-    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toHaveCount(0);
+    //JJQR - AI (Nov 21, 2026) - the fee decision is required and always the LAST step: visible without opening More
+    await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();
     await steps.getByRole("button", { name: "More", exact: true }).click();
     await expect(steps.getByRole("button", { name: /Vaccinations/ })).toBeVisible();
     await expect(steps.getByRole("button", { name: /Professional Fee/ })).toBeVisible();

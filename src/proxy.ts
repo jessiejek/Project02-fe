@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth/cookies";
+import { ACCESS_COOKIE, REFRESH_COOKIE, COOKIE_SECURE } from "@/lib/auth/cookies";
 import { verifyJwt } from "@/lib/auth/jwt";
 import { dotnetAuth } from "@/lib/auth/dotnet";
 
@@ -70,10 +70,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       claims = await verifyJwt(token);
       if (claims) {
         response.cookies.set(ACCESS_COOKIE, refreshed.data.accessToken, {
-          httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60,
+          httpOnly: true, sameSite: "lax", secure: COOKIE_SECURE, path: "/", maxAge: 60 * 60,
         });
         response.cookies.set(REFRESH_COOKIE, refreshed.data.refreshToken, {
-          httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 7,
+          httpOnly: true, sameSite: "lax", secure: COOKIE_SECURE, path: "/", maxAge: 60 * 60 * 24 * 7,
         });
       }
     }

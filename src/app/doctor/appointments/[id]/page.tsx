@@ -16,6 +16,7 @@ import {
   shortRxSummaryForItems,
 } from "@/lib/data/clinical";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { isVoidBooking } from "@/lib/paymentDisplay"; //JJQR - AI (Nov 21, 2026)
 import { AppointmentPrintActions } from "@/components/doctor/AppointmentPrintActions";
 
 // Stitch appointment_overview_states — 3 states driven by booking status,
@@ -47,7 +48,9 @@ export default async function AppointmentOverviewPage({ params }: { params: Prom
     appointmentDate: b.appointment_date,
     slotStartTime: (b.slot_start_time ?? "").slice(0, 5),
     status: b.status,
-    paymentStatus: b.payments?.status ?? "Not recorded",
+    //JJQR - AI (Nov 21, 2026) - cancelled / no-show / expired: nothing is owed, so "—" instead of "Unpaid"
+    paymentStatus: isVoidBooking(b.status) ? "—" : b.payments?.status ?? "Not recorded",
+    //JJQR - END
     queueNumber: b.queue_number,
     totalFee: Number(b.total_fee),
     amountDue: Number(b.amount_due),
