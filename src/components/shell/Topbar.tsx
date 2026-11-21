@@ -174,7 +174,7 @@ export function Topbar({ onMenuClick, roleBadge }: TopbarProps) {
               }
             }}
             placeholder="Search…" //JJQR - AI (Nov 19, 2026) - short placeholder (the aria-label still says what is searched)
-            className="w-full rounded-lg border border-outline-variant bg-surface-container-low py-xs pl-xl pr-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-[6px] border border-outline-variant bg-surface-container-lowest py-xs pl-xl pr-md text-body-md focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {search.trim().length >= 2 && !loading && settledQuery === search.trim() && open && (
             <ul

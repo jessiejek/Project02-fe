@@ -14,8 +14,8 @@ export function Card({ hoverable, className, ...props }: CardProps) {
   return (
     <div
       className={cn(
-        "bento-card rounded-xl border border-outline-variant bg-surface-container-lowest p-lg",
-        hoverable && "bento-card--interactive cursor-pointer hover:shadow-md",
+        "bento-card rounded-lg border border-outline-variant bg-surface-container-lowest p-md",
+        hoverable && "cursor-pointer hover:border-primary/40",
         className,
       )}
       {...props}

@@ -52,7 +52,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = "md" }:
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={cn("animate-surface-in relative z-10 flex max-h-[90vh] w-full flex-col rounded-xl bg-surface-container-lowest shadow-lg", SIZE_CLASS[size])}
+        className={cn("animate-surface-in relative z-10 flex max-h-[90vh] w-full flex-col rounded-lg bg-surface-container-lowest shadow-lg", SIZE_CLASS[size])}
       >
         <div className="flex items-center justify-between border-b border-outline-variant px-lg py-md">
           <h2 className="text-headline-sm text-on-surface">{title}</h2>

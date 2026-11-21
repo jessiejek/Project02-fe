@@ -375,11 +375,12 @@ export default function DoctorDashboardPage() {
 
   return (
     <AppShell role="doctor" roleBadge={dayStatus ? <StatusPill status={dayStatus} /> : undefined}>
-      <div className="min-w-0 space-y-lg overflow-x-hidden">
-        <DoctorPageHeader title="Your clinic today" description={<>{name} · <span className="tabular-nums">{visitDate(todayManila())}</span></>} actions={<>{/*JJQR - AI (Nov 19, 2026) */}<Link href="/doctor/performance" data-testid="performance-link" className={buttonStyles("secondary")}><Icon name="monitoring" className="h-4 w-4" />Your performance</Link>{/*JJQR - END */}<Link href="/doctor/appointments" className={buttonStyles("primary")}>Open appointments<Icon name="arrow_forward" className="h-4 w-4" /></Link></>} />
+      {/*JJQR - AI (Nov 22, 2026) - two columns like the desktop: queue + reports on the left, availability / analytics / clinic hours on the right */}
+      <div className="grid min-w-0 gap-lg overflow-x-hidden xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start">
+        <div className="xl:col-span-2"><DoctorPageHeader title="Your clinic today" description={<>{name} · <span className="tabular-nums">{visitDate(todayManila())}</span></>} actions={<>{/*JJQR - AI (Nov 19, 2026) */}<Link href="/doctor/performance" data-testid="performance-link" className={buttonStyles("secondary")}><Icon name="monitoring" className="h-4 w-4" />Your performance</Link>{/*JJQR - END */}<Link href="/doctor/appointments" className={buttonStyles("primary")}>Open appointments<Icon name="arrow_forward" className="h-4 w-4" /></Link></>} /></div>
         {statusError && <Toast variant="error" key={statusError} message={statusError} />}
 
-        <Card className="!p-lg sm:!p-xl">
+        <Card className="!p-md xl:col-start-1 xl:row-span-4 sm:!p-lg">
           <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
             <h3 className="text-label-lg font-semibold text-on-surface">Your patient queue</h3>
             <div className="flex flex-wrap gap-sm text-label-sm text-on-surface-variant">
@@ -481,7 +482,7 @@ export default function DoctorDashboardPage() {
           )}
         </Card>
 
-        <Card className="!p-md">
+        <Card className="!p-md xl:col-start-2">
           <h3 className="mb-sm text-label-lg font-semibold text-on-surface">Availability</h3>
           <p className="mb-sm text-label-md text-on-surface-variant">
             {queueError ? "Queue information is unavailable." : board.summary.waiting > 0
@@ -508,7 +509,7 @@ export default function DoctorDashboardPage() {
         {/* Clinic Overview — the Admin Dashboard's own stat cards + recent
             bookings, surfaced here too so a solo doctor running the clinic
             doesn't need a separate admin login just to see these. */}
-        <details className="rounded-xl border border-outline-variant bg-surface-container-lowest p-lg">
+        <details className="rounded-lg border border-outline-variant bg-surface-container-lowest p-md xl:col-start-1">
           <summary className="text-headline-sm font-semibold text-on-surface">Clinic reports & recent bookings</summary>
           {overviewError ? <p role="alert" className="mt-md text-body-md text-on-surface-variant">Reports are unavailable. <button type="button" onClick={loadClinicOverview} className="text-primary underline">Try again</button></p> : <div className="mt-lg space-y-lg">
           <div className="grid grid-cols-1 gap-lg sm:grid-cols-2 md:grid-cols-3">
@@ -556,7 +557,7 @@ export default function DoctorDashboardPage() {
           </div>}
         </details>
 
-        <Card>
+        <Card className="xl:col-start-2">
           <div className="mb-md flex flex-wrap items-center justify-between gap-md">
             <h3 className="text-headline-sm text-on-surface">Practice Analytics — {rangeLabel}</h3>
             <div className="flex gap-xs">
@@ -639,7 +640,7 @@ export default function DoctorDashboardPage() {
           )}
         </Card>
 
-        <Card>
+        <Card className="xl:col-start-2">
           <h3 className="mb-md text-headline-sm text-on-surface">Clinic hours & days away</h3>
           <p className="text-body-md text-on-surface-variant">Review your saved weekly hours and blocked dates before changing your availability.</p>
           <Link href="/doctor/schedule" className="mt-sm inline-block text-label-md text-primary hover:underline">

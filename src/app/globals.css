@@ -9,21 +9,21 @@
   (e.g. --color-primary generates bg-primary/text-primary/border-primary).
 */
 @theme {
-  /* Colors */
-  --color-surface: #f8f9ff;
+  /* Colors — //JJQR - AI (Nov 22, 2026): neutral palette matched to the desktop app (the standard now) //JJQR - END */
+  --color-surface: #f3f5f7;
   --color-surface-dim: #cbdbf5;
-  --color-surface-bright: #f8f9ff;
+  --color-surface-bright: #f3f5f7;
   --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #eff4ff;
-  --color-surface-container: #e5eeff;
-  --color-surface-container-high: #dce9ff;
-  --color-surface-container-highest: #d3e4fe;
-  --color-on-surface: #0b1c30;
-  --color-on-surface-variant: #3d4947;
-  --color-inverse-surface: #213145;
+  --color-surface-container-low: #f3f5f7;
+  --color-surface-container: #eceff2;
+  --color-surface-container-high: #e4e8ec;
+  --color-surface-container-highest: #dadfe5;
+  --color-on-surface: #1b2733;
+  --color-on-surface-variant: #5b6672;
+  --color-inverse-surface: #0b3d38;
   --color-inverse-on-surface: #eaf1ff;
-  --color-outline: #6d7a77;
-  --color-outline-variant: #bcc9c6;
+  --color-outline: #8a94a0;
+  --color-outline-variant: #dde2e8;
   --color-surface-tint: #006a61;
   --color-primary: #00685f;
   --color-on-primary: #ffffff;
@@ -54,9 +54,9 @@
   --color-tertiary-fixed-dim: #ffb59a;
   --color-on-tertiary-fixed: #370e00;
   --color-on-tertiary-fixed-variant: #773215;
-  --color-background: #f8f9ff;
-  --color-on-background: #0b1c30;
-  --color-surface-variant: #d3e4fe;
+  --color-background: #f3f5f7;
+  --color-on-background: #1b2733;
+  --color-surface-variant: #dadfe5;
 
   /* Semantic status colors: a shared vocabulary, separate from brand teal. */
   --color-status-success: #166534;
@@ -105,25 +105,25 @@
   --text-display-sm--letter-spacing: -0.02em;
   --text-display-sm--font-weight: 600;
 
-  --text-headline-lg: 30px;
-  --text-headline-lg--line-height: 38px;
+  --text-headline-lg: 24px;
+  --text-headline-lg--line-height: 32px;
   --text-headline-lg--letter-spacing: -0.02em;
   --text-headline-lg--font-weight: 600;
 
-  --text-headline-lg-mobile: 24px;
-  --text-headline-lg-mobile--line-height: 32px;
+  --text-headline-lg-mobile: 22px;
+  --text-headline-lg-mobile--line-height: 30px;
   --text-headline-lg-mobile--font-weight: 600;
 
-  --text-headline-md: 20px;
-  --text-headline-md--line-height: 28px;
+  --text-headline-md: 18px;
+  --text-headline-md--line-height: 26px;
   --text-headline-md--font-weight: 600;
 
-  --text-headline-sm: 16px;
-  --text-headline-sm--line-height: 24px;
+  --text-headline-sm: 15px;
+  --text-headline-sm--line-height: 22px;
   --text-headline-sm--font-weight: 600;
 
-  --text-body-lg: 16px;
-  --text-body-lg--line-height: 24px;
+  --text-body-lg: 15px;
+  --text-body-lg--line-height: 22px;
   --text-body-lg--font-weight: 400;
 
   --text-body-md: 14px;
@@ -139,7 +139,7 @@
   --text-label-md--letter-spacing: 0.01em;
   --text-label-md--font-weight: 500;
 
-  --text-label-sm: 11px;
+  --text-label-sm: 12px;
   --text-label-sm--line-height: 16px;
   --text-label-sm--letter-spacing: 0.03em;
   --text-label-sm--font-weight: 600;

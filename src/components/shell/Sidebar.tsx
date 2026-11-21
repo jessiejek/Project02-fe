@@ -20,13 +20,6 @@ const ACCENT_BACKGROUND: Record<string, string> = {
   tertiary: "bg-tertiary",
 };
 
-const ACCENT_TEXT: Record<string, string> = {
-  primary: "text-primary-fixed",
-  secondary: "text-secondary-fixed",
-  "on-secondary-fixed": "text-secondary-fixed",
-  tertiary: "text-tertiary-fixed",
-};
-
 export interface SidebarProps {
   role: Role;
   /** Called after a nav link is clicked — used by the mobile drawer to close itself. */
@@ -53,12 +46,12 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
   const config = ROLE_CONFIG[role];
 
   return (
-    <div className={cn("flex h-full flex-col py-lg", role === "doctor" ? "border-r border-outline-variant bg-surface-container-lowest" : "bg-inverse-surface")}>
+    <div className={cn("flex h-full flex-col py-lg", "bg-inverse-surface")}>
       <div className={cn("mb-md flex items-center gap-sm", collapsed ? "justify-center px-xs" : "px-lg")}>
         {!collapsed && (
           <div className="min-w-0">
-            <p className={cn("truncate text-headline-sm font-semibold", role === "doctor" ? "text-primary" : "text-primary-fixed")}>Dr. Grace Gavino</p>
-            <p className={cn("text-label-sm", role === "doctor" ? "mt-xs text-on-surface-variant" : "truncate uppercase tracking-widest text-surface-variant/70")}>
+            <p className={cn("truncate text-headline-sm font-semibold", "text-white")}>Dr. Grace Gavino</p>
+            <p className={cn("text-label-sm", "truncate uppercase tracking-widest text-white/60")}>
               {config.subtitle}
             </p>
           </div>
@@ -70,7 +63,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn(
-              role === "doctor" ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-nav text-on-surface-variant hover:bg-surface-container-low" : "shrink-0 rounded-full p-xs text-outline-variant transition-colors hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
+              "shrink-0 rounded-full p-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white",
               !collapsed && "ml-auto",
             )}
           >
@@ -83,7 +76,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
         {config.navGroups.map((group, i) => (
           <div key={group.label ?? i} className="space-y-xs">
             {group.label && !collapsed && (
-              <p className={cn("px-md pt-sm text-label-sm font-medium", role === "doctor" ? "text-on-surface-variant" : "uppercase tracking-widest text-outline-variant")}>
+              <p className={cn("px-md pt-sm text-label-sm font-medium", "uppercase tracking-widest text-white/50")}>
                 {group.label}
               </p>
             )}
@@ -101,9 +94,9 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
                   className={cn(
                     "group/sidebar-nav relative flex min-h-11 items-center gap-md rounded-nav py-sm text-label-md transition-colors motion-reduce:transition-none",
                     collapsed ? "justify-center px-sm" : "px-md",
-                    role === "doctor" ? (active ? "bg-primary/10 font-semibold text-primary" : "text-on-surface-variant hover:bg-surface-container-low") : active
-                      ? cn("bg-on-secondary-fixed-variant", ACCENT_TEXT[config.accent])
-                      : "text-outline-variant hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
+                    active
+                      ? "bg-white/10 font-semibold text-white"
+                      : "text-white/75 hover:bg-white/10 hover:text-white",
                   )}
                 >
                   {/* A separate inset indicator stays straight instead of following the link's corners. */}
@@ -117,7 +110,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
         ))}
       </nav>
 
-      <div className={cn("space-y-base border-t border-outline/20 pt-md", collapsed ? "px-xs" : "px-sm")}>
+      <div className={cn("space-y-base border-t border-white/10 pt-md", collapsed ? "px-xs" : "px-sm")}>
         {/* Plain <a>, not <Link>: /logout is a destructive GET (it revokes the
             refresh token + clears cookies). Next would prefetch a <Link> on
             viewport/hover and silently log the user out. */}
@@ -140,7 +133,7 @@ export function Sidebar({ role, onNavigate, collapsed = false, onToggleCollapsed
           //JJQR - END
           title={collapsed ? "Logout" : undefined}
           className={cn(
-            role === "doctor" ? "flex min-h-11 items-center gap-md rounded-nav py-sm text-label-md text-on-surface-variant hover:bg-surface-container-low" : "flex items-center gap-md rounded-nav py-sm text-label-md text-outline-variant transition-all hover:bg-on-secondary-fixed-variant/50 hover:text-inverse-on-surface",
+            "flex min-h-11 items-center gap-md rounded-nav py-sm text-label-md text-white/75 transition-colors hover:bg-white/10 hover:text-white",
             collapsed ? "justify-center px-sm" : "px-md",
           )}
         >

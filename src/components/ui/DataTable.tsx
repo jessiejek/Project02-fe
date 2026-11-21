@@ -88,7 +88,7 @@ export function DataTable<T>({
   }
 
   return (
-    <div aria-busy={loading || undefined} className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
+    <div aria-busy={loading || undefined} className="overflow-hidden rounded-lg border border-outline-variant bg-surface-container-lowest">
       {loading && <p role="status" className="sr-only">Loading records…</p>}
       {renderMobileCard && (
         <div className="divide-y divide-outline-variant/30 sm:hidden">
@@ -122,13 +122,13 @@ export function DataTable<T>({
       <div className={cn("overflow-x-auto", renderMobileCard && "hidden sm:block")}>
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-outline-variant bg-surface-container-low">
+            <tr className="border-b border-outline-variant bg-surface-container">
               {columns.map((column) => (
                 <th
                   key={column.header}
                   scope="col"
                   className={cn(
-                    "px-lg py-md text-label-md text-on-surface-variant",
+                    "px-md py-sm text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant",
                     ALIGN_CLASS[column.align ?? "left"],
                   )}
                 >
@@ -142,7 +142,7 @@ export function DataTable<T>({
               Array.from({ length: 6 }).map((_, i) => (
                 <tr key={i}>
                   {columns.map((column, c) => (
-                    <td key={column.header} className={cn("px-lg py-md", ALIGN_CLASS[column.align ?? "left"])}>
+                    <td key={column.header} className={cn("px-md py-sm", ALIGN_CLASS[column.align ?? "left"])}>
                       <Skeleton className={cn("h-4", c === 0 ? "w-1/2" : "w-3/4")} />
                     </td>
                   ))}
@@ -169,7 +169,7 @@ export function DataTable<T>({
                   {columns.map((column) => (
                     <td
                       key={column.header}
-                      className={cn("px-lg py-md", ALIGN_CLASS[column.align ?? "left"])}
+                      className={cn("px-md py-sm", ALIGN_CLASS[column.align ?? "left"])}
                     >
                       {column.render(row)}
                     </td>
