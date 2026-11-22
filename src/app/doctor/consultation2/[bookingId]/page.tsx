@@ -69,6 +69,7 @@ import { followUpModeSatisfied, followUpViewLine } from "@/lib/pf-default";
 //JJQR - END
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryVitalFieldTemplates, queryLabTestCatalog, type LabTestRow } from "@/lib/data/lookups";
+import { beginVisitSession, endVisitSession } from "@/lib/api/client";
 import { queryLabOrdersByBooking, replaceLabOrdersByConsultation } from "@/lib/data/labs";
 import { queryVaccinationsByConsultation, queryVaccinations, replaceVaccinationsByConsultation, type VaccinationRow } from "@/lib/data/patientFiles";
 import { updateQueueEntry } from "@/lib/data/queue";
@@ -1293,6 +1294,23 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   }
   //JJQR - END
 
+
+  //JJQR - AI (Nov 22, 2026) - stale-form protection: while this visit is open, saves carry the visit version the server reported (see lib/api/client.ts). Declared before the load effect so the first reads start the session.
+  const [visitChangedElsewhere, setVisitChangedElsewhere] = useState<string | null>(null);
+  useEffect(() => {
+    beginVisitSession(bookingId);
+    setVisitChangedElsewhere(null);
+    const onChanged = (e: Event) => {
+      const d = (e as CustomEvent<{ bookingId?: string | null; message?: string }>).detail;
+      if (!d?.bookingId || d.bookingId === bookingId) setVisitChangedElsewhere(d?.message ?? "This visit was changed on another computer or window.");
+    };
+    window.addEventListener("clinic:visit-changed", onChanged);
+    return () => {
+      window.removeEventListener("clinic:visit-changed", onChanged);
+      endVisitSession(bookingId);
+    };
+  }, [bookingId]);
+  //JJQR - END
 
   // Single load effect: real booking (joined), consultation + diagnoses +
   // follow_up, last-visit SOAP + its vitals, this booking's own vital
@@ -2696,6 +2714,16 @@ Return to patient queue
   // mode === "complete" | "amend"
   return (
     <AppShell role="doctor">
+      {/*JJQR - AI (Nov 22, 2026) - stale-form protection: a save was refused because this visit changed elsewhere */}
+      {visitChangedElsewhere && (
+        <div role="alert" className="mb-md flex flex-wrap items-center justify-between gap-sm rounded-lg border border-status-danger-border bg-status-danger-surface px-md py-sm text-body-md text-status-danger">
+          <span><strong>Not saved.</strong> {visitChangedElsewhere}</span>
+          <button type="button" onClick={() => window.location.reload()} className="rounded-lg bg-primary px-md py-xs text-label-md font-medium text-on-primary">
+            Reload this visit
+          </button>
+        </div>
+      )}
+      {/*JJQR - END*/}
       {/* JJQR - AI (Oct 31, 2026) — F-002 sticky patient banner */}
       <ConsultPatientBanner
         className="!shadow-none tabular-nums"

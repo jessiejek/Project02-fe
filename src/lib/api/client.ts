@@ -87,13 +87,76 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
+//JJQR - AI (Nov 22, 2026) - stale-form protection. While a visit page is open, the server's "visit version" (X-Visit-Version) is remembered and sent with every save
+// of that visit (consultation, vitals, prescriptions, labs, follow-up, diagnoses). If the visit was changed on another computer or window the server answers 409 "visit_changed"
+// and nothing is overwritten. Saves of one visit also run one at a time so two of our own saves cannot trip the check. Outside an open visit page nothing changes.
+type VisitSession = { version?: string };
+const visitSessions = new Map<string, VisitSession>();
+const consultationToBooking = new Map<string, string>();
+const visitWriteQueues = new Map<string, Promise<unknown>>();
+
+/** Call when a visit page opens; call endVisitSession when it closes. */
+export function beginVisitSession(bookingId: string) {
+  visitSessions.set(bookingId, {});
+  visitWriteQueues.delete(bookingId);
+}
+export function endVisitSession(bookingId: string) {
+  visitSessions.delete(bookingId);
+  visitWriteQueues.delete(bookingId);
+}
+
+const GUID = "[0-9a-fA-F-]{36}";
+const RE_BY_BOOKING = new RegExp(`^/api/(?:consultations|vitals|prescription-groups|lab-orders)/by-booking/(${GUID})/?$`);
+const RE_DIAGNOSES = new RegExp(`^/api/consultations/(${GUID})/diagnoses/?$`);
+const RE_BY_CONSULTATION = new RegExp(`^/api/(?:lab-orders|follow-ups)/by-consultation/(${GUID})/?$`);
+
+function visitBookingFor(path: string, query?: RequestOptions["query"]): string | undefined {
+  if (visitSessions.size === 0) return undefined;
+  const bare = path.replace(/^https?:\/\/[^/]+/, "").split("?")[0];
+  const m1 = RE_BY_BOOKING.exec(bare);
+  if (m1) return visitSessions.has(m1[1]) ? m1[1] : undefined;
+  const m2 = RE_DIAGNOSES.exec(bare) ?? RE_BY_CONSULTATION.exec(bare);
+  if (m2) {
+    const b = consultationToBooking.get(m2[1]);
+    return b && visitSessions.has(b) ? b : undefined;
+  }
+  if (["/api/vitals", "/api/prescription-groups", "/api/consultations"].includes(bare)) {
+    const b = query?.bookingId ? String(query.bookingId) : /[?&]bookingId=([^&]+)/.exec(path)?.[1];
+    return b && visitSessions.has(b) ? b : undefined;
+  }
+  return undefined;
+}
+
 async function request<T>(
   method: string,
   path: string,
   body?: unknown,
   opts: RequestOptions = {},
 ): Promise<T> {
+  const bookingId = visitBookingFor(path, opts.query);
+  const isWrite = method === "PUT" || method === "DELETE";
+  if (bookingId && isWrite) {
+    const previous = visitWriteQueues.get(bookingId) ?? Promise.resolve();
+    const run = previous.catch(() => undefined).then(() => requestOnce<T>(method, path, body, opts, bookingId));
+    visitWriteQueues.set(bookingId, run);
+    return run;
+  }
+  return requestOnce<T>(method, path, body, opts, bookingId);
+}
+//JJQR - END
+
+async function requestOnce<T>(
+  method: string,
+  path: string,
+  body: unknown,
+  opts: RequestOptions,
+  visitBookingId?: string,
+): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json", ...opts.headers };
+  //JJQR - AI (Nov 22, 2026) - send the version this page last saw (writes only)
+  const session = visitBookingId ? visitSessions.get(visitBookingId) : undefined;
+  if (session?.version && (method === "PUT" || method === "DELETE")) headers["X-Visit-Version"] = session.version;
+  //JJQR - END
 
   if (body !== undefined && !(body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
@@ -132,9 +195,34 @@ async function request<T>(
     }
   }
 
+  //JJQR - AI (Nov 22, 2026) - remember the visit version the server reports
+  if (visitBookingId && session) {
+    const v = res.headers.get("X-Visit-Version");
+    const cons = res.headers.get("X-Visit-Consultation");
+    const booking = res.headers.get("X-Visit-Booking");
+    if (cons && booking) consultationToBooking.set(cons, booking);
+    if (v) {
+      const isWrite = method === "PUT" || method === "DELETE";
+      if (isWrite && res.ok) session.version = v; // our own save: the visit is now exactly what we saved
+      else if (!isWrite && session.version === undefined && (res.ok || res.status === 404)) session.version = v; // first read of this visit
+      // a refused (409) save keeps the old version, so nothing can be saved until the page reloads
+    }
+  } else if (visitSessions.size > 0 && res.ok && (method === "PUT" || method === "DELETE")) {
+    // a save of this visit through a route the client could not map (e.g. DELETE /prescription-groups/{id}): keep our version in step with it
+    const booking = res.headers.get("X-Visit-Booking");
+    const v = res.headers.get("X-Visit-Version");
+    const sess = booking ? visitSessions.get(booking) : undefined;
+    if (sess && v) sess.version = v;
+  }
+  //JJQR - END
   const text = await res.text();
   const parsed = text ? safeJson(text) : undefined;
 
+  if (res.status === 409 && typeof window !== "undefined" && parsed && typeof parsed === "object" && (parsed as { code?: string }).code === "visit_changed") {
+    //JJQR - AI (Nov 22, 2026) - tell the open visit page, so it can say plainly that the visit changed elsewhere and must be reloaded (the save-specific messages only say "try again")
+    window.dispatchEvent(new CustomEvent("clinic:visit-changed", { detail: { bookingId: visitBookingId ?? res.headers.get("X-Visit-Booking"), message: (parsed as { message?: string }).message } }));
+    //JJQR - END
+  }
   if (!res.ok) {
     throw new ApiError(res.status, parsed ?? text, extractMessage(parsed) ?? res.statusText);
   }
