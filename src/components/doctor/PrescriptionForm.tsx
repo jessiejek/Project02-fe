@@ -239,6 +239,7 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
   //JJQR - END
 
   if (!item) return null;
+  const editProblem = rxLineProblem({ dosage, quantity, durationKind, durationValue }); //JJQR - AI (Nov 22, 2026) - QA high #6 //JJQR - END
 
   function handleSave() {
     onSave({
@@ -264,9 +265,12 @@ function EditLineItemModal({ item, onClose, onSave }: EditLineItemModalProps) {
       onClose={onClose}
       title="Edit Prescription"
       footer={
-        <Button onClick={handleSave} disabled={!genericName.trim() || !quantity.trim()}>
-          Save
-        </Button>
+        <div className="flex items-center gap-md">
+          {editProblem && <span role="alert" className="text-label-sm text-status-danger">{editProblem}</span>}
+          <Button onClick={handleSave} disabled={!genericName.trim() || editProblem !== null}>
+            Save
+          </Button>
+        </div>
       }
     >
       <div className="space-y-md">
@@ -357,6 +361,25 @@ interface NewRxTabProps {
   onAdd: (item: Omit<PrescriptionLineItem, "id">, addToFavorites: boolean) => void;
 }
 
+//JJQR - AI (Nov 22, 2026) - QA high #6: a prescription line needs a dosage and a real quantity. The server refuses the same lines (Rules.RxItem), this just says so before Add Item.
+export function rxLineProblem(l: { dosage: string; quantity: string; durationKind?: string | null; durationValue?: string | number | null }): string | null {
+  if (!l.dosage.trim()) return "Enter the dosage / strength.";
+  const q = l.quantity.trim();
+  const m = /-?\d+(?:\.\d+)?/.exec(q);
+  if (!q) return "Enter the quantity.";
+  if (!m) return "Quantity needs a number, for example 30 or 1 box.";
+  if (m[0].startsWith("-") || Number(m[0]) <= 0) return "Quantity must be more than 0.";
+  if (l.durationKind === "Days" || l.durationKind === "Weeks") {
+    const raw = String(l.durationValue ?? "").trim();
+    if (raw !== "") {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1 || n > 365) return "Duration must be a whole number from 1 to 365.";
+    }
+  }
+  return null;
+}
+//JJQR - END
+
 function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
   const [query, setQuery] = useState("");
   const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(null);
@@ -387,7 +410,10 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
 
   const matches = query.length >= 3 && !selectedMedicine ? medicines.filter((m) => m.genericName.toLowerCase().includes(query.toLowerCase())).slice(0, 8) : [];
   const effectiveGenericName = (selectedMedicine?.genericName ?? query).trim();
-  const canAdd = effectiveGenericName !== "" && quantity.trim() !== "";
+  //JJQR - AI (Nov 22, 2026) - QA high #6
+  const lineProblem = rxLineProblem({ dosage, quantity, durationKind, durationValue });
+  const canAdd = effectiveGenericName !== "" && lineProblem === null;
+  //JJQR - END
   //JJQR - AI (Oct 31, 2026) — F-014 catalog soft warning
   const showCatalogWarning = effectiveGenericName !== "" && !selectedMedicine && !medicines.some((m) => m.genericName.toLowerCase() === effectiveGenericName.toLowerCase());
   //JJQR - END
@@ -571,6 +597,9 @@ function NewRxTab({ medicines, onAdd }: NewRxTabProps) {
         <input type="checkbox" checked={addToFavorites} onChange={(e) => setAddToFavorites(e.target.checked)} className="h-4 w-4" />
         Add to Favorites
       </label>
+      {effectiveGenericName !== "" && lineProblem && (dosage !== "" || quantity !== "" || durationValue !== "") && (
+        <p role="alert" className="text-label-sm text-status-danger">{lineProblem}</p>
+      )}
       <Button variant="secondary" onClick={handleAdd} disabled={!canAdd} className="w-full">
         Add Item
       </Button>

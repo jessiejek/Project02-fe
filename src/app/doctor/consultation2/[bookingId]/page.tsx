@@ -2633,11 +2633,15 @@ Return to patient queue
               </Card>
               <Card>
                 <h2 className="mb-md text-headline-sm font-semibold text-on-surface">Lab Orders</h2>
-                {sc.labOrders && sc.labOrders.length > 0 ? (
+                {/* JJQR - AI (Nov 22, 2026) - QA high #4: the saved consultation never carried its lab orders (they load into the form state), so View always said "No lab orders recorded" */}
+                {(() => {
+                  const viewLabs = (sc.labOrders && sc.labOrders.length > 0 ? sc.labOrders : labOrders).filter((l) => l.testName.trim());
+                  return viewLabs.length > 0;
+                })() ? (
                   <div className="space-y-xs">
-                    {sc.labOrders.map((lab, i) => (
+                    {(sc.labOrders && sc.labOrders.length > 0 ? sc.labOrders : labOrders).filter((l) => l.testName.trim()).map((lab, i) => (
                       <p key={i} className="text-body-md text-on-surface-variant">
-                        {lab.testName} — {lab.reason}{lab.specimenType ? ` (${lab.specimenType})` : ""}
+                        {lab.testName}{lab.reason ? ` — ${lab.reason}` : ""}{lab.specimenType ? ` (${lab.specimenType})` : ""}
                       </p>
                     ))}
                   </div>
