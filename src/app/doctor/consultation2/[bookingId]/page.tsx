@@ -432,7 +432,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - END
   //JJQR - AI (Oct 31, 2026) — complete mode shows all sections; no occasional toggle
   /** Consult2: occasional sections hidden until the doctor asks for them (not in complete mode). */
-  const [showOccasional, setShowOccasional] = useState(false);
+  const [showOccasional, setShowOccasional] = useState(true); //JJQR - AI (Nov 22, 2026) - owner request: every step is always shown //JJQR - END
   //JJQR - AI (Nov 20, 2026) C6
   const [seenSectionQuery, setSeenSectionQuery] = useState(() => searchParams.get("section"));
   const sectionQuery = searchParams.get("section");
@@ -2863,17 +2863,6 @@ Return to patient queue
                 </span>
               </button>
             ))}
-            {/*JJQR - AI (Nov 20, 2026) C6 - Vaccinations + Professional Fee live behind "More" in every mode */}
-            <button
-              type="button"
-              onClick={() => setShowOccasional((v) => !v)}
-              aria-expanded={showOccasional}
-              className="flex min-h-9 shrink-0 cursor-pointer items-center gap-xs rounded-md border border-dashed border-outline-variant px-sm py-xs text-label-md text-on-surface-variant hover:bg-surface-container lg:w-full lg:border-transparent"
-            >
-              {showOccasional ? "Less" : "More"}
-              <Icon name={showOccasional ? "expand_less" : "expand_more"} className="text-[16px]" aria-hidden />
-            </button>
-            {/*JJQR - END */}
             {/*JJQR - AI (Nov 21, 2026) - the Professional Fee decision is always the LAST step: after "More" so opening Vaccinations never pushes it into the middle */}
             {visibleSectionOrder.includes(FEE_SECTION_INDEX) && (
               <button
