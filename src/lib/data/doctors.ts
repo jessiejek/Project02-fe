@@ -104,6 +104,20 @@ export async function updateDoctor(
   await api.put(`/api/doctors/${doctorId}`, { ...current, ...patch });
 }
 
+/**
+ * The signed-in doctor saves their OWN profile: bio, license / PTR / S2 numbers and their own consultation fee (PF).
+ * PUT /api/doctors/me. Name and specialization are Admin-only; a new fee applies to NEW bookings only.
+ */
+export async function updateMyDoctorProfile(patch: {
+  bio?: string | null;
+  license_number?: string | null;
+  ptr_number?: string | null;
+  s2_number?: string | null;
+  consultation_fee?: number;
+}): Promise<void> {
+  await api.put("/api/doctors/me", patch);
+}
+
 export async function queryDoctorById(
   _supabase: unknown,
   doctorId: string,

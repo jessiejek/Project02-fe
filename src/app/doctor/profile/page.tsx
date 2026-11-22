@@ -11,7 +11,7 @@ import { SkeletonCard } from "@/components/ui/Skeleton";
 import { AppShell } from "@/components/shell/AppShell";
 import { Toast } from "@/components/ui/Toast";
 import { useSession } from "@/components/providers/SessionProvider";
-import { queryDoctorById, updateDoctor } from "@/lib/data/doctors";
+import { queryDoctorById, updateMyDoctorProfile } from "@/lib/data/doctors";
 import { updateStaffAccount } from "@/lib/data/staff";
 import { changePassword } from "@/lib/auth/account";
 
@@ -100,18 +100,15 @@ function ProfileCard({ doctorId, initial }: { doctorId: string; initial: DoctorP
     setSaving(true);
     setSaveError("");
     try {
-    const supabase = null as never;
-    await Promise.all([
-      updateDoctor(supabase, doctorId, {
-        specialization: form.specialization,
-        bio: form.bio || null,
-        consultation_fee: Number(form.consultationFee) || 0,
-        license_number: form.licenseNumber || null,
-        ptr_number: form.ptrNumber || null,
-        s2_number: form.s2Number || null,
-      }),
-      updateStaffAccount(supabase, doctorId, { full_name: form.fullName }),
-    ]);
+    // JJQR - AI (Nov 22, 2026) - the doctor saves their own profile (bio, license/PTR/S2, own fee) through PUT /api/doctors/me; name and specialization are Admin-only.
+    await updateMyDoctorProfile({
+      bio: form.bio || null,
+      consultation_fee: Number(form.consultationFee) || 0,
+      license_number: form.licenseNumber || null,
+      ptr_number: form.ptrNumber || null,
+      s2_number: form.s2Number || null,
+    });
+    // JJQR - END
     setSavedAt(new Date().toLocaleTimeString("en-PH", { timeZone: "Asia/Manila" }));
     } catch { setSaveError("Some profile changes could not be saved. Please review your details and try again."); }
     finally { setSaving(false); }
