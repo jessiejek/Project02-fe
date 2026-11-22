@@ -12,7 +12,6 @@ import { AppShell } from "@/components/shell/AppShell";
 import { Toast } from "@/components/ui/Toast";
 import { useSession } from "@/components/providers/SessionProvider";
 import { queryDoctorById, updateMyDoctorProfile } from "@/lib/data/doctors";
-import { updateStaffAccount } from "@/lib/data/staff";
 import { changePassword } from "@/lib/auth/account";
 
 interface DoctorProfile {
