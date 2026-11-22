@@ -109,6 +109,8 @@ export async function updateDoctor(
  * PUT /api/doctors/me. Name and specialization are Admin-only; a new fee applies to NEW bookings only.
  */
 export async function updateMyDoctorProfile(patch: {
+  full_name?: string;
+  specialization?: string;
   bio?: string | null;
   license_number?: string | null;
   ptr_number?: string | null;

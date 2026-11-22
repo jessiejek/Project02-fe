@@ -4,6 +4,7 @@ import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJ
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
+import { ChangeEmailCard } from "@/components/profile/ChangeEmailCard"; // JJQR - AI (Nov 22, 2026) // JJQR - END
 import { Button } from "@/components/ui/Button";
 import { DoctorPageHeader } from "@/components/doctor/DoctorPageHeader";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -79,7 +80,7 @@ export default function DoctorProfilePage() {
 
   return (
     <AppShell role="doctor">
-      <div className="mx-auto max-w-4xl space-y-xl"><DoctorPageHeader title="Your profile" description="Manage your professional identity and the details used on prescriptions." /><ProfileCard key={doctorId} doctorId={doctorId} initial={profile} /></div>
+      <div className="mx-auto max-w-4xl space-y-xl"><DoctorPageHeader title="Your profile" description="Manage your professional identity and the details used on prescriptions." /><ProfileCard key={doctorId} doctorId={doctorId} initial={profile} /><ChangeEmailCard currentEmail={profile.email} /></div>
     </AppShell>
   );
 }
@@ -101,6 +102,8 @@ function ProfileCard({ doctorId, initial }: { doctorId: string; initial: DoctorP
     try {
     // JJQR - AI (Nov 22, 2026) - the doctor saves their own profile (bio, license/PTR/S2, own fee) through PUT /api/doctors/me; name and specialization are Admin-only.
     await updateMyDoctorProfile({
+      full_name: form.fullName.trim(),
+      specialization: form.specialization.trim(),
       bio: form.bio || null,
       consultation_fee: Number(form.consultationFee) || 0,
       license_number: form.licenseNumber || null,

@@ -4,6 +4,7 @@ import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJ
 import { lengthProblem, phoneProblem } from "@/lib/validation";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
+import { ChangeEmailCard } from "@/components/profile/ChangeEmailCard"; // JJQR - AI (Nov 22, 2026) // JJQR - END
 import { Button } from "@/components/ui/Button";
 import { AppShell } from "@/components/shell/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -65,6 +66,7 @@ export default function StaffProfilePage() {
           <>
             <ProfileCard key={session.staffId} staffId={session.staffId} initial={profile} />
             <ChangePasswordSection />
+            <ChangeEmailCard currentEmail={profile.email} />
           </>
         )}
       </div>

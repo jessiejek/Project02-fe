@@ -63,3 +63,18 @@ function safeParse(s: string): unknown {
     return null;
   }
 }
+
+// JJQR - AI (Nov 22, 2026) - owner: everyone can change their own sign-in email (current password required). POST /api/auth/change-email
+export async function changeEmail(currentPassword: string, newEmail: string): Promise<string> {
+  try {
+    const res = await api.post<{ message?: string; email?: string }>("/api/auth/change-email", { currentPassword, newEmail });
+    return res?.email ?? newEmail;
+  } catch (e) {
+    if (e instanceof ApiError) {
+      const m = safeMessage(e.body);
+      if (m) throw new Error(m);
+    }
+    throw e instanceof Error ? e : new Error("Could not change the email.");
+  }
+}
+// JJQR - END

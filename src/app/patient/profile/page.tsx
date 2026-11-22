@@ -4,6 +4,7 @@ import { PASSWORD_MIN_LENGTH, PASSWORD_HINT } from "@/lib/password-rules"; // JJ
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
+import { ChangeEmailCard } from "@/components/profile/ChangeEmailCard"; // JJQR - AI (Nov 22, 2026) // JJQR - END
 import { Tabs } from "@/components/ui/Tabs";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -99,7 +100,7 @@ export default function PatientProfilePage() {
           <Card>
             <Tabs tabs={TABS} activeId={tab} onChange={setTab} className="mb-lg" />
             {tab === "info" && <ProfileInfoTab key={patient.id} patient={patient} />}
-            {tab === "password" && <ChangePasswordTab />}
+            {tab === "password" && <><ChangePasswordTab /><div className="mt-lg"><ChangeEmailCard currentEmail={patient.email ?? undefined} /></div></>}
             {/* JJQR - AI (Nov 20, 2026) - PV-12/13/14: consent + withdraw + download + correction/deletion */}
             {tab === "consent" && <PrivacyTab patientId={patient.id} />}
             {/* JJQR - END */}
