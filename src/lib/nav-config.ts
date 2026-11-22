@@ -109,6 +109,9 @@ export const ROLE_CONFIG: Record<Role, RoleConfig> = {
         items: [
           { label: "Settings", href: "/admin/settings", icon: "settings" },
           { label: "Audit Logs", href: "/admin/audit-logs", icon: "history" },
+          //JJQR - AI (Nov 22, 2026) - offline-mode plan step 4.5: sync problems an admin has to look at
+          { label: "Sync review", href: "/admin/sync-review", icon: "warning" },
+          //JJQR - END
           { label: "Reports", href: "/admin/reports", icon: "monitoring" },
         ],
       },
