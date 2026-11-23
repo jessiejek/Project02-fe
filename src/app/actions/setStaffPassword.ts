@@ -6,7 +6,7 @@ import { getServerSession } from "@/lib/auth/session";
 export type SetPasswordResult = { success: true } | { success: false; error: string };
 
 // Admin support tool: set a temporary password for a Staff or Doctor member (staffId = doctorId for doctors).
-// The server checks the password rule, ends their sessions and makes them choose their own at next sign-in.
+// The server checks the password rule, clears any lock-out and ends their sessions. (Nothing forces a change at next sign-in: ask them to change it in Profile.)
 // The password is only passed through to the API; it is never logged or stored here.
 export async function setStaffPassword(staffId: string, newPassword: string): Promise<SetPasswordResult> {
   const session = await getServerSession();

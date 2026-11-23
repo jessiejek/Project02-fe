@@ -56,10 +56,10 @@ export function SetPasswordButton({ staffId, name, className }: { staffId: strin
         }
       >
         {done ? (
-          <p className="text-body-md text-on-surface">{name} can sign in with the new password and will then choose their own.</p>
+          <p className="text-body-md text-on-surface">{name} can sign in with the new password. Ask them to change it in their Profile.</p>
         ) : (
           <form className="space-y-md" onSubmit={(e) => { e.preventDefault(); save(); }}>
-            <p className={hintStyles}>Set a temporary password for {name}. Tell them in person. They are asked to choose their own at next sign-in, and any computer they are signed in on is signed out.</p>
+            <p className={hintStyles}>Set a temporary password for {name}. Tell them in person and ask them to change it in their Profile after signing in. Any computer they are signed in on is signed out.</p>
             {error && <FormAlert>{error}</FormAlert>}
             <div className="space-y-xs">
               <label htmlFor="sp-new" className={labelStyles}>New password (12 or more characters)</label>
