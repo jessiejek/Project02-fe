@@ -1,5 +1,6 @@
 "use client";
 
+import { SetPasswordButton } from "@/components/admin/SetPasswordButton";
 import { friendlyError } from "@/lib/api/friendly-error";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -263,6 +264,7 @@ export function DoctorForm({ mode, doctor }: DoctorFormProps) {
       </section>
 
       <div className="flex flex-wrap justify-end gap-sm">
+        {mode === "edit" && doctor && <SetPasswordButton staffId={doctor.id} name={doctor.name || "this doctor"} />}
         <Link href="/admin/doctors" className={buttonStyles("secondary")}>Cancel</Link>
         <Button type="submit" disabled={!canSave} loading={inviting}>
           {inviting ? (mode === "create" ? "Sending invite…" : "Saving…") : mode === "create" ? "Send invite" : "Save changes"}

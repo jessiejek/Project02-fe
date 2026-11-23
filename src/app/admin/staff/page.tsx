@@ -11,6 +11,7 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { hintStyles, inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { inviteStaffMember } from "@/app/actions/inviteStaffMember";
+import { SetPasswordButton } from "@/components/admin/SetPasswordButton";
 import { revokeStaffInvite } from "@/app/actions/revokeStaffInvite";
 import { queryStaffAccounts, updateStaffAccount } from "@/lib/data/staff";
 import type { StaffMember } from "@/data/types";
@@ -101,10 +102,13 @@ export default function AdminStaffPage() {
       <Button variant="ghost" className={full ? "w-full text-status-danger hover:bg-status-danger-surface" : "px-md text-status-danger hover:bg-status-danger-surface"}
         loading={busyId === s.id} disabled={busyId !== null && busyId !== s.id} onClick={() => revoke(s.id)}>Revoke invite</Button>
     ) : (
-      <Button variant="secondary" className={full ? "w-full" : "px-md"} loading={busyId === s.id}
-        disabled={busyId !== null && busyId !== s.id} onClick={() => toggleStatus(s.id)}>
-        {s.status === "Active" ? "Deactivate" : "Activate"}
-      </Button>
+      <div className={full ? "flex w-full flex-col gap-sm" : "flex justify-end gap-sm"}>
+        <SetPasswordButton staffId={s.id} name={s.fullName} className={full ? "w-full" : "px-md"} />
+        <Button variant="secondary" className={full ? "w-full" : "px-md"} loading={busyId === s.id}
+          disabled={busyId !== null && busyId !== s.id} onClick={() => toggleStatus(s.id)}>
+          {s.status === "Active" ? "Deactivate" : "Activate"}
+        </Button>
+      </div>
     );
 
   return (
