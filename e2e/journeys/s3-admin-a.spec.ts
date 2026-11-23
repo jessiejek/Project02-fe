@@ -318,6 +318,10 @@ test.describe("/admin/patients", () => {
     await dlg.getByLabel("Date of birth").fill("1991-02-03");
     await expect(add, "no sex chosen").toBeDisabled();
     await dlg.getByLabel("Sex").selectOption("Female");
+    //JJQR - AI (Nov 23, 2026) - Data Privacy Act (PH): the privacy notice must be shown (ticked) before a patient can be added
+    await expect(add, "privacy notice not ticked").toBeDisabled();
+    await dlg.getByLabel(/I have shown the patient the privacy notice/).check();
+    //JJQR - END
     await expect(add).toBeEnabled();
     await dlg.getByLabel("Date of birth").fill("2999-01-01");
     await dlg.getByLabel("Date of birth").fill("1991-02-03");
@@ -332,6 +336,7 @@ test.describe("/admin/patients", () => {
     await dlg.getByLabel("Date of birth").fill("1991-02-03");
     await dlg.getByLabel("Sex").selectOption("Female");
     await dlg.getByLabel("Contact number").fill("09171230000");
+    await dlg.getByLabel(/I have shown the patient the privacy notice/).check(); //JJQR - AI (Nov 23, 2026) //JJQR - END
     await dlg.getByRole("button", { name: "Add patient" }).dblclick();
     await page.waitForTimeout(1500);
     const found = await patientsMatching(admin, first);
@@ -351,6 +356,7 @@ test.describe("/admin/patients", () => {
     await dlg.getByLabel("Last name").fill("Tester");
     await dlg.getByLabel("Date of birth").fill("2999-01-01");
     await dlg.getByLabel("Sex").selectOption("Male");
+    await dlg.getByLabel(/I have shown the patient the privacy notice/).check(); //JJQR - AI (Nov 23, 2026) //JJQR - END
     const add = dlg.getByRole("button", { name: "Add patient" });
     if (await add.isEnabled()) { await add.click(); await page.waitForTimeout(1500); }
     expect(await patientsMatching(admin, first), "a patient born in 2999 must not be created").toHaveLength(0);

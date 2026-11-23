@@ -157,6 +157,16 @@ export async function createPatient(
   return api.post<PatientRow>("/api/patients", row);
 }
 
+//JJQR - AI (Nov 23, 2026) - Data Privacy Act (PH): record that the privacy notice was shown at the front desk (an audit entry on the server, never the patient's consent). Best effort: the patient is already registered.
+export async function recordPrivacyNoticeShown(patientId: string): Promise<void> {
+  try {
+    await api.post(`/api/patients/${patientId}/privacy-notice-shown`);
+  } catch {
+    /* the audit entry is best effort; registration already succeeded */
+  }
+}
+//JJQR - END
+
 //JJQR - AI (Oct 31, 2026)
 /** Keys returned on GET but must not be sent on PUT (nav collections, identity, audit). */
 const PATIENT_PUT_READONLY_KEYS = [

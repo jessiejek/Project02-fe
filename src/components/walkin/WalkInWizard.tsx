@@ -18,7 +18,8 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { hintStyles, inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { formatClinicDateShort, formatPeso, orDash } from "@/lib/format";
-import { queryPatients, createPatient } from "@/lib/data/patients";
+import { queryPatients, createPatient, recordPrivacyNoticeShown } from "@/lib/data/patients";
+import { PrivacyNoticeAck } from "@/components/privacy/PrivacyNoticeAck"; //JJQR - AI (Nov 23, 2026) - Data Privacy Act (PH) notice at registration //JJQR - END
 import { clientPage } from "@/lib/data/paging";
 import { checkInWalkIn, type QueueTicket } from "@/lib/data/queue";
 import { cn } from "@/lib/cn";
@@ -76,6 +77,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
   const [quickRegisterOpen, setQuickRegisterOpen] = useState(false);
   const [quickRegister, setQuickRegister] = useState(BLANK_QUICK_REGISTER);
   const [preparePortal, setPreparePortal] = useState(false);
+  const [privacyShown, setPrivacyShown] = useState(false); //JJQR - AI (Nov 23, 2026) - the privacy notice was shown to the patient //JJQR - END
   const [registering, setRegistering] = useState(false);
   const [registerError, setRegisterError] = useState("");
   const [patientId, setPatientId] = useState<string | null>(null);
@@ -163,7 +165,8 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
     quickRegister.firstName.trim() !== "" &&
     quickRegister.lastName.trim() !== "" &&
     quickRegister.dateOfBirth.trim() !== "" &&
-    quickRegister.sex !== "";
+    quickRegister.sex !== "" &&
+    privacyShown; //JJQR - AI (Nov 23, 2026) - the privacy notice must be shown first //JJQR - END
 
   async function handleQuickRegister() {
     if (!canQuickRegister) return;
@@ -187,6 +190,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
       return;
     }
     setRegistering(false);
+    void recordPrivacyNoticeShown(data.patient_id); //JJQR - AI (Nov 23, 2026) - audit entry, best effort //JJQR - END
     const created: PatientRow = {
       id: data.patient_id,
       patientCode: data.patient_code,
@@ -201,6 +205,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
     setPatientId(created.id);
     setQuickRegister(BLANK_QUICK_REGISTER);
     setPreparePortal(false);
+    setPrivacyShown(false);
     setQuickRegisterOpen(false);
   }
 
@@ -481,6 +486,7 @@ export function WalkInWizard({ role }: { role: Extract<Role, "staff" | "admin"> 
                 Not wired yet — this registers as a guest record for now; portal invites need an email field this form doesn&apos;t collect.
               </FormAlert>
             )}
+            <PrivacyNoticeAck id="qr-privacy" checked={privacyShown} onChange={setPrivacyShown} className="sm:col-span-2" />
           </div>
         </Modal>
 

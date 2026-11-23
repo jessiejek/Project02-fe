@@ -579,7 +579,8 @@ export function buildMedicalCertificateHtml(opts: McHtmlOpts): string {
 }
 .form-mc .sig-name { font-size: 7.5pt; font-weight: 700; height: 0.20in; line-height: 0.20in; }
 .form-mc .sig-row { font-size: 7.5pt; height: 0.20in; margin: 0; line-height: 0.20in; }
-`;
+
+.form-mc .ln { width: auto; }`; //JJQR - AI (Nov 23, 2026) - every pinned line used width:100% inside the left/right margins, so its underline ran past the right margin to the page edge. Let it fill only the margin box (the desktop already did; keeps both prints identical) //JJQR - END
 
   const inner =
     letterheadHtml(opts.origin) +

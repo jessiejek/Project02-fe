@@ -16,7 +16,8 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { orDash } from "@/lib/format";
 import { todayManila } from "@/lib/clock";
-import { queryPatientsPaged, createPatient } from "@/lib/data/patients";
+import { queryPatientsPaged, createPatient, recordPrivacyNoticeShown } from "@/lib/data/patients";
+import { PrivacyNoticeAck } from "@/components/privacy/PrivacyNoticeAck"; //JJQR - AI (Nov 23, 2026) - Data Privacy Act (PH) notice at registration //JJQR - END
 import type { PatientSummary } from "@/data/types";
 
 const PAGE_SIZE = 25;
@@ -40,6 +41,7 @@ export default function AdminPatientsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [newPatient, setNewPatient] = useState(BLANK_NEW_PATIENT);
+  const [privacyShown, setPrivacyShown] = useState(false); //JJQR - AI (Nov 23, 2026) - the privacy notice was shown to the patient //JJQR - END
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -102,7 +104,7 @@ export default function AdminPatientsPage() {
     lengthProblem(newPatient.lastName, 100, "Last name") ??
     phoneProblem(newPatient.contactNumber);
   // JJQR - END
-  const canCreate = newPatientProblem === null && newPatient.firstName.trim() !== "" && newPatient.lastName.trim() !== "" && newPatient.dateOfBirth.trim() !== "" && newPatient.sex !== "";
+  const canCreate = newPatientProblem === null && newPatient.firstName.trim() !== "" && newPatient.lastName.trim() !== "" && newPatient.dateOfBirth.trim() !== "" && newPatient.sex !== "" && privacyShown; //JJQR - AI (Nov 23, 2026) - the privacy notice must be shown first //JJQR - END
 
   async function handleCreate() {
     if (!canCreate) return;
@@ -117,6 +119,7 @@ export default function AdminPatientsPage() {
         sex: newPatient.sex as "Male" | "Female",
         contact_number: newPatient.contactNumber || null,
       });
+      void recordPrivacyNoticeShown(data.patient_id); //JJQR - AI (Nov 23, 2026) - audit entry, best effort //JJQR - END
       setRows((prev) => [
         {
           id: data.patient_id,
@@ -132,6 +135,7 @@ export default function AdminPatientsPage() {
       ]);
       setTotal((n) => n + 1);
       setNewPatient(BLANK_NEW_PATIENT);
+      setPrivacyShown(false);
       setAddOpen(false);
     } catch (e) {
       // Keep the modal and the typed details open on failure.
@@ -145,6 +149,7 @@ export default function AdminPatientsPage() {
     if (creating) return;
     setAddOpen(false);
     setNewPatient(BLANK_NEW_PATIENT);
+    setPrivacyShown(false);
     setCreateError("");
   }
 
@@ -253,6 +258,7 @@ export default function AdminPatientsPage() {
               <span className={labelStyles}>Contact number <span className="font-normal text-on-surface-variant">(optional)</span></span>
               <input type="tel" value={newPatient.contactNumber} onChange={(e) => setNewPatient({ ...newPatient, contactNumber: e.target.value })} className={inputStyles()} />
             </label>
+            <PrivacyNoticeAck id="admin-add-privacy" checked={privacyShown} onChange={setPrivacyShown} className="sm:col-span-2" />
           </div>
         </div>
       </Modal>

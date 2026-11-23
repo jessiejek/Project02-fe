@@ -86,8 +86,11 @@ test.describe("/staff/walk-in · step 1 (find the patient)", () => {
 
 test.describe("/staff/walk-in · quick register", () => {
   const dlg = (page: Page) => page.getByRole("dialog", { name: "Register a new patient" });
-  async function fill(page: Page, v: { first?: string; last?: string; dob?: string; sex?: string; contact?: string; address?: string }) {
+  //JJQR - AI (Nov 23, 2026) - Data Privacy Act (PH): the privacy notice tick is required to register; `privacy: false` leaves it empty
+  async function fill(page: Page, v: { first?: string; last?: string; dob?: string; sex?: string; contact?: string; address?: string; privacy?: boolean }) {
     const d = dlg(page);
+    if (v.privacy !== false) await d.getByLabel(/I have shown the patient the privacy notice/).check();
+    //JJQR - END
     if (v.first !== undefined) await d.getByLabel("First name").fill(v.first);
     if (v.last !== undefined) await d.getByLabel("Last name").fill(v.last);
     if (v.dob !== undefined) await d.getByLabel("Date of birth").fill(v.dob);
@@ -117,6 +120,19 @@ test.describe("/staff/walk-in · quick register", () => {
     expect(found[0]).toMatchObject({ last_name: "Quick", sex: "Female", date_of_birth: "1991-02-03", contact_number: "09175550101", address: "1 Quick St" });
     expect(await queueFor(staff, first)).toHaveLength(1);
   });
+
+  //JJQR - AI (Nov 23, 2026) - Data Privacy Act (PH): a complete form still cannot be submitted until the privacy notice is ticked
+  test("'Register and select' stays disabled until the privacy notice is ticked", async ({ as, tag }) => {
+    const page = await as("staff");
+    await page.goto("/staff/walk-in");
+    await page.getByRole("button", { name: "Register new patient" }).click();
+    await fill(page, { ...base(tag("pn")), privacy: false });
+    const submit = dlg(page).getByRole("button", { name: "Register and select" });
+    await expect(submit).toBeDisabled();
+    await dlg(page).getByLabel(/I have shown the patient the privacy notice/).check();
+    await expect(submit).toBeEnabled();
+  });
+  //JJQR - END
 
   test("each required field empty keeps 'Register and select' disabled", async ({ as, tag }) => {
     const page = await as("staff");
