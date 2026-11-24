@@ -1176,7 +1176,7 @@ export function buildLabRequestHtml(opts: LabHtmlOpts): string {
   white-space: nowrap;
 }
 .lab-c0 { left: 1.0in; }
-.lab-c1 { left: 3.15in; }
+.lab-c1 { left: 3.0in; }
 .lab-r0 { top: 2.95in; }
 .lab-r1 { top: 3.35in; }
 .lab-r2 { top: 3.75in; }
