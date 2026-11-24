@@ -81,6 +81,9 @@ export interface LabHtmlOpts {
   tests: string[];
   diagnoses?: string[];
   clinicalNotes?: string | null;
+  //JJQR - AI (Nov 24, 2026) - owner: the Admin can add and remove the tests on the lab request. Omitted or empty = the clinic's printed pad list (LAB_DEFAULT_ITEMS).
+  items?: string[];
+  //JJQR - END
 }
 
 const LETTERHEAD = {
@@ -98,22 +101,31 @@ const LETTERHEAD = {
   saturdayHours: "10:00pm- 5:00pm",
 };
 
-//JJQR - AI (Nov 24, 2026) - owner: the clinic's lab only does these tests (the pad's printed list plus the hand-written TSH, FT3, FT4, HbA1c). c = column, r = row on the A5 sheet.
-const LAB_ITEMS = [
-  { name: "CBC", c: 0, r: 0 },
-  { name: "URINALYSIS", c: 0, r: 1 },
-  { name: "LIPID PROFILE", c: 0, r: 2 },
-  { name: "SGPT", c: 0, r: 3 },
-  { name: "CREA", c: 0, r: 4 },
-  { name: "FBS", c: 0, r: 5 },
-  { name: "BUA", c: 0, r: 6 },
-  { name: "TSH", c: 1, r: 0 },
-  { name: "FT3", c: 1, r: 1 },
-  { name: "FT4", c: 1, r: 2 },
-  { name: "HbA1c", c: 1, r: 3 },
-  { name: "DENGUE NS1, IgG, IgM", c: 1, r: 4 },
-  { name: "ECG 12L", c: 1, r: 5 },
+//JJQR - AI (Nov 24, 2026) - owner: the clinic's lab does these tests (the pad's printed list plus the hand-written TSH, FT3, FT4, HbA1c). This is the DEFAULT; the Admin can add and remove tests.
+export const LAB_DEFAULT_ITEMS = [
+  "CBC", "URINALYSIS", "LIPID PROFILE", "SGPT", "CREA", "FBS", "BUA",
+  "TSH", "FT3", "FT4", "HbA1c", "DENGUE NS1, IgG, IgM", "ECG 12L",
 ];
+export const LAB_MAX_ITEMS = 26;
+
+/** The tests to print: the Admin's list (trimmed, no blanks or repeats, at most LAB_MAX_ITEMS) or the default. */
+export function normalizeLabItems(items: string[] | null | undefined): string[] {
+  const out: string[] = [];
+  const seen: { [k: string]: boolean } = {};
+  for (const raw of items ?? []) {
+    const t = (raw ?? "").replace(/\s+/g, " ").trim();
+    const k = t.toLowerCase();
+    if (!t || seen[k]) continue;
+    seen[k] = true;
+    out.push(t);
+    if (out.length >= LAB_MAX_ITEMS) break;
+  }
+  return out.length ? out : LAB_DEFAULT_ITEMS.slice();
+}
+
+function labTop(hundredths: number): string {
+  return Math.floor(hundredths / 100) + "." + String(hundredths % 100).padStart(2, "0") + "in";
+}
 //JJQR - END
 
 function escapeHtml(value: string): string {
@@ -1040,6 +1052,7 @@ function matchLabItem(ordered: string, item: string): boolean {
   if (i.indexOf("dengue") >= 0 && o.indexOf("dengue") >= 0) return true;
   if (i.indexOf("ecg") >= 0 && o.indexOf("ecg") >= 0) return true;
   if (item === "CREA" && (n === "crea" || o.indexOf("creatinine") >= 0)) return true;
+  if (i.length > 0 && (" " + n + " ").indexOf(" " + i + " ") >= 0) return true; //JJQR - AI (Nov 24, 2026) - the whole test name appears in what was ordered //JJQR - END
   if (item === "LIPID PROFILE" && o.indexOf("lipid") >= 0) return true;
   //JJQR - AI (Nov 24, 2026) - thyroid and HbA1c names as a doctor might type them
   if (item === "TSH" && (/(^| )tsh( |$)/.test(" " + n + " ") || o.indexOf("thyroid stimulating") >= 0)) return true;
@@ -1051,15 +1064,15 @@ function matchLabItem(ordered: string, item: string): boolean {
   return false;
 }
 
-function labMatch(tests: string[]): { checked: { [k: string]: boolean }; extras: string[] } {
+function labMatch(tests: string[], items: string[]): { checked: { [k: string]: boolean }; extras: string[] } {
   const checked: { [k: string]: boolean } = {};
   const extras: string[] = [];
   for (let t = 0; t < tests.length; t++) {
     const test = tests[t];
     let hit = "";
-    for (let i = 0; i < LAB_ITEMS.length; i++) {
-      if (matchLabItem(test, LAB_ITEMS[i].name)) {
-        hit = LAB_ITEMS[i].name;
+    for (let i = 0; i < items.length; i++) {
+      if (matchLabItem(test, items[i])) {
+        hit = items[i];
         break;
       }
     }
@@ -1069,24 +1082,29 @@ function labMatch(tests: string[]): { checked: { [k: string]: boolean }; extras:
   return { checked: checked, extras: extras };
 }
 
-function labItemHtml(name: string, on: boolean, c: number, r: number): string {
+function labItemHtml(name: string, on: boolean, c: number, top: string): string {
   const tick = on ? '<span class="tick">✓</span>' : "";
   return (
-    '<div class="lab-item lab-c' + c + " lab-r" + r + '"><span class="lab-blank">' +
+    '<div class="lab-item lab-c' + c + '" style="top:' + top + '"><span class="lab-blank">' +
     tick +
     '___</span><span class="lab-name">' +
-    name +
+    e(name) +
     "</span></div>"
   );
 }
 
 //JJQR - AI (Nov 24, 2026) - owner: the lab request is re-laid out on the SAME A5 sheet as the prescription and the medical certificate (same letterhead, same patient lines, same signature block).
 export function buildLabRequestHtml(opts: LabHtmlOpts): string {
-  const matched = labMatch(opts.tests);
+  const items = normalizeLabItems(opts.items);
+  const matched = labMatch(opts.tests, items);
+  // two columns, filled top to bottom; with more than 14 tests the rows move closer so everything still fits above "Others:"
+  const perCol = Math.ceil(items.length / 2);
+  const step = perCol <= 7 ? 40 : Math.floor(240 / (perCol - 1));
   let list = "";
-  for (let i = 0; i < LAB_ITEMS.length; i++) {
-    const row = LAB_ITEMS[i];
-    list += labItemHtml(row.name, !!matched.checked[row.name], row.c, row.r);
+  for (let i = 0; i < items.length; i++) {
+    const col = i < perCol ? 0 : 1;
+    const row = col === 0 ? i : i - perCol;
+    list += labItemHtml(items[i], !!matched.checked[items[i]], col, labTop(295 + row * step));
   }
 
   let extras = "";
@@ -1177,13 +1195,6 @@ export function buildLabRequestHtml(opts: LabHtmlOpts): string {
 }
 .lab-c0 { left: 1.0in; }
 .lab-c1 { left: 3.0in; }
-.lab-r0 { top: 2.95in; }
-.lab-r1 { top: 3.35in; }
-.lab-r2 { top: 3.75in; }
-.lab-r3 { top: 4.15in; }
-.lab-r4 { top: 4.55in; }
-.lab-r5 { top: 4.95in; }
-.lab-r6 { top: 5.35in; }
 .lab-blank {
   position: relative;
   display: inline-block;

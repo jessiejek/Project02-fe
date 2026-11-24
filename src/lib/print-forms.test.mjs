@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  LAB_DEFAULT_ITEMS,
+  normalizeLabItems,
   buildLabRequestHtml,
   buildMedicalCertificateHtml,
   buildPrescriptionHtml,
@@ -775,4 +777,31 @@ test("lab request: A5 page size, the clinic's tests in order, ticks, others, bla
   });
   assert.ok(!evil.includes("<script>"));
   assert.ok(evil.includes("&lt;script&gt;"));
+});
+
+test("lab request: the Admin's own list replaces the default, which is the printed pad list", () => {
+  const base = { origin: ORIGIN, pageSize: PAGE_LAB, doctor, patient, age: "36", date: "November 20, 2026" };
+  // default = what is on the paper
+  assert.deepEqual(normalizeLabItems(undefined), LAB_DEFAULT_ITEMS);
+  assert.deepEqual(normalizeLabItems([]), LAB_DEFAULT_ITEMS);
+  assert.deepEqual(normalizeLabItems(["  ", ""]), LAB_DEFAULT_ITEMS);
+  assert.equal(buildLabRequestHtml({ ...base, tests: ["cbc"] }), buildLabRequestHtml({ ...base, tests: ["cbc"], items: LAB_DEFAULT_ITEMS }));
+
+  // add and remove: trimmed, no blanks, no repeats (any case), kept in the Admin's order
+  assert.deepEqual(normalizeLabItems(["CBC", " cbc ", "Vitamin D", "", "Ferritin"]), ["CBC", "Vitamin D", "Ferritin"]);
+  const html = buildLabRequestHtml({ ...base, tests: ["Vitamin D 25-OH", "cbc with platelets", "TSH"], items: ["CBC", "Vitamin D", "Ferritin"] });
+  const at = (name) => html.indexOf('<span class="lab-name">' + name + "</span>");
+  assert.ok(at("CBC") > 0 && at("Vitamin D") > at("CBC") && at("Ferritin") > at("Vitamin D"));
+  assert.ok(at("TSH") < 0, "a test removed from the list is no longer on the form");
+  const ticked = (name) => html.slice(html.lastIndexOf('<div class="lab-item', at(name)), at(name)).includes("✓");
+  assert.ok(ticked("CBC") && ticked("Vitamin D") && !ticked("Ferritin"));
+  assert.match(html, /class="lab-others"[^>]*>[\s\S]*TSH/, "an ordered test that is not on the list goes under Others");
+
+  // names are escaped, and a long list is squeezed to fit (26 at most)
+  assert.ok(!buildLabRequestHtml({ ...base, tests: [], items: ["<script>"] }).includes("<script>"));
+  const many = Array.from({ length: 40 }, (_, i) => "Test " + (i + 1));
+  assert.equal(normalizeLabItems(many).length, 26);
+  const big = buildLabRequestHtml({ ...base, tests: [], items: many });
+  assert.equal((big.match(/class="lab-item /g) ?? []).length, 26);
+  assert.ok(big.includes("top:2.95in") && big.includes("top:5.35in"), "first and last rows stay in the list area");
 });
