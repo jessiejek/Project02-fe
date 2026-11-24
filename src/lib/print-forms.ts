@@ -6,7 +6,13 @@
  * window does not add the default brand line or body padding.
  */
 import { printHtml } from "@/lib/print";
+//JJQR - AI (Nov 24, 2026) - iPad: a real A5 PDF (iOS ignores a web page's paper size)
+import { htmlToPdf, isIosDevice } from "@/lib/print-pdf";
+//JJQR - END
 import { todayManila } from "@/lib/clock";
+//JJQR - AI (Nov 24, 2026) - the web prints like the desktop: the Admin's Printing settings are applied
+import { getPrintPolicy, loadPrintPolicy, printBlockedMessage, withBackground, type PrintKind } from "@/lib/print-policy";
+//JJQR - END
 //JJQR - AI (Nov 20, 2026) E3
 import { cleanMedCertAddress } from "@/lib/clinical/med-cert-fields";
 //JJQR - END
@@ -68,9 +74,35 @@ function assetOrigin(): string {
   return "";
 }
 
-function printForm(title: string, bodyHtml: string): boolean {
-  return printHtml(title, bodyHtml, { brand: null, bare: true });
+//JJQR - AI (Nov 24, 2026) - owner: same as the desktop. A document the Admin switched off does not print; the clinic's background picture goes behind the form; the PTR number is left off (the desktop's "Include PTR in print" starts off).
+function printForm(title: string, bodyHtml: string, kind: PrintKind): boolean {
+  void loadPrintPolicy(); // keep the settings fresh for the next print
+  const blocked = printBlockedMessage(kind, title);
+  if (blocked) {
+    if (typeof window !== "undefined") window.alert(blocked);
+    return true; // handled: nothing to retry or "allow pop-ups" about
+  }
+  const html = withBackground(kind, bodyHtml);
+  //JJQR - AI (Nov 24, 2026) - iPhone/iPad: open an A5 PDF (the window opens now, straight from the tap, and the PDF is placed in it); if anything fails the normal print runs in that window
+  if (isIosDevice() && typeof window !== "undefined") {
+    const win = window.open("", "_blank");
+    if (win) {
+      win.document.write("<!doctype html><title>" + title + "</title><body style=\"font-family:-apple-system,sans-serif;padding:24px;color:#333\">Preparing the A5 print…</body>");
+      void htmlToPdf(html, 148, 210).then(
+        (blob) => { win.location.href = URL.createObjectURL(blob); },
+        () => { win.close(); printHtml(title, html, { brand: null, bare: true }); },
+      );
+      return true;
+    }
+  }
+  //JJQR - END
+  return printHtml(title, html, { brand: null, bare: true });
 }
+
+function withoutPtr(d: PrintDoctor): PrintDoctor {
+  return { ...d, ptr_number: null };
+}
+//JJQR - END
 
 export interface RxLine {
   generic_name: string;
@@ -104,13 +136,14 @@ export function printPrescription(opts: {
     buildPrescriptionHtml({
       origin: assetOrigin(),
       pageSize: PAGE_A5,
-      doctor: opts.doctor,
+      doctor: withoutPtr(opts.doctor), //JJQR - AI (Nov 24, 2026) - PTR off, like the desktop default //JJQR - END
       patient: opts.patient,
       age: ageFromDob(opts.patient.date_of_birth),
       date: fmtDate(opts.date ?? new Date().toISOString()),
       items: opts.items,
       nextAppointment: opts.next_appointment ?? "",
     }),
+    "prescription",
   );
 }
 
@@ -141,7 +174,7 @@ export function printMedicalCertificate(opts: {
     buildMedicalCertificateHtml({
       origin: assetOrigin(),
       pageSize: PAGE_A5,
-      doctor,
+      doctor: withoutPtr(doctor),
       patient,
       issueDate: fmtDate(cert.issue_date ?? new Date().toISOString()),
       address: addr,
@@ -153,6 +186,7 @@ export function printMedicalCertificate(opts: {
       purposeException: cert.purpose_exception ?? "",
       comeBackOn: fmtDate(cert.come_back_on),
     }),
+    "medical_certificate",
   );
 }
 
@@ -173,13 +207,15 @@ export function printLabRequest(opts: {
     buildLabRequestHtml({
       origin: assetOrigin(),
       pageSize: PAGE_A5, //JJQR - AI (Nov 24, 2026) - the lab request is the same A5 sheet as the prescription and the medical certificate //JJQR - END
-      doctor: opts.doctor,
+      doctor: withoutPtr(opts.doctor),
       patient: opts.patient,
       age: ageFromDob(opts.patient.date_of_birth),
       date: fmtDate(opts.date ?? new Date().toISOString()),
+      items: getPrintPolicy().labTests ?? undefined, //JJQR - AI (Nov 24, 2026) - the tests the Admin chose (null = the clinic's printed list) //JJQR - END
       tests: opts.tests,
       diagnoses: opts.diagnoses,
       clinicalNotes: opts.clinicalNotes,
     }),
+    "lab_request",
   );
 }
