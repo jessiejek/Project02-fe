@@ -11,10 +11,10 @@ test('SHOW_DIAGNOSIS_STEP flag hides Diagnosis from nav and gates', () => {
 });
 
 test('Diagnosis is excluded from required gating when SHOW_DIAGNOSIS_STEP is false', () => {
-  assert.match(
-    page,
-    /const effectiveRequiredSections = REQUIRED_SECTIONS\.filter\(\s*\n?\s*\(i\) => SHOW_DIAGNOSIS_STEP \|\| i !== DIAGNOSIS_SECTION_INDEX,/,
-  );
+  // JJQR - AI (Nov 24, 2026) - the required list now comes from Admin > Settings > Consultation; Diagnosis (2) is never one of the choices
+  assert.match(page, /const CONSULT_REQUIRED_KEYS: \[string, number\]\[\] = \[\["notes", 0\], \["vitals", 1\], \["prescription", 3\]\];/);
+  assert.match(page, /const effectiveRequiredSections = requiredSectionsFor\(clinicRow\?\.consult_required\);/);
+  // JJQR - END
   assert.match(page, /const canComplete = effectiveRequiredSections\.every\(\(i\) => isRequiredSectionDone\(i\)\);/);
   assert.match(page, /effectiveRequiredSections\.filter\(\(i\) => !isRequiredSectionDone\(i\)\)/);
   assert.match(page, /effectiveRequiredSections\.includes\(i\)/);

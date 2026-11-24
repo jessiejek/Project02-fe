@@ -32,6 +32,9 @@ export interface ClinicSettingsRow {
   // JJQR - AI (Nov 24, 2026) - Admin > Settings > Payments switch: the visit is marked paid (cash, exact fee) when the doctor completes it. Missing on an older server = off.
   auto_paid_on_complete?: boolean;
   // JJQR - END
+  // JJQR - AI (Nov 24, 2026) - Admin > Settings > Consultation: comma list of required parts (notes / vitals / prescription); null = notes only; the fee is always required
+  consult_required?: string | null;
+  // JJQR - END
   updated_at: string;
 }
 
@@ -55,6 +58,13 @@ export async function updateClinicSettings(
 export async function setAutoPaidOnComplete(enabled: boolean): Promise<boolean> {
   const res = await api.put<{ auto_paid_on_complete: boolean }>("/api/settings/auto-paid-on-complete", { enabled });
   return res?.auto_paid_on_complete ?? enabled;
+}
+// JJQR - END
+
+// JJQR - AI (Nov 24, 2026) - Admin > Settings > Consultation, its own endpoint (the full settings save never changes it)
+export async function setConsultRequired(sections: string[]): Promise<string> {
+  const res = await api.put<{ consult_required: string | null }>("/api/settings/consult-required", { sections });
+  return res?.consult_required ?? sections.join(",");
 }
 // JJQR - END
 

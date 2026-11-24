@@ -454,6 +454,9 @@ export interface ClinicSettings {
   // JJQR - AI (Nov 24, 2026) - Payments tab switch (saved on its own, right away)
   autoPaidOnComplete?: boolean;
   // JJQR - END
+  // JJQR - AI (Nov 24, 2026) - Consultation tab: comma list of required parts (null = clinical notes only; the fee always)
+  consultRequired?: string | null;
+  // JJQR - END
 }
 
 // Matches clinic_operating_hours (schema.sql) exactly — admin/settings' Hours

@@ -222,9 +222,15 @@ const DIAGNOSIS_SECTION_INDEX = 2;
 /** UI only: the yellow "{n} required sections left … Go to next" banner is hidden. Completion gating (canComplete, missingRequiredSections) is unchanged. */
 const SHOW_REQUIRED_LEFT_BANNER = false;
 //JJQR - END
-const effectiveRequiredSections = REQUIRED_SECTIONS.filter(
-  (i) => SHOW_DIAGNOSIS_STEP || i !== DIAGNOSIS_SECTION_INDEX,
-);
+//JJQR - AI (Nov 24, 2026) - owner: the Admin chooses what is required (Admin > Settings > Consultation, clinic_settings.consult_required).
+// Keys notes (0) / vitals (1) / prescription (3); null = notes only; the fee (8) is ALWAYS required; follow-up never blocks (no date = no follow-up).
+// REQUIRED_SECTIONS / SHOW_DIAGNOSIS_STEP above are kept for reference only. Same rule as the desktop ConsultSteps.RequiredFrom.
+const CONSULT_REQUIRED_KEYS: [string, number][] = [["notes", 0], ["vitals", 1], ["prescription", 3]];
+function requiredSectionsFor(consultRequired: string | null | undefined): number[] {
+  const keys = new Set((consultRequired ?? "notes").split(",").map((k) => k.trim().toLowerCase()).filter(Boolean));
+  return [...CONSULT_REQUIRED_KEYS.filter(([k]) => keys.has(k)).map(([, i]) => i), FEE_SECTION_INDEX];
+}
+//JJQR - END
 //JJQR - END
 /** Vaccinations stay behind "More" (PF is no longer hidden there: it is required and always the last visible step). */
 const OCCASIONAL_SECTIONS = [5] as const;
@@ -1067,6 +1073,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [feeSchedule, setFeeSchedule] = useState<ClinicFeeSchedule | null>(null);
   // §16.8 Form 2 — medical certificate (its own section, index 7).
   const [clinicRow, setClinicRow] = useState<ClinicSettingsRow | null>(null);
+  const effectiveRequiredSections = requiredSectionsFor(clinicRow?.consult_required); // JJQR - AI (Nov 24, 2026) - Admin > Settings > Consultation // JJQR - END
   const [mcAddress, setMcAddress] = useState("");
   //JJQR Nov 20, 2026 - pre-filled with the clinic letterhead (was an empty box with a placeholder)
   const [mcExaminedAt, setMcExaminedAt] = useState(MC_EXAMINED_AT_DEFAULT);

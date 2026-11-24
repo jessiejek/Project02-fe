@@ -21,6 +21,7 @@ import {
   queryPaymentMethods,
   setPaymentMethods,
   setAutoPaidOnComplete, // JJQR - AI (Nov 24, 2026) // JJQR - END
+  setConsultRequired, // JJQR - AI (Nov 24, 2026) - Consultation tab // JJQR - END
 } from "@/lib/data/admin";
 import { DAYS, dayNameToIndex, indexToDayName } from "@/lib/days";
 import type { ClinicSettings, OperatingHours } from "@/data/types";
@@ -30,6 +31,7 @@ const TABS = [
   { id: "hours", label: "Hours" },
   { id: "fees", label: "Fees" },
   { id: "payments", label: "Payments" },
+  { id: "consultation", label: "Consultation" }, // JJQR - AI (Nov 24, 2026) - after Payments, same as the desktop // JJQR - END
   { id: "privacy", label: "Privacy & consent" },
   { id: "branding", label: "Branding" },
 ];
@@ -117,6 +119,7 @@ export default function AdminSettingsPage() {
           feeMedCert: s.fee_med_cert ?? 50,
           discountPct: s.discount_pct ?? 0.2,
           autoPaidOnComplete: s.auto_paid_on_complete ?? false, // JJQR - AI (Nov 24, 2026) // JJQR - END
+          consultRequired: s.consult_required ?? null, // JJQR - AI (Nov 24, 2026) - Consultation tab // JJQR - END
         });
       }
       if (hoursRes.data) {
@@ -214,6 +217,30 @@ export default function AdminSettingsPage() {
         throw e;
       }
     }, "The switch could not be saved. Try again.");
+  }
+  // JJQR - END
+
+  // JJQR - AI (Nov 24, 2026) - Consultation tab: which parts are required to complete a visit (the fee always is). One tick = the whole list saved right away; a failure puts it back.
+  const CONSULT_PARTS: { key: string; label: string; hint: string }[] = [
+    { key: "notes", label: "Clinical notes", hint: "Needs the chief complaint." },
+    { key: "vitals", label: "Vital signs", hint: "Needs blood pressure and pulse rate." },
+    { key: "prescription", label: "Prescription", hint: "Needs at least one medicine, or the \"no medicine needed\" tick." },
+  ];
+  const consultRequiredKeys = (settings.consultRequired ?? "notes").split(",").map((k) => k.trim()).filter(Boolean);
+  async function toggleConsultPart(key: string, on: boolean) {
+    const before = settings.consultRequired;
+    const next = CONSULT_PARTS.map((p) => p.key).filter((k) => (k === key ? on : consultRequiredKeys.includes(k)));
+    setSettings((prev) => ({ ...prev, consultRequired: next.join(",") }));
+    await run(async () => {
+      try {
+        const saved = await setConsultRequired(next);
+        setSettings((prev) => ({ ...prev, consultRequired: saved }));
+        setSavedAt(new Date().toLocaleTimeString());
+      } catch (e) {
+        setSettings((prev) => ({ ...prev, consultRequired: before }));
+        throw e;
+      }
+    }, "The setting could not be saved. Try again.");
   }
   // JJQR - END
 
@@ -383,6 +410,35 @@ export default function AdminSettingsPage() {
             {saveBar(() => run(saveSettings, "Payment settings could not be saved. Try again."))}
           </div>
         )}
+
+        {/* JJQR - AI (Nov 24, 2026) - owner: Admin chooses what is required to complete a visit. Tick boxes save right away; the fee is shown ticked and locked. */}
+        {tab === "consultation" && (
+          <div className="space-y-md">
+            <div>
+              <h2 className="text-headline-sm text-on-surface">Required to complete a visit</h2>
+              <p className={hintStyles}>The doctor cannot press Complete until every ticked part is filled in. Changes save right away and apply the next time a consultation is opened.</p>
+            </div>
+            {CONSULT_PARTS.map((p) => (
+              <label key={p.key} className="flex min-h-11 items-start gap-sm text-body-md text-on-surface">
+                <input type="checkbox" checked={consultRequiredKeys.includes(p.key)} disabled={saving}
+                  onChange={(e) => toggleConsultPart(p.key, e.target.checked)} className="mt-1 h-5 w-5 accent-primary" />
+                <span>
+                  <span className="block font-medium">{p.label}</span>
+                  <span className={hintStyles}>{p.hint}</span>
+                </span>
+              </label>
+            ))}
+            <label className="flex min-h-11 items-start gap-sm text-body-md text-on-surface">
+              <input type="checkbox" checked disabled className="mt-1 h-5 w-5 accent-primary" />
+              <span>
+                <span className="block font-medium">Professional fee (always required)</span>
+                <span className={hintStyles}>Charge or Waive must be chosen, because the payment depends on it.</span>
+              </span>
+            </label>
+            <p className={hintStyles}>Follow-up is never required: if no follow-up date is entered, the visit has no follow-up.</p>
+          </div>
+        )}
+        {/* JJQR - END */}
 
         {tab === "privacy" && (
           <div className="space-y-lg">
