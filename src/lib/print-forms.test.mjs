@@ -114,7 +114,7 @@ test("medical certificate: A5 page size, stationery, labels, fill, escape", () =
   assert.ok(html.includes("Acute gastritis"));
   assert.ok(html.includes("Rest"));
   assert.ok(html.includes("employment"));
-  assert.ok(!html.includes("LIC-99"), "the license number is left blank");
+  assert.ok(html.includes("LIC-99"), "the license number the doctor filled in prints");
   assert.ok(html.includes("PTR-88"));
   assert.ok(html.includes("S2-77"));
   assert.ok(html.includes("JANE DOE, MD"));
@@ -312,7 +312,7 @@ test("prescription: A5 page size, table labels, 1 row, fill, 6 meds, escape", ()
   assert.ok(html.includes("20 tablets"));
   assert.ok(html.includes("Juan Dela Cruz"));
   assert.ok(html.includes("Buaya, Lapu Lapu City"));
-  assert.ok(!html.includes("LIC-99"), "the license number is left blank");
+  assert.ok(html.includes("LIC-99"), "the license number the doctor filled in prints");
   assert.ok(html.includes("PTR-88"));
   assert.ok(html.includes(`${ORIGIN}/forms/rx.png`));
   assert.equal(countClass(html, "rx-row"), 1);
@@ -717,7 +717,7 @@ test("lab request: A5 page size, the clinic's tests in order, ticks, others, bla
   assert.ok(html.includes("Sex:"));
   assert.ok(html.includes("License No:"));
   assert.ok(html.includes("PTR No:"));
-  assert.ok(!html.includes("LIC-99"), "the license number is left blank");
+  assert.ok(html.includes("LIC-99"), "the license number the doctor filled in prints");
   assert.ok(html.includes("PTR-88"));
   assert.ok(html.includes("Juan Dela Cruz"));
   assert.ok(html.includes(`${ORIGIN}/forms/cartoon.png`));
@@ -804,4 +804,23 @@ test("lab request: the Admin's own list replaces the default, which is the print
   const big = buildLabRequestHtml({ ...base, tests: [], items: many });
   assert.equal((big.match(/class="lab-item /g) ?? []).length, 26);
   assert.ok(big.includes("top:2.95in") && big.includes("top:5.35in"), "first and last rows stay in the list area");
+});
+
+test("license and PTR numbers print when the doctor filled them in and stay blank when empty (all three forms)", () => {
+  const base = { origin: ORIGIN, pageSize: PAGE_A5, patient, age: "36", date: "November 20, 2026" };
+  const filled = { ...doctor, license_number: "0125232", ptr_number: "7788" };
+  const empty = { ...doctor, license_number: null, ptr_number: "" };
+  const forms = (d) => [
+    buildPrescriptionHtml({ ...base, doctor: d, items: [{ generic_name: "Paracetamol", dosage: "500 mg", quantity: "10" }] }),
+    buildMedicalCertificateHtml({ ...base, doctor: d, issueDate: "November 20, 2026", address: "Cebu", examinedAt: "Clinic", examFrom: "", examTo: "", diagnosis: "x", recommendations: "y", purposeException: "", comeBackOn: "" }),
+    buildLabRequestHtml({ ...base, doctor: d, tests: ["cbc"] }),
+  ];
+  for (const html of forms(filled)) {
+    assert.ok(html.includes("0125232") && html.includes("7788"), "both numbers print");
+    assert.match(html, /License No:<\/span><span class="u sig-u">0125232</);
+  }
+  for (const html of forms(empty)) {
+    assert.match(html, /License No:<\/span><span class="u sig-u"><\/span>/, "an empty license stays a blank line to write on");
+    assert.match(html, /PTR No:<\/span><span class="u sig-u"><\/span>/);
+  }
 });

@@ -202,7 +202,7 @@ function credLine(label: string, value: string): string {
 function signatureBlock(doctor: HtmlDoctor): string {
   const lines = [
     '<div class="sig-name">' + e(rxMcSigName(doctor)) + "</div>",
-    credLine("License No:", ""), //JJQR - AI (Nov 24, 2026) - owner: the license number is left blank on the prescription, medical certificate and lab request //JJQR - END
+    credLine("License No:", doctor.license_number ?? ""), //JJQR - AI (Nov 24, 2026) - owner: what the doctor fills in under Profile prints on the prescription, medical certificate and lab request; the line stays blank when it is empty //JJQR - END
     credLine("PTR No:", doctor.ptr_number ?? ""),
   ];
   if (doctor.s2_number) lines.push(credLine("S2 No:", doctor.s2_number));
