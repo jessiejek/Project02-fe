@@ -8,7 +8,7 @@ import {
 
 const ORIGIN = "http://forms.test";
 const PAGE_A5 = "148mm 210mm";
-const PAGE_LAB = "4.3in 6.4in";
+const PAGE_LAB = "148mm 210mm"; // the lab request is the same A5 sheet as the prescription and the medical certificate
 
 const doctor = {
   full_name: "Jane Doe",
@@ -112,7 +112,7 @@ test("medical certificate: A5 page size, stationery, labels, fill, escape", () =
   assert.ok(html.includes("Acute gastritis"));
   assert.ok(html.includes("Rest"));
   assert.ok(html.includes("employment"));
-  assert.ok(html.includes("LIC-99"));
+  assert.ok(!html.includes("LIC-99"), "the license number is left blank");
   assert.ok(html.includes("PTR-88"));
   assert.ok(html.includes("S2-77"));
   assert.ok(html.includes("JANE DOE, MD"));
@@ -310,7 +310,7 @@ test("prescription: A5 page size, table labels, 1 row, fill, 6 meds, escape", ()
   assert.ok(html.includes("20 tablets"));
   assert.ok(html.includes("Juan Dela Cruz"));
   assert.ok(html.includes("Buaya, Lapu Lapu City"));
-  assert.ok(html.includes("LIC-99"));
+  assert.ok(!html.includes("LIC-99"), "the license number is left blank");
   assert.ok(html.includes("PTR-88"));
   assert.ok(html.includes(`${ORIGIN}/forms/rx.png`));
   assert.equal(countClass(html, "rx-row"), 1);
@@ -693,7 +693,7 @@ test("prescription: saved structured fields win over sig; as_needed notes; legac
 });
 //JJQR - END
 
-test("lab request: custom page size, fixed checklist order, ticks, extras, escape", () => {
+test("lab request: A5 page size, the clinic's tests in order, ticks, others, blank license, escape", () => {
   const html = buildLabRequestHtml({
     origin: ORIGIN,
     pageSize: PAGE_LAB,
@@ -701,93 +701,53 @@ test("lab request: custom page size, fixed checklist order, ticks, extras, escap
     patient,
     age: "36",
     date: "November 20, 2026",
-    tests: ["cbc", "Creatinine", "TSH", "dengue duo", "ECG"],
+    tests: ["cbc", "Creatinine", "TSH", "free T4", "HbA1c", "dengue duo", "ECG", "Vitamin D"],
     diagnoses: ["Viral illness"],
     clinicalNotes: "follow up",
   });
 
-  assert.match(html, /@page\s*\{[^}]*size:\s*4\.3in 6\.4in/);
+  assert.match(html, /@page\s*\{[^}]*size:\s*148mm 210mm/);
   assertHeader(html);
-  assert.ok(html.includes("Patient Name:"));
+  assert.ok(html.includes("Patient's Name:"));
   assert.ok(html.includes("Date:"));
   assert.ok(html.includes("Address:"));
   assert.ok(html.includes("Age:"));
   assert.ok(html.includes("Sex:"));
-  assert.ok(html.includes("LIC No:"));
+  assert.ok(html.includes("License No:"));
   assert.ok(html.includes("PTR No:"));
-  assert.ok(html.includes("Juan Dela Cruz"));
-  assert.ok(html.includes("LIC-99"));
+  assert.ok(!html.includes("LIC-99"), "the license number is left blank");
   assert.ok(html.includes("PTR-88"));
+  assert.ok(html.includes("Juan Dela Cruz"));
   assert.ok(html.includes(`${ORIGIN}/forms/cartoon.png`));
   assert.ok(html.includes("Dx:"));
   assert.ok(html.includes("Viral illness"));
 
+  // the clinic's lab only does these tests, in this order
   const names = [
-    "CBC",
-    "URINALYSIS",
-    "LIPID PROFILE",
-    "SGPT",
-    "CREA",
-    "FBS",
-    "BUA",
-    "DENGUE NS1, IgG, IgM",
-    "ECG 12L",
+    "CBC", "URINALYSIS", "LIPID PROFILE", "SGPT", "CREA", "FBS", "BUA",
+    "TSH", "FT3", "FT4", "HbA1c", "DENGUE NS1, IgG, IgM", "ECG 12L",
   ];
   let prev = -1;
   for (const name of names) {
-    const idx = html.indexOf(name);
+    const idx = html.indexOf('<span class="lab-name">' + name + "</span>");
     assert.ok(idx > prev, `lab item out of order: ${name}`);
     prev = idx;
   }
+  const ticked = (name) => {
+    const at = html.indexOf('<span class="lab-name">' + name + "</span>");
+    return html.slice(html.lastIndexOf('<div class="lab-item', at), at).includes("✓");
+  };
+  for (const name of ["CBC", "CREA", "TSH", "FT4", "HbA1c", "DENGUE NS1, IgG, IgM", "ECG 12L"]) assert.ok(ticked(name), `${name} should be ticked`);
+  for (const name of ["URINALYSIS", "LIPID PROFILE", "SGPT", "FBS", "BUA", "FT3"]) assert.ok(!ticked(name), `${name} should not be ticked`);
 
-  const cbcBlock = html.slice(html.indexOf("CBC") - 80, html.indexOf("CBC") + 8);
-  assert.ok(cbcBlock.includes("✓"), "CBC should be ticked");
-  const creaBlock = html.slice(html.indexOf("CREA") - 80, html.indexOf("CREA") + 8);
-  assert.ok(creaBlock.includes("✓"), "CREA should be ticked for creatinine");
-  const denBlock = html.slice(
-    html.indexOf("DENGUE NS1, IgG, IgM") - 80,
-    html.indexOf("DENGUE NS1, IgG, IgM") + 12,
-  );
-  assert.ok(denBlock.includes("✓"), "dengue should tick DENGUE NS1, IgG, IgM");
-  const ecgBlock = html.slice(html.indexOf("ECG 12L") - 80, html.indexOf("ECG 12L") + 10);
-  assert.ok(ecgBlock.includes("✓"), "ecg should tick ECG 12L");
-
-  assert.match(html, /class="lab-extras"[^>]*>[\s\S]*TSH/);
-  assert.match(html, /Bradley Hand/);
-  assert.match(html, /rotate\(-20deg\)/);
-  assert.match(html, /font-size:\s*11pt/);
-  assert.match(html, /line-height:\s*0\.3in/);
-  assert.match(html, /--pad-l:\s*0\.27in/);
-  assert.match(html, /--pad-r:\s*0\.6in/);
-  assert.match(html, /left:\s*1\.07in/);
-  assert.match(html, /line-height:\s*0\.185in/);
-  assert.match(html, /top:\s*2\.94in/);
-  assert.match(html, /top:\s*5\.15in/);
-  assert.match(html, /top:\s*1\.15in/);
-  assert.match(html, /top:\s*1\.38in/);
-  assert.match(html, /top:\s*1\.53in/);
-  assert.match(html, /top:\s*0\.38in/);
-  assert.match(html, /top:\s*1\.9in/);
-  assert.match(html, /width:\s*0\.38in/);
-  assert.match(html, /width:\s*0\.42in/);
-  assert.match(html, /width:\s*0\.55in/);
-  assert.match(html, /width:\s*3\.43in/);
-  assert.match(html, /height:\s*1\.3in/);
-  assert.match(html, /left:\s*2\.5in/);
-  assert.match(html, /top:\s*2\.5in/);
-  assert.match(html, /left:\s*0\.28in/);
-  assert.match(html, /left:\s*3\.46in/);
-  assert.match(html, /left:\s*2\.04in/);
-  assert.match(html, /left:\s*0\.76in/);
-  assert.match(html, /left:\s*2\.2in/);
-  assert.match(html, /left:\s*3\.4in/);
-  assert.match(html, /left:\s*1\.95in/);
-  assert.match(html, /font-size:\s*8\.8pt/);
-  assert.match(html, /font-size:\s*5\.6pt/);
-  assert.match(html, /font-size:\s*4\.6pt/);
-  assert.match(html, /font-size:\s*6pt/);
+  // anything the lab does not list goes under "Others:"
+  assert.match(html, /class="lab-others"[^>]*>[\s\S]*Vitamin D/);
   assert.match(html, /class="lab-extra"/);
-  assert.ok(html.includes('class="lab-md">MD'));
+  // same sheet and same signature block as the prescription
+  assert.match(html, /\.form-lab \{\s*width: 148mm;\s*height: 210mm;/);
+  assert.match(html, /class="rx-sig-block"/);
+  assert.match(html, /class="rule-double"/);
+  assert.ok(!html.includes("4.3in"));
 
   const emptyDx = buildLabRequestHtml({
     origin: ORIGIN,
@@ -799,8 +759,8 @@ test("lab request: custom page size, fixed checklist order, ticks, extras, escap
     tests: ["urine"],
   });
   assert.ok(!emptyDx.includes("Dx:"));
-  const uriBlock = emptyDx.slice(emptyDx.indexOf("URINALYSIS") - 80, emptyDx.indexOf("URINALYSIS") + 12);
-  assert.ok(uriBlock.includes("✓"));
+  const uriAt = emptyDx.indexOf('<span class="lab-name">URINALYSIS</span>');
+  assert.ok(emptyDx.slice(emptyDx.lastIndexOf('<div class="lab-item', uriAt), uriAt).includes("✓"));
 
   const evil = buildLabRequestHtml({
     origin: ORIGIN,

@@ -98,17 +98,23 @@ const LETTERHEAD = {
   saturdayHours: "10:00pm- 5:00pm",
 };
 
+//JJQR - AI (Nov 24, 2026) - owner: the clinic's lab only does these tests (the pad's printed list plus the hand-written TSH, FT3, FT4, HbA1c). c = column, r = row on the A5 sheet.
 const LAB_ITEMS = [
-  { name: "CBC", y: "2.94in" },
-  { name: "URINALYSIS", y: "3.13in" },
-  { name: "LIPID PROFILE", y: "3.31in" },
-  { name: "SGPT", y: "3.49in" },
-  { name: "CREA", y: "3.68in" },
-  { name: "FBS", y: "3.87in" },
-  { name: "BUA", y: "4.05in" },
-  { name: "DENGUE NS1, IgG, IgM", y: "4.40in" },
-  { name: "ECG 12L", y: "5.15in" },
+  { name: "CBC", c: 0, r: 0 },
+  { name: "URINALYSIS", c: 0, r: 1 },
+  { name: "LIPID PROFILE", c: 0, r: 2 },
+  { name: "SGPT", c: 0, r: 3 },
+  { name: "CREA", c: 0, r: 4 },
+  { name: "FBS", c: 0, r: 5 },
+  { name: "BUA", c: 0, r: 6 },
+  { name: "TSH", c: 1, r: 0 },
+  { name: "FT3", c: 1, r: 1 },
+  { name: "FT4", c: 1, r: 2 },
+  { name: "HbA1c", c: 1, r: 3 },
+  { name: "DENGUE NS1, IgG, IgM", c: 1, r: 4 },
+  { name: "ECG 12L", c: 1, r: 5 },
 ];
+//JJQR - END
 
 function escapeHtml(value: string): string {
   return value
@@ -184,7 +190,7 @@ function credLine(label: string, value: string): string {
 function signatureBlock(doctor: HtmlDoctor): string {
   const lines = [
     '<div class="sig-name">' + e(rxMcSigName(doctor)) + "</div>",
-    credLine("License No:", doctor.license_number ?? ""),
+    credLine("License No:", ""), //JJQR - AI (Nov 24, 2026) - owner: the license number is left blank on the prescription, medical certificate and lab request //JJQR - END
     credLine("PTR No:", doctor.ptr_number ?? ""),
   ];
   if (doctor.s2_number) lines.push(credLine("S2 No:", doctor.s2_number));
@@ -1035,6 +1041,12 @@ function matchLabItem(ordered: string, item: string): boolean {
   if (i.indexOf("ecg") >= 0 && o.indexOf("ecg") >= 0) return true;
   if (item === "CREA" && (n === "crea" || o.indexOf("creatinine") >= 0)) return true;
   if (item === "LIPID PROFILE" && o.indexOf("lipid") >= 0) return true;
+  //JJQR - AI (Nov 24, 2026) - thyroid and HbA1c names as a doctor might type them
+  if (item === "TSH" && (/(^| )tsh( |$)/.test(" " + n + " ") || o.indexOf("thyroid stimulating") >= 0)) return true;
+  if (item === "FT3" && (/(^| )ft3( |$)/.test(" " + n + " ") || /free t ?3/.test(o))) return true;
+  if (item === "FT4" && (/(^| )ft4( |$)/.test(" " + n + " ") || /free t ?4/.test(o))) return true;
+  if (item === "HbA1c" && (/hb ?a1c/.test(o) || o.indexOf("glycated") >= 0 || o.indexOf("glycosylated") >= 0 || /(^| )a1c( |$)/.test(" " + n + " "))) return true;
+  //JJQR - END
   if (item === "URINALYSIS" && (o.indexOf("urinalysis") >= 0 || /(^| )urine( |$)/.test(" " + n + " "))) return true;
   return false;
 }
@@ -1057,10 +1069,10 @@ function labMatch(tests: string[]): { checked: { [k: string]: boolean }; extras:
   return { checked: checked, extras: extras };
 }
 
-function labItemHtml(name: string, on: boolean, y: string): string {
+function labItemHtml(name: string, on: boolean, c: number, r: number): string {
   const tick = on ? '<span class="tick">✓</span>' : "";
   return (
-    '<div class="lab-item" style="top:' + y + '"><span class="lab-blank">' +
+    '<div class="lab-item lab-c' + c + " lab-r" + r + '"><span class="lab-blank">' +
     tick +
     '___</span><span class="lab-name">' +
     name +
@@ -1068,18 +1080,19 @@ function labItemHtml(name: string, on: boolean, y: string): string {
   );
 }
 
+//JJQR - AI (Nov 24, 2026) - owner: the lab request is re-laid out on the SAME A5 sheet as the prescription and the medical certificate (same letterhead, same patient lines, same signature block).
 export function buildLabRequestHtml(opts: LabHtmlOpts): string {
   const matched = labMatch(opts.tests);
   let list = "";
   for (let i = 0; i < LAB_ITEMS.length; i++) {
     const row = LAB_ITEMS[i];
-    list += labItemHtml(row.name, !!matched.checked[row.name], row.y);
+    list += labItemHtml(row.name, !!matched.checked[row.name], row.c, row.r);
   }
 
   let extras = "";
   if (matched.extras.length) {
     extras =
-      '<div class="lab-extras">' +
+      '<div class="lab-others"><div class="lab-others-lbl">Others:</div>' +
       matched.extras.map(function (x) { return '<div class="lab-extra">' + e(x) + "</div>"; }).join("") +
       "</div>";
   }
@@ -1088,129 +1101,89 @@ export function buildLabRequestHtml(opts: LabHtmlOpts): string {
   if (opts.diagnoses && opts.diagnoses.length) dxBits.push(opts.diagnoses.join("; "));
   if (opts.clinicalNotes && opts.clinicalNotes.trim()) dxBits.push(opts.clinicalNotes.trim());
   const dx = dxBits.length
-    ? '<div class="lab-dx"><div class="lab-dx-lbl">Dx:</div>' + e(dxBits.join(" — ")) + "</div>"
+    ? '<div class="lab-dx"><span class="lab-dx-lbl">Dx:</span> ' + e(dxBits.join(" — ")) + "</div>"
     : "";
 
-  const sigWritten = labSigName(opts.doctor);
   const css =
-    shellCss(opts.pageSize, "4.3in", "6.4in") +
+    shellCss(opts.pageSize, "148mm", "210mm") +
+    a5LetterheadCss("1.58in") +
     `
 .form-lab {
-  width: 4.3in;
-  height: 6.4in;
-  --pad-l: 0.27in;
-  --pad-r: 0.6in;
+  width: 148mm;
+  height: 210mm;
+  --pad-l: 0.35in;
+  --pad-r: 0.65in;
 }
-.form-lab .lh { height: 1.15in; }
-.form-lab .lh-logo {
-  left: 0.28in;
-  top: 0.38in;
-  width: 0.32in;
-  height: auto;
-}
-.form-lab .lh-seal {
-  left: 3.46in;
-  top: 0.40in;
-  width: 0.34in;
-  height: auto;
-}
-.form-lab .lh-doc {
-  left: 2.04in;
-  top: 0.48in;
-  transform: translate(-50%, -50%);
-  font-size: 8.8pt;
-  line-height: 0.14in;
-}
-.form-lab .lh-fam {
-  left: 2.04in;
-  top: 0.62in;
-  transform: translate(-50%, -50%);
-  font-size: 5.6pt;
-  line-height: 0.11in;
-}
-.form-lab .lh-adult {
-  left: 2.04in;
-  top: 0.73in;
-  transform: translate(-50%, -50%);
-  font-size: 5.6pt;
-  line-height: 0.11in;
-}
-.form-lab .lh-c1, .form-lab .lh-c2, .form-lab .lh-c3, .form-lab .lh-c4 {
-  left: 0.76in;
-  font-size: 4.6pt;
-  line-height: 0.083in;
-  transform: translateY(-50%);
-}
-.form-lab .lh-c1 { top: 0.85in; }
-.form-lab .lh-c2 { top: 0.93in; }
-.form-lab .lh-c3 { top: 1.02in; }
-.form-lab .lh-c4 { top: 1.09in; }
-.form-lab .lh-r1d, .form-lab .lh-r3d {
-  left: 2.2in;
-  font-size: 4.6pt;
-  line-height: 0.083in;
-  transform: translateY(-50%);
-}
-.form-lab .lh-r1d { top: 0.85in; }
-.form-lab .lh-r3d { top: 1.02in; }
-.form-lab .lh-r1t, .form-lab .lh-r2t, .form-lab .lh-r3t {
-  left: 3.4in;
-  font-size: 4.6pt;
-  line-height: 0.083in;
-  transform: translate(-100%, -50%);
-}
-.form-lab .lh-r1t { top: 0.85in; }
-.form-lab .lh-r2t { top: 0.93in; }
-.form-lab .lh-r3t { top: 1.02in; }
-.form-lab .rule-single {
+.rx-name, .rx-addr, .rx-age, .rx-sex, .rx-date {
   position: absolute;
-  top: 1.15in;
-  left: 0.27in;
-  width: 3.43in;
-}
-.lab-id-name, .lab-id-addr {
-  position: absolute;
-  left: var(--pad-l);
-  right: var(--pad-r);
-  font-size: 6pt;
+  font-size: 7.5pt;
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: 4px;
 }
-.lab-id-name { top: 1.38in; }
-.lab-id-addr { top: 1.53in; }
-.lab-ids-left { flex: 1; display: flex; align-items: flex-end; gap: 3px; min-width: 0; }
-.lab-ids-left .u { flex: 1; min-width: 0; }
-.lab-ids-right { display: flex; align-items: flex-end; gap: 4px; flex: 0 0 38%; }
-.lab-ids-right .u.date { flex: 1; min-width: 0.55in; }
-.lab-ids-right .u.age, .lab-ids-right .u.sex { width: 0.38in; min-width: 0.32in; }
+.rx-name {
+  top: 1.77in;
+  left: var(--pad-l);
+  right: 35%;
+}
+.rx-age {
+  top: 1.77in;
+  left: 66%;
+  right: 24%;
+}
+.rx-sex {
+  top: 1.77in;
+  left: 77%;
+  right: var(--pad-r);
+}
+.rx-addr {
+  top: 1.98in;
+  left: var(--pad-l);
+  right: 35%;
+}
+.rx-date {
+  top: 1.98in;
+  left: 66%;
+  right: var(--pad-r);
+  white-space: nowrap;
+}
+.rx-name .u, .rx-addr .u, .rx-date .u { flex: 1; min-width: 0; }
+.rx-age .u { width: 0.42in; min-width: 0.42in; }
+.rx-sex .u { flex: 1; min-width: 0.4in; }
 .lab-rx {
   position: absolute;
   left: var(--pad-l);
-  top: 1.9in;
-  width: 0.42in;
-  height: 0.4in;
-  font: 800 28px/1 "Arial Black", Arial, sans-serif;
+  top: 2.4in;
+  width: 0.6in;
+  height: 0.6in;
+  font: 800 38px/1 "Arial Black", Arial, sans-serif;
   letter-spacing: -1px;
   color: #000;
 }
 .lab-rx-x {
-  font-size: 22px;
+  font-size: 30px;
   position: relative;
-  top: 4px;
+  top: 6px;
 }
 .lab-item {
   position: absolute;
-  left: 1.07in;
   font-size: 11pt;
   font-weight: 700;
-  line-height: 0.185in;
-  height: 0.185in;
-  margin-top: -0.12in;
+  line-height: 0.25in;
+  height: 0.25in;
   font-family: Arial, Helvetica, sans-serif;
   color: #111;
   white-space: nowrap;
 }
+.lab-c0 { left: 1.0in; }
+.lab-c1 { left: 3.15in; }
+.lab-r0 { top: 2.95in; }
+.lab-r1 { top: 3.35in; }
+.lab-r2 { top: 3.75in; }
+.lab-r3 { top: 4.15in; }
+.lab-r4 { top: 4.55in; }
+.lab-r5 { top: 4.95in; }
+.lab-r6 { top: 5.35in; }
 .lab-blank {
   position: relative;
   display: inline-block;
@@ -1228,126 +1201,71 @@ export function buildLabRequestHtml(opts: LabHtmlOpts): string {
   font-size: 12pt;
   line-height: 1;
 }
-.lab-extras {
+.lab-others {
   position: absolute;
-  left: 0.05in;
-  top: 3.3in;
-  width: 0.85in;
-  font-size: 11pt;
-  font-family: "Bradley Hand", "Segoe Script", "Comic Sans MS", cursive;
-  color: #1a2332;
-  line-height: 0.3in;
+  left: var(--pad-l);
+  right: var(--pad-r);
+  top: 5.85in;
+  font-size: 8.5pt;
+  line-height: 0.2in;
 }
-.lab-extra {
-  transform: rotate(-20deg);
-  transform-origin: left center;
-  white-space: nowrap;
-  height: 0.3in;
-}
+.lab-others-lbl { font-weight: 700; }
+.lab-extra { white-space: nowrap; }
 .lab-dx {
   position: absolute;
-  left: 2.5in;
-  top: 2.5in;
+  left: var(--pad-l);
   right: var(--pad-r);
-  font-size: 6pt;
+  top: 6.5in;
+  font-size: 7.5pt;
   line-height: 1.3;
 }
 .lab-dx-lbl { font-weight: 700; }
 .lab-cartoon {
   position: absolute;
-  left: 0.08in;
-  top: 5.0in;
+  left: var(--pad-l);
+  top: 6.95in;
   width: 0.55in;
-  height: 1.3in;
+  height: 1.15in;
   object-fit: contain;
   object-position: bottom left;
 }
-.lab-sig {
+.rx-sig-block {
   position: absolute;
-  left: 1.95in;
+  left: 55%;
   right: var(--pad-r);
-  top: 5.72in;
-  font-size: 6.7pt;
+  top: 7.54in;
 }
-.lab-sig-name {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  border-bottom: 1px solid #333;
-  min-height: 0.16in;
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0.16in;
-}
-.lab-sig-written {
-  flex: 1 1 auto;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: visible;
-  font-size: 6pt;
-  font-weight: 700;
-  line-height: 1;
-  transform: translateY(-0.05in);
-}
-.lab-md {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding-left: 2px;
-  line-height: 1;
-}
-.lab-lic {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0.35in;
-  font-size: 6.5pt;
-}
-.lab-ptr {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0.51in;
-  font-size: 6.5pt;
-}
-.lab-sig .sig-row { font-size: 6.5pt; margin: 0; }
-.lab-sig .sig-lbl { white-space: nowrap; }
+.form-lab .sig-name { font-size: 7.5pt; height: 0.17in; line-height: 0.17in; }
+.form-lab .sig-row { font-size: 7.5pt; height: 0.17in; margin: 0; line-height: 0.17in; }
 `;
 
   const inner =
     letterheadHtml(opts.origin) +
-    '<div class="rule-single"></div>' +
-    '<div class="lab-id-name">' +
-      '<div class="lab-ids-left"><span>Patient Name:</span><span class="u grow">' +
-      e(opts.patient.full_name) +
-      "</span></div>" +
-      '<div class="lab-ids-right"><span>Date:</span><span class="u date">' +
-      e(opts.date) +
-      "</span></div>" +
-    "</div>" +
-    '<div class="lab-id-addr">' +
-      '<div class="lab-ids-left"><span>Address:</span><span class="u grow">' +
-      e(opts.patient.address) +
-      "</span></div>" +
-      '<div class="lab-ids-right"><span>Age:</span><span class="u age">' +
-      e(opts.age) +
-      '</span><span>Sex:</span><span class="u sex">' +
-      e(opts.patient.sex) +
-      "</span></div>" +
-    "</div>" +
+    '<div class="rule-double"></div>' +
+    '<div class="rx-name"><span>Patient\'s Name:</span><span class="u grow">' +
+    e(opts.patient.full_name) +
+    "</span></div>" +
+    '<div class="rx-age"><span>Age:</span><span class="u age">' +
+    e(opts.age) +
+    "</span></div>" +
+    '<div class="rx-sex"><span>Sex:</span><span class="u sex">' +
+    e(opts.patient.sex) +
+    "</span></div>" +
+    '<div class="rx-addr"><span>Address:</span><span class="u grow">' +
+    e(opts.patient.address) +
+    "</span></div>" +
+    '<div class="rx-date"><span>Date:</span><span class="u date">' +
+    e(opts.date) +
+    "</span></div>" +
     '<div class="lab-rx">R<span class="lab-rx-x">x</span></div>' +
-    extras +
     '<div class="lab-list">' + list + "</div>" +
+    extras +
     dx +
     '<img class="lab-cartoon" src="' + asset(opts.origin, "cartoon.png") + '" alt="" />' +
-    '<div class="lab-sig">' +
-      '<div class="lab-sig-name"><span class="lab-sig-written" style="font-size:' +
-      labSigFontSize(sigWritten) +
-      '">' + e(sigWritten) +
-      '</span><span class="lab-md">MD</span></div>' +
-      '<div class="lab-lic">' + credLine("LIC No:", opts.doctor.license_number ?? "") + "</div>" +
-      '<div class="lab-ptr">' + credLine("PTR No:", opts.doctor.ptr_number ?? "") + "</div>" +
+    '<div class="rx-sig-block">' +
+    signatureBlock(opts.doctor) +
     "</div>";
 
   return "<style>" + css + '</style><div class="form form-lab">' + inner + "</div>";
 }
+//JJQR - END

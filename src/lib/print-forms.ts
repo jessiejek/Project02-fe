@@ -38,7 +38,6 @@ export interface PrintPatient {
 }
 
 const PAGE_A5 = "148mm 210mm";
-const PAGE_LAB = "4.3in 6.4in";
 
 const fmtDate = (d: string | null | undefined) =>
   d
@@ -173,7 +172,7 @@ export function printLabRequest(opts: {
     "Laboratory Request",
     buildLabRequestHtml({
       origin: assetOrigin(),
-      pageSize: PAGE_LAB,
+      pageSize: PAGE_A5, //JJQR - AI (Nov 24, 2026) - the lab request is the same A5 sheet as the prescription and the medical certificate //JJQR - END
       doctor: opts.doctor,
       patient: opts.patient,
       age: ageFromDob(opts.patient.date_of_birth),
