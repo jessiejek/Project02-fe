@@ -1,67 +1,7 @@
 import { NextResponse } from "next/server";
-import { dotnetAuth } from "@/lib/auth/dotnet";
-import { setSessionCookies } from "@/lib/auth/cookies";
-import { PASSWORD_MIN_LENGTH } from "@/lib/password-rules"; // JJQR - AI (Nov 20, 2026) - PV-3 // JJQR - END
 
-/**
- * Self-registration against Project02-be: creates a Patient-role account,
- * authenticates immediately, stores the JWT pair in httpOnly cookies.
- *
- * Body:  { firstName, middleName?, lastName, email, password, dateOfBirth, sex, contactNumber? }
- * 200:   { role }
- * 409:   { error }  — email already registered
- * 400:   { error }
- */
-export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as {
-    firstName?: string;
-    middleName?: string;
-    lastName?: string;
-    email?: string;
-    password?: string;
-    dateOfBirth?: string;
-    sex?: string;
-    contactNumber?: string;
-    acceptedPrivacyNotice?: boolean; // JJQR - AI (Nov 20, 2026) - PV-12 // JJQR - END
-  };
-
-  const { firstName, lastName, email, password } = body;
-  if (!firstName?.trim() || !lastName?.trim() || !email?.trim() || !password) {
-    return NextResponse.json({ error: "First name, last name, email, and password are required." }, { status: 400 });
-  }
-  if (!body.dateOfBirth || !/^\d{4}-\d{2}-\d{2}$/.test(body.dateOfBirth)) {
-    return NextResponse.json({ error: "Date of birth is required." }, { status: 400 });
-  }
-  if (body.sex !== "Male" && body.sex !== "Female") {
-    return NextResponse.json({ error: "Please select your sex." }, { status: 400 });
-  }
-  // JJQR - AI (Nov 20, 2026) - PV-3: 12+ (server enforces the full policy and its message is passed through)
-  if (password.length < PASSWORD_MIN_LENGTH) {
-    return NextResponse.json({ error: `Password must be at least ${PASSWORD_MIN_LENGTH} characters.` }, { status: 400 });
-  }
-  // JJQR - END
-
-  const result = await dotnetAuth.register({
-    firstName: firstName.trim(),
-    middleName: body.middleName?.trim() || undefined,
-    lastName: lastName.trim(),
-    email: email.trim(),
-    password,
-    dateOfBirth: body.dateOfBirth,
-    sex: body.sex,
-    contactNumber: body.contactNumber?.trim() || undefined,
-    acceptedPrivacyNotice: body.acceptedPrivacyNotice === true, // JJQR - AI (Nov 20, 2026) - PV-12 // JJQR - END
-  });
-
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.status === 409 ? "An account with this email already exists." : result.message },
-      { status: result.status || 502 },
-    );
-  }
-
-  const { accessToken, refreshToken, user } = result.data;
-  const res = NextResponse.json({ role: user.role });
-  setSessionCookies(res, accessToken, refreshToken);
-  return res;
+//JJQR - AI (Nov 24, 2026) - owner: the buyer said no online booking, so patient self-registration is closed (the server refuses it too).
+export async function POST() {
+  return NextResponse.json({ error: "Online patient registration is closed. Please register at the clinic's front desk." }, { status: 403 });
 }
+//JJQR - END

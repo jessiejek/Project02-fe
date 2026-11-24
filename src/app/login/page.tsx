@@ -94,13 +94,9 @@ function LoginPageForm() {
     <AuthShell
       title="Log in to your account"
       description="Patients, doctors, staff and administrators all sign in here."
-      footer={<>New patient?{" "}
-        <Link href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"} className="font-medium text-primary hover:underline">
-          Create an account
-        </Link>
-        <span className="mt-xs block">
+      footer={<span className="block">
           <Link href="/privacy" className="text-label-md text-on-surface-variant hover:underline">Privacy Notice</Link>
-        </span></>}
+        </span>} //JJQR - AI (Nov 24, 2026) - no "Create an account": patients cannot register themselves online any more //JJQR - END
     >
       <form className="space-y-md" onSubmit={handleSubmit}>
         {error && <FormAlert>{error}</FormAlert>}

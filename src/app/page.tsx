@@ -79,12 +79,9 @@ export default async function Home() {
         <section className="space-y-md py-lg text-center">
           <h1 className="mx-auto max-w-copy text-balance text-headline-lg-mobile text-on-surface sm:text-headline-lg">Get your queue number before you arrive</h1>
           <p className="mx-auto max-w-copy text-pretty text-body-lg text-on-surface-variant">
-            Walk in on any open day, or book online first. You are seen in queue order either way.
+            Walk in on any open day. You are seen in queue order.
           </p>
           <div className="flex flex-col items-center justify-center gap-sm sm:flex-row">
-            <Link href="/register?next=/patient/bookings" className={primaryLink}>
-              Book a visit
-            </Link>
             <a href="#how" className={secondaryLink}>
               How booking works
             </a>
