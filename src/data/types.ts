@@ -451,6 +451,9 @@ export interface ClinicSettings {
   feeSeniorPwd: number;
   feeMedCert: number;
   discountPct: number;
+  // JJQR - AI (Nov 24, 2026) - Payments tab switch (saved on its own, right away)
+  autoPaidOnComplete?: boolean;
+  // JJQR - END
 }
 
 // Matches clinic_operating_hours (schema.sql) exactly — admin/settings' Hours

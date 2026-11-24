@@ -29,6 +29,9 @@ export interface ClinicSettingsRow {
   fee_senior_pwd: number;
   fee_med_cert: number;
   discount_pct: number;
+  // JJQR - AI (Nov 24, 2026) - Admin > Settings > Payments switch: the visit is marked paid (cash, exact fee) when the doctor completes it. Missing on an older server = off.
+  auto_paid_on_complete?: boolean;
+  // JJQR - END
   updated_at: string;
 }
 
@@ -47,6 +50,13 @@ export async function updateClinicSettings(
   const current = await api.get<ClinicSettingsRow>("/api/settings", { anonymous: true });
   await api.put("/api/settings", { ...current, ...patch });
 }
+
+// JJQR - AI (Nov 24, 2026) - its own endpoint: the full settings save never changes this switch
+export async function setAutoPaidOnComplete(enabled: boolean): Promise<boolean> {
+  const res = await api.put<{ auto_paid_on_complete: boolean }>("/api/settings/auto-paid-on-complete", { enabled });
+  return res?.auto_paid_on_complete ?? enabled;
+}
+// JJQR - END
 
 // ── clinic_operating_hours ─────────────────────────────────────────────
 export interface OperatingHourRow {

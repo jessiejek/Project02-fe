@@ -20,6 +20,7 @@ import {
   setOperatingHours,
   queryPaymentMethods,
   setPaymentMethods,
+  setAutoPaidOnComplete, // JJQR - AI (Nov 24, 2026) // JJQR - END
 } from "@/lib/data/admin";
 import { DAYS, dayNameToIndex, indexToDayName } from "@/lib/days";
 import type { ClinicSettings, OperatingHours } from "@/data/types";
@@ -115,6 +116,7 @@ export default function AdminSettingsPage() {
           feeSeniorPwd: s.fee_senior_pwd ?? 400,
           feeMedCert: s.fee_med_cert ?? 50,
           discountPct: s.discount_pct ?? 0.2,
+          autoPaidOnComplete: s.auto_paid_on_complete ?? false, // JJQR - AI (Nov 24, 2026) // JJQR - END
         });
       }
       if (hoursRes.data) {
@@ -197,6 +199,23 @@ export default function AdminSettingsPage() {
     );
     setSavedAt(new Date().toLocaleTimeString());
   }
+
+  // JJQR - AI (Nov 24, 2026) - owner: "let admin have a flag". The switch saves on its own, right away (own endpoint); a failure puts it back.
+  async function toggleAutoPaid(on: boolean) {
+    const before = !!settings.autoPaidOnComplete;
+    setSettings((prev) => ({ ...prev, autoPaidOnComplete: on }));
+    await run(async () => {
+      try {
+        const saved = await setAutoPaidOnComplete(on);
+        setSettings((prev) => ({ ...prev, autoPaidOnComplete: saved }));
+        setSavedAt(new Date().toLocaleTimeString());
+      } catch (e) {
+        setSettings((prev) => ({ ...prev, autoPaidOnComplete: before }));
+        throw e;
+      }
+    }, "The switch could not be saved. Try again.");
+  }
+  // JJQR - END
 
   function toggleMethod(method: string) {
     setSettings((prev) => ({
@@ -350,6 +369,16 @@ export default function AdminSettingsPage() {
                 ))}
               </div>
             </fieldset>
+            {/* JJQR - AI (Nov 24, 2026) - owner: mark the visit paid when the doctor completes it (off by default; saves right away) */}
+            <label className="flex min-h-11 items-start gap-sm text-body-md text-on-surface">
+              <input type="checkbox" checked={!!settings.autoPaidOnComplete} disabled={saving}
+                onChange={(e) => toggleAutoPaid(e.target.checked)} className="mt-1 h-5 w-5 accent-primary" />
+              <span>
+                <span className="block font-medium">Mark the visit paid when the doctor completes it</span>
+                <span className={hintStyles}>Records cash for the exact fee, so the front desk does not press Record payment. Waived and ₱0 visits are skipped. No receipt number is given. Saves right away.</span>
+              </span>
+            </label>
+            {/* JJQR - END */}
             {field("set-refund", "Refund policy", <textarea id="set-refund" value={settings.refundPolicy ?? ""} onChange={(e) => setSettings({ ...settings, refundPolicy: e.target.value })} rows={3} className={inputStyles("py-md")} />)}
             {saveBar(() => run(saveSettings, "Payment settings could not be saved. Try again."))}
           </div>
