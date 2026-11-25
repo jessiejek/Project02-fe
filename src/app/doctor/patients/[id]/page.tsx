@@ -20,7 +20,7 @@ import { queryConsultations, queryRxGroups, queryVitalReadings, deleteRxGroup } 
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { queryPatientById } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
-import { openPatientFile, queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
+import { openPatientFile, queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles"; //JJQR - AI (Nov 25, 2026) - openPatientFile: Open a visit's file from the chart //JJQR - END
 //JJQR - AI (Nov 25, 2026) - desktop parity: upload to one visit + Reprint
 import { VisitUploadModal } from "@/components/doctor/VisitUploadModal";
 import { formatUploadedManila } from "@/lib/visit-upload"; //JJQR - AI (2026-11-25) - owner: Manila upload times //JJQR - END
