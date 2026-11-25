@@ -9,7 +9,7 @@ Longer docs (desktop repo): `docs/handoff/00-START-HERE.md` (state + rules), `1-
 ## 0. TL;DR (read this if nothing else)
 - The system is **LIVE** at a real clinic (Grace Medical Clinic: one doctor and a front desk). The doctor works on the **same Windows laptop** this was developed on.
 - **Production is untouched by this handoff.** Backend, web and desktop production are exactly as released on **24 Nov 2026**: desktop **v0.2.45**, backend `main` **e4494a3**, web `main` **bd0f449**.
-- **Waiting to ship (desktop only): v0.2.46.** That's every desktop commit after `a0822d1` on the handoff branch: template editor fixes, uploads tagged to a consultation, the Reprint button, three code review rounds, and the pop-up fixes. The backend and web need **no change** for it.
+- **Waiting to ship: desktop v0.2.46 AND the matching web update.** Desktop: every commit after `a0822d1` on the handoff branch (template editor fixes, uploads tagged to a consultation, Reprint, 3 code review rounds, pop-up fixes). **Web:** commit `2e42d58` on the web handoff branch brings the same features to the website (Lab Orders upload 75/25, chart files per visit, Reprint button, Patient chart link). **Backend: no change** (uses existing endpoints).
 - **Ship rules:** only after the owner says **"ship"**, and only between **11:00 PM and 12:00 midnight Manila time**.
 - **Next step #1:** the owner clicks through v0.2.46 in the test copy (section J). Then ship it in the window.
 
@@ -194,10 +194,10 @@ Release builds default to the live server address, with demo off.
 
 **Already in production (shipped 24 Nov 2026):** desktop **v0.2.44** and **v0.2.45**; backend `main` e4494a3 (deploys 145/146); web `main` bd0f449.
 
-**Next release: desktop v0.2.46 (desktop only)**
+**Next release: desktop v0.2.46 + web update (no backend change)**
 - **Contents:** desktop commits `7665d5b, 43c28cc, 93409be, 5a454cf, e3b0478, 4bf153a, dddf74a, c06a80b`. The first four are on desktop **local `main`, not pushed**; the last four are on the handoff branch.
 - **Backend:** nothing. The uploads use the existing endpoints, and per-group printing is local.
-- **Web:** nothing.
+- **Web:** commit `2e42d58` (web handoff branch): same features as the desktop: Lab Orders "Upload results" in the step title bar + 75% tests / 25% "Uploaded results"; chart visit "Results & files" + Upload result / document; Lab Results / Documents tabs show the Visit + Open; "Reprint" button in the chart left panel (each prescription, lab request, medical certificate); "Patient chart" link (new tab) after "View Patient History". Type-check (tsc) clean; **not yet seen in a browser** (Node 16 on the Windows PC cannot run Next 16).
 - **Held back / not included:**
   - `SyncResultPage` ("Sync now" progress) still answers before it closes. Left on purpose: it shows the result in place.
   - Mac A5 paper default.
@@ -210,8 +210,9 @@ Release builds default to the live server address, with demo off.
 3. ☐ Build on Windows: `dotnet build ClinicNode/ClinicNode.App/ClinicNode.App.csproj -f net10.0-windows10.0.19041.0` → 0 errors.
 4. ☐ Tests: `dotnet test ClinicNode/ClinicNode.Tests` and `dotnet test ClinicNode/ClinicNode.Api.Tests`. Expect **only** the known failures (F).
 5. ☐ `git tag v0.2.46`, then `git push origin main v0.2.46`.
+   - ☐ **Web (same night, same window):** in `Project02-fe`: `git checkout main`, `git merge --ff-only handoff/claude-to-grok-2026-11-25`, then `git push origin main` (Vercel deploys in about 1 min). Check the doctor chart and a consultation in the browser right after. The web branch also adds `HANDOFF.md` to web main: harmless.
    - **Never** `git push --all` / `--tags`.
-   - **Don't push backend or web `main`**: nothing to ship there, and a backend push restarts the live server.
+   - **Don't push backend `main`**: nothing to ship there, and a backend push restarts the live server.
 6. ☐ Wait about 20–25 min. Confirm the `Project02-releases` commit shows 0.2.46. Give the owner the installer links.
 7. ☐ After the doctor's laptop updates (silently), smoke test after hours: open a consult → Lab Orders → upload; chart → Reprint.
 8. ☐ Update `docs/handoff/00-START-HERE.md` section 2 ("SHIPPED …").
@@ -242,6 +243,7 @@ Release builds default to the live server address, with demo off.
 | Production (backend, web, desktop v0.2.45) | **Working, live.** |
 | v0.2.46: upload in Lab Orders, 75/25 split, per-visit files, Reprint button | Built; **the owner saw it in the QA copy and said "perfect"**. |
 | v0.2.46: review round 3 fixes, per-prescription print, the 7 pop-up fixes | Built, tests pass, **NOT yet clicked through on screen.** |
+| Web update (`2e42d58`): Lab Orders upload, chart files per visit, Reprint, Patient chart link | Built, `tsc` clean; **NOT seen in a browser yet** (Node 16 on the Windows PC). Must be checked before or right after shipping (a Vercel Preview of the web handoff branch can be opened safely; it talks to the live API, so use a test patient only). |
 | Desktop tests (Windows) | `ClinicNode.Tests`: 467 pass, **11 fail** (`GoldenParityTests` CRLF line endings on Windows — old, not a regression), 6 skipped. `ClinicNode.Api.Tests`: 132 pass, **1 fail** (`PaperQueueTests.Offline_with_no_reserved_number…`, stale since reserved queue blocks were removed — old). |
 | Backend tests | 523 pass, 4 old queue-clash failures (old). |
 | Web tests | 13 old consultation-UI failures (old); tsc clean; ESLint can't run on the Windows PC (Node 16). |
@@ -356,7 +358,8 @@ Release builds default to the live server address, with demo off.
 
 ## J. Next steps (priority order)
 
-1. **Owner click-through of v0.2.46 in the QA copy** (after clinic hours, or while the doctor isn't using the laptop).
+1. **Web check:** open the Vercel *Preview* of the web handoff branch (or run the web locally with Node 20+). Check the doctor chart (Reprint, visit Results & files, Upload) and a consultation Lab Orders step (Upload results, 75/25). Use a TEST patient only: the Preview talks to the live API.
+1. 1. **Owner click-through of v0.2.46 in the QA copy** (after clinic hours, or while the doctor isn't using the laptop).
    - Start the local server and QA app (A).
    - Things to try:
      - consult → Lab Orders → Upload results (1 file, then 3 files; Cancel is blocked while sending);
