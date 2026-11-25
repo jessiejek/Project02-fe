@@ -1,5 +1,6 @@
 "use client";
 
+import { rxPreviewName, rxPreviewSig } from "@/lib/rx-preview"; //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { Card } from "@/components/ui/Card";
@@ -29,6 +30,7 @@ interface PrescriptionLine {
   quantity: string;
   dosage: string;
   instruction: string;
+  route: string | null; //JJQR - AI (2026-11-25) - Sig line + print like the doctor's printed form //JJQR - END
   timing: string | null;
   mealRelation: string | null;
   //JJQR - AI (Nov 20, 2026)
@@ -95,6 +97,7 @@ export default function PrescriptionsPage() {
           quantity: i.quantity,
           dosage: i.dosage,
           instruction: i.instruction ?? "",
+          route: i.route ?? null, //JJQR - AI (2026-11-25) - Sig line + print like the doctor's printed form //JJQR - END
           timing: i.timing ?? null,
           mealRelation: i.meal_relation ?? null,
           //JJQR - AI (Nov 20, 2026)
@@ -136,6 +139,7 @@ export default function PrescriptionsPage() {
         dosage: i.dosage,
         quantity: i.quantity,
         instruction: i.instruction,
+        route: i.route, //JJQR - AI (2026-11-25) - print the route like the doctor's printed form //JJQR - END
         timing: i.timing,
         meal_relation: i.mealRelation,
         //JJQR - AI (Nov 20, 2026)
@@ -185,9 +189,9 @@ export default function PrescriptionsPage() {
                         <span className="w-5 shrink-0 text-right text-body-md tabular-nums text-on-surface-variant">{i + 1}.</span>
                         <div className="min-w-0">
                           <p className="text-body-md font-medium text-on-surface">
-                            {item.genericName} <span className="font-normal tabular-nums text-on-surface-variant">#{item.quantity}</span>
+                            {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{rxPreviewName(item)}{/* //JJQR - END */} <span className="font-normal tabular-nums text-on-surface-variant">#{item.quantity}</span>
                           </p>
-                          <p className="text-body-md text-on-surface">Sig. {item.dosage} {item.instruction}</p>
+                          <p className="text-body-md text-on-surface">{/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/* //JJQR - END */}</p>
                           {item.isControlledSubstance && <p className="text-label-md text-status-warning">Controlled medicine. Bring the printed prescription.</p>}
                         </div>
                       </li>

@@ -1,5 +1,6 @@
 "use client";
 
+import { rxPreviewName, rxPreviewSig } from "@/lib/rx-preview"; //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -67,7 +68,7 @@ interface VitalReadingEntry {
 interface PrescriptionSummary {
   id: string;
   createdAt: string;
-  items: { id: string; genericName: string; dosage: string; quantity: string; instruction: string }[];
+  items: { id: string; genericName: string; dosage: string; quantity: string; instruction: string; route?: string | null /* //JJQR - AI (2026-11-25) - for the printed-form Sig line //JJQR - END */ }[];
 }
 
 const TABS = [
@@ -193,6 +194,7 @@ export function PatientHistoryModal({
               dosage: i.dosage,
               quantity: i.quantity,
               instruction: i.instruction ?? "",
+              route: i.route ?? null, //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
             })),
           }))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
@@ -367,10 +369,10 @@ export function PatientHistoryModal({
                         {group.items.map((item, i) => (
                           <p key={item.id} className="text-body-md text-on-surface-variant">
                             <span className="text-on-surface">
-                              {i + 1}. {item.genericName} #{item.quantity}
+                              {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(item)} #{item.quantity}{/* //JJQR - END */}
                             </span>
                             <br />
-                            Sig. {item.dosage} {item.instruction}
+                            {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/* //JJQR - END */}
                           </p>
                         ))}
                       </div>

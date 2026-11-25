@@ -1,5 +1,6 @@
 "use client";
 
+import { rxPreviewName, rxPreviewSig } from "@/lib/rx-preview"; //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
 import { Suspense, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { buttonStyles } from "@/components/ui/buttonStyles";
@@ -812,10 +813,10 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               {printPreviewGroup.items.map((item, i) => (
                 <p key={item.id} className="text-body-md text-on-surface-variant">
                   <span className="text-on-surface">
-                    {i + 1}. {item.genericName} #{item.quantity}
+                    {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(item)} #{item.quantity}{/* //JJQR - END */}
                   </span>
                   <br />
-                  Sig. {item.dosage} {item.instruction}
+                  {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/* //JJQR - END */}
                 </p>
               ))}
             </div>

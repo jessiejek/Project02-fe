@@ -1,5 +1,6 @@
 "use client";
 
+import { rxPreviewName, rxPreviewSig } from "@/lib/rx-preview"; //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
 import "./consultation.css";
 import { ClinicalNoteField } from "@/components/doctor/ClinicalNoteField";
 
@@ -2638,7 +2639,7 @@ Return to patient queue
                   <div className="space-y-xs">
                     {prescriptionGroup.items.map((rx, i) => (
                       <p key={rx.id} className="text-body-md text-on-surface-variant">
-                        {i + 1}. {rx.genericName} #{rx.quantity} — Sig. {rx.dosage} {rx.instruction}
+                        {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(rx)} #{rx.quantity} — Sig. {rxPreviewSig(rx)}{/* //JJQR - END */}
                       </p>
                     ))}
                   </div>

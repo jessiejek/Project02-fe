@@ -714,7 +714,9 @@ function collapseDupFirstWord(text: string): string {
   return first + (sp2 < 0 ? "" : rest.slice(sp2));
 }
 
-function sigFreeText(item: HtmlRxLine): string {
+//JJQR - AI (2026-11-25) - exported so the on-screen previews (lib/rx-preview.ts) use the printed form's own Sig rule; output unchanged
+export function sigFreeText(item: Pick<HtmlRxLine, "route" | "instruction">): string {
+//JJQR - END
   const route = (item.route ?? "").trim();
   const instruction = (item.instruction ?? "").trim();
   let text = "";
