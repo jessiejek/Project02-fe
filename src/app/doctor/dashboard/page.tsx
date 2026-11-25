@@ -26,7 +26,11 @@ import { queryQueue, type QueueBoard } from "@/lib/data/queue";
 import { queryConsultations, type ConsultationRow } from "@/lib/data/clinical";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 import { compareQueueNumbers, isPriorityQueueNumber } from "@/lib/queue-lane"; //JJQR - AI (Nov 21, 2026) - priority lane
-import { ATTENTION_GROUP_MAX_ROWS, attentionFrom, groupAttention, isGroupOpen, itemsLabel, type AttentionEntry } from "@/lib/attention-groups"; //JJQR - AI (Nov 25, 2026) - GAV-2 Needs attention by date
+import { ATTENTION_GROUP_MAX_ROWS, attentionFrom, groupAttention, isGroupOpen, itemsLabel, MARK_RECEIVED_DETAIL, markReceivedQuestion, pesoLabel, type AttentionEntry } from "@/lib/attention-groups"; //JJQR - AI (Nov 25, 2026) - GAV-2 Needs attention by date
+//JJQR - AI (Nov 25, 2026) - doctor "Mark received"
+import { Modal } from "@/components/ui/Modal";
+import { markReceivedByDoctor } from "@/lib/data/payments";
+//JJQR - END
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
 
@@ -86,6 +90,14 @@ export default function DoctorDashboardPage() {
   const [bookingNames, setBookingNames] = useState<Record<string, string>>({});
   // which date headers the doctor opened / closed (today starts open, older dates closed)
   const [attentionToggled, setAttentionToggled] = useState<Record<string, boolean>>({});
+  //JJQR - AI (Nov 25, 2026) - doctor "Mark received" on a completed, unpaid row: the row being confirmed, saving flag (stops a double tap),
+  // the confirm box's error, rows already marked (hidden at once, before the refresh lands) and the "marked received" note
+  const [receiveTarget, setReceiveTarget] = useState<{ bookingId: string; name: string; amount: number } | null>(null);
+  const [receiving, setReceiving] = useState(false);
+  const [receiveError, setReceiveError] = useState("");
+  const [receivedIds, setReceivedIds] = useState<string[]>([]);
+  const [receivedNote, setReceivedNote] = useState("");
+  //JJQR - END
   //JJQR - END
   const [followUpsDueToday, setFollowUpsDueToday] = useState<ConsultationRow[]>([]);
 
@@ -368,6 +380,30 @@ export default function DoctorDashboardPage() {
   const attentionName = (bookingId: string) => patientNameByBooking.get(bookingId)?.trim() || bookingNames[bookingId]?.trim() || "A patient";
   //JJQR - AI (Nov 25, 2026) - GAV-2 (approved mockup): one list, grouped by visit date; today first and open, older dates collapsible
   const attentionToday = todayManila();
+  //JJQR - AI (Nov 25, 2026) - doctor "Mark received": one save at a time; the box closes only after the server said yes; a refusal (amount changed,
+  // waived, already recorded, offline) is shown in the box in plain words and the row stays
+  const confirmReceived = async () => {
+    const target = receiveTarget;
+    if (!target || receiving) return;
+    setReceiving(true);
+    setReceiveError("");
+    try {
+      await markReceivedByDoctor(target.bookingId, target.amount);
+      setReceivedIds((ids) => [...ids, target.bookingId]);
+      setReceiveTarget(null);
+      setReceivedNote(`${pesoLabel(target.amount)} from ${target.name} marked received.`);
+      void loadQueue();
+      void loadClinicOverview();
+    } catch (e) {
+      const msg = e instanceof Error && e.message && !/^API \d+$/.test(e.message) ? e.message : "";
+      setReceiveError(msg || "Couldn't mark it received. Check the connection and try again.");
+      void loadQueue();
+      void loadClinicOverview();
+    } finally {
+      setReceiving(false);
+    }
+  };
+  //JJQR - END
   const attentionEntries: AttentionEntry[] = [
     ...unpaidCompleted.map((e) => ({ booking_id: e.booking_id, patient_name: e.patient_name, appointment_date: attentionToday, amount_due: Number(e.amount_due) })),
     ...unpaidOlder,
@@ -376,11 +412,13 @@ export default function DoctorDashboardPage() {
     kind: "unpaid" as const,
     date: u.appointment_date,
     name: u.patient_name?.trim() || attentionName(u.booking_id),
-    what: `Record payment ₱${u.amount_due}`,
+    what: `${pesoLabel(u.amount_due)} due`, //JJQR - AI (Nov 25, 2026) - the row's action is now "Mark received" //JJQR - END
     note: "Completed, unpaid",
-    action: "View appointment",
+    action: "Mark received",
     href: `/doctor/appointments/${u.booking_id}`,
-  }));
+    amount: u.amount_due,
+  }))
+    .filter((e) => !receivedIds.includes(e.key.slice("unpaid-".length))); //JJQR - AI (Nov 25, 2026) - a row marked received disappears at once //JJQR - END
   for (const c of chartsToFinish)
     attentionEntries.push({
       key: `chart-${c.consultation_id}`,
@@ -445,6 +483,9 @@ export default function DoctorDashboardPage() {
       <div className="grid min-w-0 gap-lg overflow-x-hidden xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start">
         <div className="xl:col-span-2"><DoctorPageHeader title="Your clinic today" description={<>{name} · <span className="tabular-nums">{visitDate(todayManila())}</span></>} actions={<>{/*JJQR - AI (Nov 19, 2026) */}<Link href="/doctor/performance" data-testid="performance-link" className={buttonStyles("secondary")}><Icon name="monitoring" className="h-4 w-4" />Your performance</Link>{/*JJQR - END */}<Link href="/doctor/appointments" className={buttonStyles("primary")}>Open appointments<Icon name="arrow_forward" className="h-4 w-4" /></Link></>} /></div>
         {statusError && <Toast variant="error" key={statusError} message={statusError} />}
+        {/*JJQR - AI (Nov 25, 2026) - doctor "Mark received" result */}
+        {receivedNote && <Toast variant="success" key={receivedNote} message={receivedNote} />}
+        {/*JJQR - END */}
 
         <Card className="!p-md xl:col-start-1 xl:row-span-4 sm:!p-lg">
           <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
@@ -519,9 +560,25 @@ export default function DoctorDashboardPage() {
                               <p className="text-body-sm text-on-surface">{it.what}</p>
                               {it.note && <p className="text-label-sm text-on-surface-variant">{it.note}</p>}
                             </div>
-                            <Link href={it.href} className={buttonStyles(it.kind === "unpaid" ? "primary" : "secondary", "shrink-0")}>
-                              {it.action}
-                            </Link>
+                            {/*JJQR - AI (Nov 25, 2026) - unpaid: "Mark received" opens a small confirm box (no navigation) */}
+                            {it.kind === "unpaid" ? (
+                              <Button
+                                className="shrink-0"
+                                disabled={receiving}
+                                onClick={() => {
+                                  if (receiving) return;
+                                  setReceiveError("");
+                                  setReceiveTarget({ bookingId: it.key.slice("unpaid-".length), name: it.name, amount: it.amount ?? 0 });
+                                }}
+                              >
+                                {it.action}
+                              </Button>
+                            ) : (
+                              <Link href={it.href} className={buttonStyles("secondary", "shrink-0")}>
+                                {it.action}
+                              </Link>
+                            )}
+                            {/*JJQR - END */}
                           </div>
                         ))}
                         {g.items.length > ATTENTION_GROUP_MAX_ROWS && (
@@ -536,6 +593,33 @@ export default function DoctorDashboardPage() {
               })}
             </div>
           )}
+          {/*JJQR - END */}
+          {/*JJQR - AI (Nov 25, 2026) - doctor "Mark received" confirm box (Cancel / Mark received) */}
+          <Modal
+            isOpen={receiveTarget !== null}
+            onClose={() => {
+              if (!receiving) setReceiveTarget(null);
+            }}
+            title={receiveTarget ? markReceivedQuestion(receiveTarget.amount) : "Mark received?"}
+            footer={
+              <>
+                <Button variant="secondary" disabled={receiving} onClick={() => setReceiveTarget(null)}>
+                  Cancel
+                </Button>
+                <Button loading={receiving} disabled={receiving} onClick={() => void confirmReceived()}>
+                  Mark received
+                </Button>
+              </>
+            }
+          >
+            <p className="text-body-md text-on-surface">{receiveTarget?.name}</p>
+            <p className="mt-xs text-body-sm text-on-surface-variant">{MARK_RECEIVED_DETAIL}</p>
+            {receiveError && (
+              <p role="alert" className="mt-sm text-body-sm text-error">
+                {receiveError}
+              </p>
+            )}
+          </Modal>
           {/*JJQR - END */}
         </Card>
 

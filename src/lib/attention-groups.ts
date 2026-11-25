@@ -16,6 +16,7 @@ export interface AttentionEntry {
   note: string;
   action: string;
   href: string;
+  amount?: number; //JJQR - AI (Nov 25, 2026) - unpaid rows: the amount due, for "Mark received" //JJQR - END
 }
 
 export interface AttentionGroup {
@@ -80,4 +81,14 @@ export function groupAttention(items: AttentionEntry[], today: string): Attentio
 export function isGroupOpen(group: { date: string; isToday: boolean }, toggled: Record<string, boolean>): boolean {
   return toggled[group.date] ?? group.isToday;
 }
+//JJQR - END
+
+//JJQR - AI (Nov 25, 2026) - doctor "Mark received" on an unpaid row (same words on the desktop)
+export function pesoLabel(amount: number): string {
+  return `₱${Number.isInteger(amount) ? amount.toLocaleString("en-PH") : amount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+export function markReceivedQuestion(amount: number): string {
+  return `Mark ${pesoLabel(amount)} received in cash?`;
+}
+export const MARK_RECEIVED_DETAIL = "Recorded as paid in cash for the exact amount, with no OR number, under your name.";
 //JJQR - END

@@ -39,3 +39,12 @@ test("dates: another year shows the year; item counts", () => {
   assert.equal(itemsLabel(3), "3 items");
 });
 //JJQR - END
+
+//JJQR - AI (Nov 25, 2026) - doctor "Mark received"
+import { markReceivedQuestion, pesoLabel } from "./attention-groups.ts";
+test("Mark received question names the exact peso amount", () => {
+  assert.equal(markReceivedQuestion(450), "Mark ₱450 received in cash?");
+  assert.equal(pesoLabel(1500), "₱1,500");
+  assert.equal(pesoLabel(450.5), "₱450.50");
+});
+//JJQR - END

@@ -76,3 +76,11 @@ export async function refundPayment(
   const id = await paymentIdForBooking(bookingId);
   await api.post(`/api/payments/${id}/refund`, { amount: input.amount, reason: input.reason });
 }
+
+//JJQR - AI (Nov 25, 2026) - doctor dashboard "Mark received": the doctor took the cash for their OWN completed, unpaid visit. The server records Paid, Cash,
+// exactly the amount due, no OR number, confirmed by the doctor (POST /api/payments/booking/{bookingId}/doctor-received). `amount` = what the doctor saw;
+// the server refuses (409) if the amount changed, the fee was waived or it was already recorded.
+export async function markReceivedByDoctor(bookingId: string, amount: number): Promise<void> {
+  await api.post(`/api/payments/booking/${bookingId}/doctor-received`, { amount });
+}
+//JJQR - END
