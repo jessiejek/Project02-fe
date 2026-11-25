@@ -22,6 +22,25 @@ import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 const SMALL = "!min-h-8 !px-sm !py-0 text-label-md whitespace-nowrap";
 
+//JJQR - AI (2026-11-26) - why: owner (pt95u) "make queue and needs attention collapsible": a sub-heading that folds / unfolds its list (open by
+// default). Used for each date's "Queue" and "Needs attention" here and for today's "Queue" and "Needs attention · Today" on the dashboard.
+export function ListToggle({ open, onToggle, label, right, className, testId }: { open: boolean; onToggle: () => void; label: ReactNode; right?: ReactNode; className?: string; testId?: string }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={onToggle}
+      data-testid={testId}
+      className={cn("flex min-h-9 w-full items-center gap-sm text-left text-label-sm font-semibold text-on-surface-variant hover:text-on-surface", className)}
+    >
+      <span aria-hidden="true" className="w-3">{open ? "▾" : "▸"}</span>
+      <span>{label}</span>
+      {right && <span className="ml-auto">{right}</span>}
+    </button>
+  );
+}
+//JJQR - END
+
 //JJQR - AI (2026-11-26) - why: earlier days' Needs attention (doctor dashboard) goes under the same date group as that day's queue
 export interface EarlierAttention {
   date: string;
@@ -33,6 +52,7 @@ export interface EarlierAttention {
 export function LeftoverQueue({ role, onChanged, className, attention }: { role: "doctor" | "staff"; onChanged?: () => void; className?: string; attention?: EarlierAttention[] }) {
   const [items, setItems] = useState<LeftoverEntry[]>([]);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
+  const [listClosed, setListClosed] = useState<Record<string, boolean>>({}); //JJQR - AI (2026-11-26) - why: folded sub-lists ("<date>:queue" / "<date>:attention"), open by default //JJQR - END
   const [busyId, setBusyId] = useState<string | null>(null);
   const busyRef = useRef(false); // a second click before React re-renders must not send a second request
   const [error, setError] = useState("");
@@ -139,7 +159,10 @@ export function LeftoverQueue({ role, onChanged, className, attention }: { role:
                 <div className="divide-y divide-outline-variant/40 border-t border-outline-variant/40">
                   {d.queue.length > 0 && (
                     <div>
-                      <p className="px-md pb-xs pt-sm text-label-sm font-semibold text-on-surface-variant">Queue · {patientsLabel(d.queue.length)}</p>
+                      {/*JJQR - AI (2026-11-26) - why: owner (pt95u): the Queue list folds / unfolds */}
+                      <ListToggle open={!listClosed[`${d.date}:queue`]} onToggle={() => setListClosed((c) => ({ ...c, [`${d.date}:queue`]: !c[`${d.date}:queue`] }))} label={`Queue · ${patientsLabel(d.queue.length)}`} className="px-md" testId={`earlier-queue-toggle-${d.date}`} />
+                      {!listClosed[`${d.date}:queue`] && (<>
+                      {/*JJQR - END */}
                       <ul className="divide-y divide-outline-variant/40 @3xl:hidden">
                         {d.queue.map((e) => {
                           const st = leftoverStatus(e, today);
@@ -185,12 +208,15 @@ export function LeftoverQueue({ role, onChanged, className, attention }: { role:
                           })}
                         </tbody>
                       </table>
+                      {/*JJQR - AI (2026-11-26) */}</>)}{/*JJQR - END */}
                     </div>
                   )}
                   {d.attentionCount > 0 && (
                     <div>
-                      <p className="px-md pb-xs pt-sm text-label-sm font-semibold text-on-surface-variant">Needs attention · {d.attentionCount} item{d.attentionCount === 1 ? "" : "s"}</p>
-                      {renderAttention(d.date)}
+                      {/*JJQR - AI (2026-11-26) - why: owner (pt95u): the Needs attention list folds / unfolds */}
+                      <ListToggle open={!listClosed[`${d.date}:attention`]} onToggle={() => setListClosed((c) => ({ ...c, [`${d.date}:attention`]: !c[`${d.date}:attention`] }))} label={`Needs attention · ${d.attentionCount} item${d.attentionCount === 1 ? "" : "s"}`} className="px-md" testId={`earlier-attention-toggle-${d.date}`} />
+                      {!listClosed[`${d.date}:attention`] && renderAttention(d.date)}
+                      {/*JJQR - END */}
                     </div>
                   )}
                 </div>

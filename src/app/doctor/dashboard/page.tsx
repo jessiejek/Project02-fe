@@ -23,7 +23,7 @@ import { queryDoctorEarnings, queryReport, type DoctorEarningsRow } from "@/lib/
 import { queryBookings } from "@/lib/data/bookings";
 import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/scheduling";
 import { queryQueue, type QueueBoard } from "@/lib/data/queue";
-import { LeftoverQueue, type EarlierAttention } from "@/components/queue/LeftoverQueue"; //JJQR - AI (2026-11-25) - why: GAV-4 leftover patients //JJQR - END
+import { LeftoverQueue, ListToggle, type EarlierAttention } from "@/components/queue/LeftoverQueue"; //JJQR - AI (2026-11-25) - why: GAV-4 leftover patients //JJQR - END
 import { queryConsultations, type ConsultationRow } from "@/lib/data/clinical";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 import { compareQueueNumbers, isPriorityQueueNumber } from "@/lib/queue-lane"; //JJQR - AI (Nov 21, 2026) - priority lane
@@ -92,6 +92,10 @@ export default function DoctorDashboardPage() {
   const [unpaidOlder, setUnpaidOlder] = useState<{ booking_id: string; patient_name: string; appointment_date: string; amount_due: number }[]>([]);
   const [bookingNames, setBookingNames] = useState<Record<string, string>>({});
   //JJQR - AI (2026-11-26) - why: the date headers moved to the "Earlier days" card (LeftoverQueue keeps its own open / closed state) //JJQR - END
+  //JJQR - AI (2026-11-26) - why: owner (pt95u): today's Queue and Needs attention lists can be folded (open by default)
+  const [todayQueueClosed, setTodayQueueClosed] = useState(false);
+  const [todayAttentionClosed, setTodayAttentionClosed] = useState(false);
+  //JJQR - END
   //JJQR - AI (Nov 25, 2026) - doctor "Mark received" on a completed, unpaid row: the row being confirmed, saving flag (stops a double tap),
   // the confirm box's error, rows already marked (hidden at once, before the refresh lands) and the "marked received" note
   const [receiveTarget, setReceiveTarget] = useState<{ bookingId: string; name: string; amount: number } | null>(null);
@@ -555,6 +559,11 @@ export default function DoctorDashboardPage() {
               {board.summary.total === 0 ? "No one's checked in yet today." : `Queue's clear — ${board.summary.completed} seen today.`}
             </p>
           ) : (
+            //JJQR - AI (2026-11-26) - why: owner (pt95u) "make queue and needs attention collapsible": today's Queue folds / unfolds (open by default)
+            <div className="space-y-xs">
+            <ListToggle open={!todayQueueClosed} onToggle={() => setTodayQueueClosed((c) => !c)} label={`Queue · Today · ${upNext.length} up next`} testId="today-queue-toggle" />
+            {!todayQueueClosed && (
+            //JJQR - END
             <div className="space-y-md">
               {upNext.map((e) => (
                 <div
@@ -578,6 +587,9 @@ export default function DoctorDashboardPage() {
                 </div>
               ))}
             </div>
+            )}
+            {/*JJQR - AI (2026-11-26) - why: end of today's Queue fold //JJQR - END */}
+            </div>
           )}
 
           {/*JJQR - AI (2026-11-26) - why: owner (t78u/t79u) "yesterday's queue should not cross over TODAY's". This card shows TODAY only: today's queue
@@ -585,15 +597,20 @@ export default function DoctorDashboardPage() {
               "Earlier days" card under this one, one group per date. */}
           {todayAttention && todayAttention.items.length > 0 && (
             <div className="mt-sm space-y-xs border-t border-outline-variant/30 pt-sm" data-testid="today-attention">
-              <div className="flex items-center justify-between gap-sm">
-                <p className="text-label-sm font-semibold text-on-surface-variant">Needs attention · Today</p>
-                <span className="rounded-full border border-status-warning-border bg-status-warning-surface px-sm text-label-sm font-semibold text-status-warning">
-                  {itemsLabel(todayAttention.items.length)}
-                </span>
-              </div>
+              {/*JJQR - AI (2026-11-26) - why: owner (pt95u): "Needs attention · Today" folds / unfolds (open by default) */}
+              <ListToggle
+                open={!todayAttentionClosed}
+                onToggle={() => setTodayAttentionClosed((c) => !c)}
+                label="Needs attention · Today"
+                testId="today-attention-toggle"
+                right={<span className="rounded-full border border-status-warning-border bg-status-warning-surface px-sm text-label-sm font-semibold text-status-warning">{itemsLabel(todayAttention.items.length)}</span>}
+              />
+              {!todayAttentionClosed && (
               <div className="overflow-hidden rounded-lg border border-outline-variant/60 [&>div>div:first-child]:border-t-0">
                 {renderAttentionRows(todayAttention.items)}
               </div>
+              )}
+              {/*JJQR - END */}
             </div>
           )}
           {/*JJQR - END */}

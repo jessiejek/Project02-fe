@@ -43,3 +43,17 @@ test("upload times are shown in Manila time (UTC+8), including across midnight",
   assert.equal(formatUploadedManila(""), "");
 });
 //JJQR - END
+
+//JJQR - AI (2026-11-26) - why: "Take a picture" photos get their own names and the same rules
+test("camera photos: own names, extension from the real type, numbered after the ones already picked", async () => {
+  const { cameraPhotoName, nextPhotoNumber, checkUploadFiles } = await import("./visit-upload.ts");
+  assert.equal(cameraPhotoName("image.jpg", "image/jpeg", 1), "Photo 1.jpg");
+  assert.equal(cameraPhotoName("IMG_0001.PNG", "image/png", 2), "Photo 2.png");
+  assert.equal(cameraPhotoName("image.heic", "image/heic", 3), "Photo 3.heic");
+  assert.equal(nextPhotoNumber([{ name: "cbc.pdf" }, { name: "Photo 1.jpg" }, { name: "Photo 4.jpg" }]), 5);
+  assert.equal(nextPhotoNumber([]), 1);
+  assert.match(checkUploadFiles([{ name: "Photo 3.heic", size: 10 }]), /not a PDF, JPG or PNG/);
+  const eleven = Array.from({ length: 11 }, (_, i) => ({ name: `Photo ${i + 1}.jpg`, size: 10 }));
+  assert.match(checkUploadFiles(eleven), /up to 10 files/);
+});
+//JJQR - END

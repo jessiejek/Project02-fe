@@ -11,7 +11,7 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { uploadPatientDocument, uploadPatientLabResult } from "@/lib/data/patientFiles";
 
-import { MAX_UPLOAD_FILES, checkUploadFiles, uploadTitle, defaultUploadTitle } from "@/lib/visit-upload"; // rules shared with the tests
+import { MAX_UPLOAD_FILES, checkUploadFiles, uploadTitle, defaultUploadTitle, cameraPhotoName, nextPhotoNumber } from "@/lib/visit-upload"; // rules shared with the tests
 
 export function VisitUploadModal({
   isOpen, onClose, onUploaded, patientId, bookingId, visitDate, kind = "lab", suggestedTitle,
@@ -27,6 +27,7 @@ export function VisitUploadModal({
   suggestedTitle?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null); //JJQR - AI (2026-11-26) - why: "Take a picture" (owner pt95u) //JJQR - END
   const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
@@ -43,12 +44,25 @@ export function VisitUploadModal({
       setFiles([]); setTitle(suggestedTitle ?? ""); setError(""); setSaved(0); setSending(false);
       autoTitle.current = ""; //JJQR - AI (2026-11-25) - owner: a fresh pop-up has no auto-filled title yet //JJQR - END
       if (inputRef.current) inputRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = ""; //JJQR - AI (2026-11-26) - why: a fresh pop-up starts with no photo //JJQR - END
     }
     wasOpen.current = isOpen;
   }, [isOpen, suggestedTitle]);
 
-  function pick(list: FileList | null) {
-    const picked = Array.from(list ?? []);
+  //JJQR - AI (2026-11-26) - why: owner (pt95u) "there should also be take a picture". A photo from the camera JOINS the files already chosen (it does not
+  // replace them), gets its own name ("Photo 1.jpg"), and goes through the same checks (10 files, 10 MB, JPG/PNG) and the same ONE consultation.
+  function addPhotos(list: FileList | null) {
+    const shots = Array.from(list ?? []);
+    if (cameraRef.current) cameraRef.current.value = ""; // the same input can take the next picture
+    if (shots.length === 0) return;
+    let n = nextPhotoNumber(files);
+    const named = shots.map((f) => new File([f], cameraPhotoName(f.name, f.type, n++), { type: f.type || "image/jpeg", lastModified: f.lastModified }));
+    pick(null, [...files, ...named]);
+  }
+  //JJQR - END
+
+  function pick(list: FileList | null, all?: File[]) { //JJQR - AI (2026-11-26) - why: `all` = the full list after a photo was added //JJQR - END
+    const picked = all ?? Array.from(list ?? []);
     setError(checkUploadFiles(picked) ?? "");
     setFiles(picked);
     setSaved(0);
@@ -110,15 +124,33 @@ export function VisitUploadModal({
       <div className="space-y-md">
         {error && <FormAlert>{error}</FormAlert>}
         <p className="text-body-sm text-on-surface-variant">Saved with the consultation on {visitDate}. One or several PDF, JPG or PNG files (up to {MAX_UPLOAD_FILES}, 10 MB each).</p>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
-          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-          disabled={sending}
-          onChange={(e) => pick(e.target.files)}
-          className="block w-full text-body-sm"
-        />
+        {/*JJQR - AI (2026-11-26) - why: owner (pt95u): "Take a picture" right beside Choose Files. capture="environment" opens the iPad's rear camera
+            (a computer without a camera simply shows its file picker). The photo joins the list above the Title. */}
+        <div className="flex flex-wrap items-center gap-sm">
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+            disabled={sending}
+            onChange={(e) => pick(e.target.files)}
+            className="block min-w-0 flex-1 text-body-sm"
+          />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            disabled={sending}
+            onChange={(e) => addPhotos(e.target.files)}
+            className="hidden"
+            data-testid="visit-upload-camera"
+          />
+          <Button type="button" variant="secondary" disabled={sending || files.length >= MAX_UPLOAD_FILES} onClick={() => cameraRef.current?.click()} className="shrink-0">
+            Take a picture
+          </Button>
+        </div>
+        {/*JJQR - END */}
         {files.length > 0 && (
           <ul className="space-y-xs text-body-sm text-on-surface">
             {files.map((f, i) => <li key={i} className="break-all">• {f.name}{i < saved ? " — saved" : ""}</li>)}

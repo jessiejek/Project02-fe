@@ -53,3 +53,23 @@ export function formatUploadedManila(iso: string, withTime = true): string {
   return withTime ? `${date} ${parts.hour}:${parts.minute}` : date;
 }
 //JJQR - END
+
+//JJQR - AI (2026-11-26) - why: owner (pt95u) "there is upload, there should also be take a picture". iPad Safari names every camera shot "image.jpg";
+// give each photo its own name ("Photo 1.jpg", "Photo 2.jpg" …) so the list and the "(i of n)" titles stay clear. The extension follows the real
+// type (JPEG → .jpg, PNG → .png); anything else keeps its own extension so checkUploadFiles() refuses it in plain words (same 10 files / 10 MB rules).
+export function cameraPhotoName(original: string, type: string, n: number): string {
+  const t = (type || "").toLowerCase();
+  const ext = t === "image/png" ? ".png" : t === "image/jpeg" || t === "image/jpg" ? ".jpg" : extOf(original) || ".jpg";
+  return `Photo ${n}${ext}`;
+}
+
+/** Next photo number: one more than the highest "Photo N" already in the list. */
+export function nextPhotoNumber(files: { name: string }[]): number {
+  let max = 0;
+  for (const f of files) {
+    const m = /^Photo (\d+)\.[a-z]+$/i.exec(f.name);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+//JJQR - END
