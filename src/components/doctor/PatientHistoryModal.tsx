@@ -369,10 +369,10 @@ export function PatientHistoryModal({
                         {group.items.map((item, i) => (
                           <p key={item.id} className="text-body-md text-on-surface-variant">
                             <span className="text-on-surface">
-                              {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(item)} #{item.quantity}{/* //JJQR - END */}
+                              {/*JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(item)} #{item.quantity}{/*JJQR - END */}
                             </span>
                             <br />
-                            {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/* //JJQR - END */}
+                            {/*JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/*JJQR - END */}
                           </p>
                         ))}
                       </div>

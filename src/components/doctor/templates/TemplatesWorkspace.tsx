@@ -85,7 +85,7 @@ export function TemplatesWorkspace() {
     <div className="space-y-md">
       {/*JJQR - AI (Nov 19, 2026) - plain buttons (no ARIA tab roles) so the existing e2e selector getByRole("button", { name: /SOAP \(\d+\)/ }) keeps working */}
       <nav aria-label="Template type" className="flex flex-wrap gap-x-xs border-b border-outline-variant">
-        {/* //JJQR Nov 20, 2026 - Diagnoses hidden */}{VISIBLE_TEMPLATE_TABS.map((id) => {
+        {/*JJQR Nov 20, 2026 - Diagnoses hidden */}{VISIBLE_TEMPLATE_TABS.map((id) => {
           const label = `${TAB_LABELS[id]} (${counts[id]})`;
           const active = tab === id;
           return (

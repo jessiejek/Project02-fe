@@ -2654,7 +2654,7 @@ Return to patient queue
                   <div className="space-y-xs">
                     {prescriptionGroup.items.map((rx, i) => (
                       <p key={rx.id} className="text-body-md text-on-surface-variant">
-                        {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(rx)} #{rx.quantity} — Sig. {rxPreviewSig(rx)}{/* //JJQR - END */}
+                        {/*JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(rx)} #{rx.quantity} — Sig. {rxPreviewSig(rx)}{/*JJQR - END */}
                       </p>
                     ))}
                   </div>
@@ -2858,14 +2858,14 @@ Return to patient queue
             <Button variant="secondary" className="!px-sm !py-sm" onClick={() => setHistoryOpen(true)}>
               View Patient History
             </Button>
-            {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Patient chart" right after "View Patient History". Opens in a new tab and WITHOUT
+            {/*JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Patient chart" right after "View Patient History". Opens in a new tab and WITHOUT
                 this booking (read-only prescriptions there), so nothing typed here is lost and this page's autosave can't overwrite chart edits. */}
             {booking && (
               <a href={`/doctor/patients/${booking.patientId}`} target="_blank" rel="noopener" className={buttonStyles("secondary", "!px-sm !py-sm")}>
                 Patient chart
               </a>
             )}
-            {/* //JJQR - END */}
+            {/*JJQR - END */}
             {/*JJQR - AI (Nov 20, 2026) - print bar follows live Rx items */}
             {(effectiveRxItems.length > 0 || labOrders.length > 0) && consultPrintButtons("contents", "!px-sm !py-sm")}
             {/*JJQR - END */}
@@ -2945,20 +2945,20 @@ Return to patient queue
                     <h2 className="flex flex-wrap items-center gap-sm text-headline-md font-semibold text-on-surface">
                       {renderSectionIndicator(i, "text-[18px]")}
                       {displayIdx + 1}. {section}
-                      {/* //JJQR Nov 20, 2026 */}
+                      {/*JJQR Nov 20, 2026 */}
                       {effectiveRequiredSections.includes(i) && (
                         <span className="sr-only">Required before completion</span>
                       )}
-                      {/* //JJQR - END */}
+                      {/*JJQR - END */}
                     </h2>
-                    {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Upload results" sits in the Lab Orders title bar (right) */}
+                    {/*JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Upload results" sits in the Lab Orders title bar (right) */}
                     {i === 4 && booking && (
                       <Button onClick={() => setLabUploadOpen(true)}>
                         <Icon name="upload_file" className="text-[16px]" />
                         Upload results
                       </Button>
                     )}
-                    {/* //JJQR - END */}
+                    {/*JJQR - END */}
                   </div>
 
                   {isOpen && i === 0 && (
@@ -3297,7 +3297,7 @@ Return to patient queue
                       )}
                     </div>
                     {booking && <VisitFilesPanel bookingId={bookingId} version={labFilesVersion} />}
-                    {/* //JJQR - END */}
+                    {/*JJQR - END */}
                     </div>
                   )}
 
@@ -3434,11 +3434,11 @@ Return to patient queue
                       )}
                       {followUpMode === "none" && (
                         <>
-                          {/* //JJQR Nov 20, 2026 */}
+                          {/*JJQR Nov 20, 2026 */}
                           <p className="text-label-md text-on-surface-variant">
                             No follow-up will be scheduled for this visit.
                           </p>
-                          {/* //JJQR - END */}
+                          {/*JJQR - END */}
                         </>
                       )}
                     </div>
@@ -3935,7 +3935,7 @@ Return to patient queue
         )}
         {/*JJQR - END */}
         <ul className="max-h-[60vh] space-y-md overflow-y-auto text-body-md" data-testid="completion-checklist">
-          {/* //JJQR Nov 20, 2026 — only visible sections in the completion checklist */}
+          {/*JJQR Nov 20, 2026 — only visible sections in the completion checklist */}
           {visibleSectionOrder.map((i) => (
             <li key={SECTIONS[i]} className="space-y-xs">
               <div className="flex items-center gap-sm">
@@ -3947,7 +3947,7 @@ Return to patient queue
               {/*JJQR - END */}
             </li>
           ))}
-          {/* //JJQR - END */}
+          {/*JJQR - END */}
         </ul>
         {!rxSatisfied && (
           <p className="mt-md rounded-lg bg-status-warning-surface px-md py-sm text-label-md text-status-warning">
@@ -3956,9 +3956,9 @@ Return to patient queue
         )}
         {!followUpSatisfied && (
           <p className="mt-md rounded-lg bg-status-warning-surface px-md py-sm text-label-md text-status-warning">
-            {/* //JJQR Nov 20, 2026 */}
+            {/*JJQR Nov 20, 2026 */}
             Complete follow-up (schedule a date, choose PRN, or choose No follow-up) before Complete — required for Grace clinic.
-            {/* //JJQR - END */}
+            {/*JJQR - END */}
           </p>
         )}
         {saveError && (
@@ -3968,7 +3968,7 @@ Return to patient queue
         )}
       </Modal>
 
-      {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): upload one or several results, tagged to THIS consultation; title prefilled with the ordered tests */}
+      {/*JJQR - AI (Nov 25, 2026) - owner (desktop parity): upload one or several results, tagged to THIS consultation; title prefilled with the ordered tests */}
       {booking && (
         <VisitUploadModal
           isOpen={labUploadOpen}
@@ -3981,7 +3981,7 @@ Return to patient queue
           suggestedTitle={labOrders.map((l) => l.testName.trim()).filter(Boolean).join(", ") || undefined}
         />
       )}
-      {/* //JJQR - END */}
+      {/*JJQR - END */}
 
       <Modal
         isOpen={labsConfirmPrint !== null}
@@ -4160,7 +4160,7 @@ Return to patient queue
           <div className="flex w-full flex-wrap items-center justify-between gap-md lg:w-auto lg:flex-1">
             <p role="status" aria-live="polite" aria-atomic="true" className="consultation-save-status text-label-md tabular-nums text-on-surface-variant">{savingDraft || savingChanges ? "Saving your changes…" : saveError ? "Not saved — your entries are still here." : mode === "amend" ? (amendSavedAt ? `Amendment saved ${amendSavedAt}` : "Amendment · manual save") : savedDraftSnapshot && currentFormSnapshot() !== savedDraftSnapshot ? "Unsaved changes · auto-save every 30 seconds" : draftSavedAt ? `Draft saved ${draftSavedAt}` : consultationId ? "Draft loaded · no new changes" : "Draft not saved · changes auto-save every 30 seconds"}</p>
             <div className="flex items-center gap-sm">
-              {/* //JJQR Nov 20, 2026 - compact Prev / Next: navigation only, never saves or validates */}
+              {/*JJQR Nov 20, 2026 - compact Prev / Next: navigation only, never saves or validates */}
               <div className="flex items-center gap-xs" role="group" aria-label="Previous or next section">
                 <Button type="button" variant="secondary" className="!gap-xs !px-sm !py-xs" disabled={prevSection === null} onClick={() => stepSection(prevSection)} aria-label="Previous section" data-testid="consult-prev-section">
                   <Icon name="chevron_left" className="h-4 w-4" aria-hidden />Prev
@@ -4169,7 +4169,7 @@ Return to patient queue
                   Next<Icon name="chevron_right" className="h-4 w-4" aria-hidden />
                 </Button>
               </div>
-              {/* //JJQR - END */}
+              {/*JJQR - END */}
               <Button variant={mode === "complete" && canComplete ? "secondary" : "primary"} loading={mode === "complete" ? savingDraft : savingChanges} disabled={mode === "amend" && !canComplete} data-testid="consult-save" onClick={mode === "complete" ? async () => { const saved = await handleSaveDraft(); if (saved && nextSection !== null) stepSection(nextSection); } : handleSaveChanges}>{mode === "complete" ? (nextSection !== null ? "Save & next" : "Save draft") : "Save amendment"}</Button>
               {/*JJQR - AI (Nov 21, 2026) - "Save & next": save the draft, then open the next section (on the last section it stays "Save draft"; a failed save keeps you here). Prev / Next still never save. */}
               {/*JJQR - AI (Nov 21, 2026) - Review & complete is the FINAL action, so it sits last (far right), after Save & next */}

@@ -1526,7 +1526,7 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
         <p className="text-body-md text-on-surface-variant">Are you sure you want to delete this template?</p>
       </Modal>
 
-      {/* //JJQR - AI (2026-11-25) - owner: ask before a save replaces the visit's existing prescription; Cancel = nothing saved */}
+      {/*JJQR - AI (2026-11-25) - owner: ask before a save replaces the visit's existing prescription; Cancel = nothing saved */}
       <Modal
         isOpen={replaceOpen}
         onClose={() => setReplaceOpen(false)}
@@ -1542,7 +1542,7 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
       >
         <p className="text-body-md text-on-surface">{RX_REPLACE_QUESTION}</p>
       </Modal>
-      {/* //JJQR - END */}
+      {/*JJQR - END */}
 
       <Modal
         isOpen={confirmOpen}

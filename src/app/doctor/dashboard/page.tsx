@@ -535,9 +535,9 @@ export default function DoctorDashboardPage() {
             </div>
           )}
 
-          {/* //JJQR - AI (2026-11-25) - why: GAV-4 (approved pro mockup): earlier-day patients not finished, below today's queue, above Needs attention */}
+          {/*JJQR - AI (2026-11-25) - why: GAV-4 (approved pro mockup): earlier-day patients not finished, below today's queue, above Needs attention */}
           <LeftoverQueue role="doctor" onChanged={() => { void loadQueue(); }} />
-          {/* //JJQR - END */}
+          {/*JJQR - END */}
 
           {/*JJQR - AI (Nov 25, 2026) - GAV-2 (approved mockup): Needs attention grouped by visit date (Manila). "Today · Nov 25" first and open; older
               dates are headers that open / close; an item not cleared on its day stays under that date. Each row names the patient and has its action. */}

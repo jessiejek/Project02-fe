@@ -59,7 +59,7 @@ export function VisitFilesPanel({ bookingId, version }: { bookingId: string; ver
           <div key={f.kind + f.id} className="flex items-center justify-between gap-sm rounded-md border border-outline-variant bg-surface-container-lowest px-sm py-xs">
             <span className="min-w-0">
               <span className="block break-words text-body-sm font-semibold text-on-surface">{f.title}</span>
-              <span className="block text-[12px] text-on-surface-variant">{/* //JJQR - AI (2026-11-25) - owner: upload time in Manila time, not raw UTC */}Uploaded {formatUploadedManila(f.uploadedAt)}{/* //JJQR - END */}</span>
+              <span className="block text-[12px] text-on-surface-variant">{/*JJQR - AI (2026-11-25) - owner: upload time in Manila time, not raw UTC */}Uploaded {formatUploadedManila(f.uploadedAt)}{/*JJQR - END */}</span>
             </span>
             <button
               type="button"

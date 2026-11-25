@@ -432,9 +432,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                   </div>
                 ))}
               </dl>
-              {/* //JJQR - AI (Nov 25, 2026) - owner: "Reprint" button in the left panel (desktop: under "Print patient card"; the web has no patient card) */}
+              {/*JJQR - AI (Nov 25, 2026) - owner: "Reprint" button in the left panel (desktop: under "Print patient card"; the web has no patient card) */}
               <Button variant="secondary" className="mt-md w-full" onClick={() => { setChartError(""); setReprintOpen(true); }}>Reprint</Button>
-              {/* //JJQR - END */}
+              {/*JJQR - END */}
             </Card>
 
             {latestVisit && (
@@ -592,7 +592,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                               {referredBookingId === v.booking.id && (
                                 <Link href={`/doctor/consultation/${v.booking.id}/vitals`} className="text-label-md text-primary hover:underline">Add vitals</Link>
                               )}
-                              {/* //JJQR - AI (Nov 25, 2026) - owner: results belong to ONE consultation — this visit's files + Upload buttons that tag new files to THIS visit */}
+                              {/*JJQR - AI (Nov 25, 2026) - owner: results belong to ONE consultation — this visit's files + Upload buttons that tag new files to THIS visit */}
                               <p className="pt-sm text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Results &amp; files</p>
                               {filesOf(v.booking.id).length === 0 ? (
                                 <p className="text-on-surface-variant">No results or files for this visit yet.</p>
@@ -601,7 +601,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                                   <div key={f.kind + f.id} className="flex items-center justify-between gap-sm rounded-md border border-outline-variant px-sm py-xs">
                                     <span className="min-w-0">
                                       <span className="block break-words font-semibold text-on-surface">{f.title}</span>
-                                      <span className="block text-[12px] text-on-surface-variant">{f.kind === "lab-result" ? "Lab result" : "Document"} · {/* //JJQR - AI (2026-11-25) - owner: upload date in Manila time, not raw UTC */}uploaded {formatUploadedManila(f.uploadedAt, false)}{/* //JJQR - END */}</span>
+                                      <span className="block text-[12px] text-on-surface-variant">{f.kind === "lab-result" ? "Lab result" : "Document"} · {/*JJQR - AI (2026-11-25) - owner: upload date in Manila time, not raw UTC */}uploaded {formatUploadedManila(f.uploadedAt, false)}{/*JJQR - END */}</span>
                                     </span>
                                     <button type="button" onClick={() => openFile(f.kind, f.id)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Open</button>
                                   </div>
@@ -615,7 +615,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                                   <button type="button" onClick={() => setUploadFor({ bookingId: v.booking.id, date: v.booking.appointmentDate, kind: "doc" })} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Upload document</button>
                                 </div>
                               )}
-                              {/* //JJQR - END */}
+                              {/*JJQR - END */}
                             </div>
                           </div>
                         )}
@@ -625,7 +625,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                 </div>
               )
             )}
-          {/* //JJQR - AI (Nov 25, 2026) - desktop parity: each file shows the visit it belongs to + Open; uploading is done inside that visit or in the consult's Lab Orders step */}
+          {/*JJQR - AI (Nov 25, 2026) - desktop parity: each file shows the visit it belongs to + Open; uploading is done inside that visit or in the consult's Lab Orders step */}
           {(tab === "labs" || tab === "documents") && !reprintOpen && (
             <p className="mb-sm text-body-sm text-on-surface-variant">
               To add a {tab === "labs" ? "result" : "document"}, open the visit on the Visits tab and press {tab === "labs" ? "Upload result" : "Upload document"}, or upload it from the consultation&apos;s Lab Orders step.
@@ -667,8 +667,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               </div>
             )
           )}
-          {/* //JJQR - END */}
-          {/* //JJQR - AI (Nov 25, 2026) - owner: Reprint view (opened by the left panel's "Reprint" button): every visit with something printable, one button per printout */}
+          {/*JJQR - END */}
+          {/*JJQR - AI (Nov 25, 2026) - owner: Reprint view (opened by the left panel's "Reprint" button): every visit with something printable, one button per printout */}
           {reprintOpen && (
             <div className="space-y-md">
               <div className="flex flex-wrap items-start justify-between gap-sm">
@@ -713,7 +713,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               })()}
             </div>
           )}
-          {/* //JJQR - END */}
+          {/*JJQR - END */}
           {tab === "vaccinations" && !reprintOpen && (
             patientVaccinations.length === 0 ? (
               <EmptyState icon="vaccines" message="No vaccinations recorded yet." />
@@ -822,10 +822,10 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               {printPreviewGroup.items.map((item, i) => (
                 <p key={item.id} className="text-body-md text-on-surface-variant">
                   <span className="text-on-surface">
-                    {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(item)} #{item.quantity}{/* //JJQR - END */}
+                    {/*JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{i + 1}. {rxPreviewName(item)} #{item.quantity}{/*JJQR - END */}
                   </span>
                   <br />
-                  {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/* //JJQR - END */}
+                  {/*JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/*JJQR - END */}
                 </p>
               ))}
             </div>
@@ -836,7 +836,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         )}
       </Modal>
 
-      {/* //JJQR - AI (Nov 25, 2026) - upload to the visit whose button was pressed (one or several files) */}
+      {/*JJQR - AI (Nov 25, 2026) - upload to the visit whose button was pressed (one or several files) */}
       {uploadFor && (
         <VisitUploadModal
           isOpen
@@ -848,7 +848,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           kind={uploadFor.kind}
         />
       )}
-      {/* //JJQR - END */}
+      {/*JJQR - END */}
 
       <Modal
         isOpen={deleteRxGroupId !== null}

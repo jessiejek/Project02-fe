@@ -189,9 +189,9 @@ export default function PrescriptionsPage() {
                         <span className="w-5 shrink-0 text-right text-body-md tabular-nums text-on-surface-variant">{i + 1}.</span>
                         <div className="min-w-0">
                           <p className="text-body-md font-medium text-on-surface">
-                            {/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{rxPreviewName(item)}{/* //JJQR - END */} <span className="font-normal tabular-nums text-on-surface-variant">#{item.quantity}</span>
+                            {/*JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}{rxPreviewName(item)}{/*JJQR - END */} <span className="font-normal tabular-nums text-on-surface-variant">#{item.quantity}</span>
                           </p>
-                          <p className="text-body-md text-on-surface">{/* //JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/* //JJQR - END */}</p>
+                          <p className="text-body-md text-on-surface">{/*JJQR - AI (2026-11-25) - owner: Sig line like the printed form (name + strength, Sig. route + instructions) */}Sig. {rxPreviewSig(item)}{/*JJQR - END */}</p>
                           {item.isControlledSubstance && <p className="text-label-md text-status-warning">Controlled medicine. Bring the printed prescription.</p>}
                         </div>
                       </li>

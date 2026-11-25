@@ -269,9 +269,9 @@ export default function StaffQueuePage() {
             </div>
           </div>
         )}
-        {/* //JJQR - AI (2026-11-25) - why: GAV-4 — staff see the clinic's earlier-day patients not finished (same scope as this page's today queue; owner default, can change) */}
+        {/*JJQR - AI (2026-11-25) - why: GAV-4 — staff see the clinic's earlier-day patients not finished (same scope as this page's today queue; owner default, can change) */}
         {!loading && <LeftoverQueue role="staff" onChanged={() => { void refresh(); }} className="!mt-0" />}
-        {/* //JJQR - END */}
+        {/*JJQR - END */}
       </div>
 
       <Modal
