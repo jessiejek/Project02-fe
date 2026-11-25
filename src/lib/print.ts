@@ -1,3 +1,4 @@
+import { takeReservedPrintWindow } from "@/lib/print-window"; //JJQR - AI (2026-11-25) - iPad: the window opened in the tap //JJQR - END
 /**
  * Open a focused print window. Returns false if the browser blocked popups.
  * Pass `opts.brand` to override the default brand line, or `null` to omit it
@@ -19,7 +20,9 @@ export function printHtml(
   // NB: no `noopener`/`noreferrer` here — with either flag `window.open` returns
   // null (per spec), and we need the handle to write the document into. The page
   // we write never navigates anywhere external, so there's no opener to protect.
-  const win = useFrame ? null : window.open("", "_blank", "width=800,height=900");
+  //JJQR - AI (2026-11-25) - iPad Safari: use the window already opened in the tap (lib/print-window.ts) when there is one
+  const win = useFrame ? null : (takeReservedPrintWindow<Window>() ?? window.open("", "_blank", "width=800,height=900"));
+  //JJQR - END
   if (!useFrame && !win) return false;
 
   const chromeCss = bare

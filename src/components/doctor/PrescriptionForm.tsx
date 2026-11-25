@@ -1,5 +1,6 @@
 "use client";
 
+import { printAfterLoading } from "@/lib/print-window"; //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load //JJQR - END
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
@@ -1241,13 +1242,16 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
     setPrintSigError(false);
     setPrinting(true);
     try {
+      //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load the data (lib/print-window.ts)
+      await printAfterLoading(async () => {
+      //JJQR - END
       const supabase = null as never;
       const [clinic, doctor, patient] = await Promise.all([
         queryClinicSettings(supabase),
         queryDoctorById(supabase, doctorId),
         queryPatientById(supabase, patientId),
       ]);
-      printPrescription({
+      return printPrescription({
         clinic: clinic
           ? { clinic_name: clinic.clinic_name, address: clinic.address, contact_number: clinic.contact_number }
           : { clinic_name: "Grace Medical Clinic", address: "", contact_number: null },
@@ -1285,6 +1289,7 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
           //JJQR - END
         })),
       });
+      }); //JJQR - AI (2026-11-25) - closes printAfterLoading //JJQR - END
     } finally {
       setPrinting(false);
     }

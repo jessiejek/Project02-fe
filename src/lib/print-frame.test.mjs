@@ -6,7 +6,9 @@ import { readFileSync } from "node:fs";
 const src = readFileSync(new URL("./print.ts", import.meta.url), "utf8");
 
 test("the browser still prints through a pop-up window (unchanged)", () => {
-  assert.match(src, /const win = useFrame \? null : window\.open\("", "_blank", "width=800,height=900"\);/);
+  //JJQR - AI (2026-11-25) - the window opened in the tap is used first (lib/print-window.ts); otherwise the same pop-up as before
+  assert.match(src, /const win = useFrame \? null : \(takeReservedPrintWindow<Window>\(\) \?\? window\.open\("", "_blank", "width=800,height=900"\)\);/);
+  //JJQR - END
   assert.match(src, /if \(!useFrame && !win\) return false;/);
   assert.match(src, /win!\.document\.write\(documentHtml\(true\)\);/);
   assert.match(src, /window\.onload = function \(\) \{\s*setTimeout\(function \(\) \{ window\.focus\(\); window\.print\(\); \}, 50\);/);

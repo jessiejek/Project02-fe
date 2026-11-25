@@ -1,5 +1,6 @@
 "use client";
 
+import { printAfterLoading } from "@/lib/print-window"; //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load //JJQR - END
 import { rxPreviewName, rxPreviewSig } from "@/lib/rx-preview"; //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
 import { Suspense, use, useEffect, useState } from "react";
 import Link from "next/link";
@@ -384,7 +385,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
     if (printing) return;
     setChartError("");
     setPrinting(true);
-    try { if (!(await job())) setChartError(`Nothing to print: this visit has no ${what}.`); }
+    //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load the data (lib/print-window.ts)
+    try { if (!(await printAfterLoading(job))) setChartError(`Nothing to print: this visit has no ${what}.`); }
+    //JJQR - END
     catch (e) { setChartError(e instanceof Error && e.message ? e.message : `The ${what} could not be printed. Please try again.`); }
     finally { setPrinting(false); }
   };
@@ -746,15 +749,18 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         title="Print Preview"
         footer={
           <Button
-            onClick={async () => {
+            onClick={() => {
               if (!printPreviewGroup || !patient) return;
+              //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load the data (lib/print-window.ts)
+              void printAfterLoading(async () => {
+              //JJQR - END
               //JJQR - AI (Oct 31, 2026)
               const supabase = null as never;
               const [clinic, doctor] = await Promise.all([
                 queryClinicSettings(supabase),
                 queryDoctorById(supabase, printPreviewGroup.doctorId || doctorId),
               ]);
-              printPrescription({
+              return printPrescription({
                 clinic: clinic
                   ? {
                       clinic_name: clinic.clinic_name,
@@ -792,6 +798,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                   route: item.route ?? null,
                 })),
                 date: printPreviewGroup.createdAt,
+              });
+              //JJQR - END
+              //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load the data (lib/print-window.ts)
               });
               //JJQR - END
             }}

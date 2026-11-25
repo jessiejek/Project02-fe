@@ -1,6 +1,7 @@
 "use client";
 
 //JJQR - AI (Oct 31, 2026)
+import { printAfterLoading } from "@/lib/print-window"; //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load //JJQR - END
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
@@ -57,7 +58,7 @@ export function AppointmentPrintActions({ bookingId, compact, className }: Appoi
           className={compact ? "text-label-sm" : undefined}
           onClick={() => {
             setPrinting("rx");
-            void printPrescriptionForBooking(bookingId).finally(() => setPrinting(null));
+            void printAfterLoading(() => printPrescriptionForBooking(bookingId)).finally(() => setPrinting(null)); //JJQR - AI (2026-11-25) - iPad: window opened in the tap //JJQR - END
           }}
         >
           <Icon name="print" className="text-[16px]" />
@@ -72,7 +73,7 @@ export function AppointmentPrintActions({ bookingId, compact, className }: Appoi
           className={compact ? "text-label-sm" : undefined}
           onClick={() => {
             setPrinting("labs");
-            void printLabOrdersForBooking(bookingId).finally(() => setPrinting(null));
+            void printAfterLoading(() => printLabOrdersForBooking(bookingId)).finally(() => setPrinting(null)); //JJQR - AI (2026-11-25) - iPad: window opened in the tap //JJQR - END
           }}
         >
           <Icon name="print" className="text-[16px]" />

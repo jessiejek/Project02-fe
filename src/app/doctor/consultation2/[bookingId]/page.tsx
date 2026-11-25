@@ -1,5 +1,6 @@
 "use client";
 
+import { printAfterLoading } from "@/lib/print-window"; //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load //JJQR - END
 import { savedSummaryAmount } from "@/lib/clinical/saved-fee"; //JJQR - AI (2026-11-25) - "Consultation saved" fee = the amount charged //JJQR - END
 import { rxPreviewName, rxPreviewSig } from "@/lib/rx-preview"; //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
 import "./consultation.css";
@@ -912,7 +913,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (tests.length === 0) return;
     setPrintingLabs(true);
     try {
-      await printLabOrdersForBooking(bookingId, labPrintOverrides());
+      await printAfterLoading(() => printLabOrdersForBooking(bookingId, labPrintOverrides())); //JJQR - AI (2026-11-25) - iPad: window opened in the tap //JJQR - END
     } finally {
       setPrintingLabs(false);
     }
@@ -923,7 +924,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     if (!booking || effectiveRxItems.length === 0) return;
     setPrintingRx(true);
     try {
-      await printPrescriptionForBooking(bookingId, {
+      //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load the data (lib/print-window.ts)
+      await printAfterLoading(() => printPrescriptionForBooking(bookingId, {
+      //JJQR - END
         date: booking.appointmentDate,
         items: effectiveRxItems.map((i) => ({
           generic_name: i.genericName,
@@ -941,7 +944,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           is_controlled_substance: i.isControlledSubstance,
           route: i.route ?? null,
         })),
-      });
+      })); //JJQR - AI (2026-11-25) - closes printAfterLoading //JJQR - END
     } finally {
       setPrintingRx(false);
     }
@@ -4021,7 +4024,10 @@ Return to patient queue
               onClick={async () => {
                 const printAfter = certConfirmPrint === true;
                 setCertConfirmPrint(null);
-                await handleIssueMedCert(printAfter);
+                //JJQR - AI (2026-11-25) - iPad Safari: open the print window in the tap, then load the data (lib/print-window.ts); "Confirm & Save" opens no window
+                if (printAfter) await printAfterLoading(async () => { await handleIssueMedCert(true); return true; });
+                else await handleIssueMedCert(false);
+                //JJQR - END
               }}
             >
               {certConfirmPrint ? "Confirm & Print" : "Confirm & Save"}

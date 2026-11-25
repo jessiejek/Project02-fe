@@ -6,6 +6,7 @@
  * window does not add the default brand line or body padding.
  */
 import { printHtml } from "@/lib/print";
+import { takeReservedPrintWindow } from "@/lib/print-window"; //JJQR - AI (2026-11-25) - iPad: the window opened in the tap //JJQR - END
 //JJQR - AI (Nov 24, 2026) - iPad: a real A5 PDF (iOS ignores a web page's paper size)
 import { htmlToPdf, isIosDevice } from "@/lib/print-pdf";
 //JJQR - END
@@ -85,7 +86,7 @@ function printForm(title: string, bodyHtml: string, kind: PrintKind): boolean {
   const html = withBackground(kind, bodyHtml);
   //JJQR - AI (Nov 24, 2026) - iPhone/iPad: open an A5 PDF (the window opens now, straight from the tap, and the PDF is placed in it); if anything fails the normal print runs in that window
   if (isIosDevice() && typeof window !== "undefined") {
-    const win = window.open("", "_blank");
+    const win = takeReservedPrintWindow<Window>() ?? window.open("", "_blank"); //JJQR - AI (2026-11-25) - the window opened in the tap (lib/print-window.ts) //JJQR - END
     if (win) {
       win.document.write("<!doctype html><title>" + title + "</title><body style=\"font-family:-apple-system,sans-serif;padding:24px;color:#333\">Preparing the A5 print…</body>");
       void htmlToPdf(html, 148, 210).then(
