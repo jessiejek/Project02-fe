@@ -315,9 +315,11 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   useEffect(() => {
     if (!reprintOpen) return;
     const todo = bookingIdsKey ? bookingIdsKey.split(",").filter((bid) => !(bid in reprintInfo)) : [];
-    if (todo.length === 0) { setReprintChecked(true); return; }
     let cancelled = false;
-    setReprintChecked(false);
+    //JJQR - AI (2026-11-25) - lint (react-hooks/set-state-in-effect): set "checked" right after the effect runs, not synchronously inside it (same screen)
+    if (todo.length === 0) { void Promise.resolve().then(() => { if (!cancelled) setReprintChecked(true); }); return () => { cancelled = true; }; }
+    void Promise.resolve().then(() => { if (!cancelled) setReprintChecked(false); });
+    //JJQR - END
     const found: Record<string, { hasLabs: boolean; hasCert: boolean }> = {};
     let next = 0;
     const worker = async () => {

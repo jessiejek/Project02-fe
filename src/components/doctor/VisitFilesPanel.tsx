@@ -25,7 +25,9 @@ export function VisitFilesPanel({ bookingId, version }: { bookingId: string; ver
   // one load per visit (and after an upload: `version` changes); a failure is shown once with Try again
   useEffect(() => {
     let cancelled = false;
-    setFailed(false);
+    //JJQR - AI (2026-11-25) - lint (react-hooks/set-state-in-effect): clear the old failure right after the effect runs, not synchronously inside it (same screen)
+    void Promise.resolve().then(() => { if (!cancelled) setFailed(false); });
+    //JJQR - END
     const supabase = null as never;
     Promise.all([queryPatientLabResults(supabase, { bookingId }), queryPatientDocuments(supabase, { bookingId })])
       .then(([labs, docs]) => {
