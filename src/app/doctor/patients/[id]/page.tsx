@@ -21,6 +21,7 @@ import { queryBookings } from "@/lib/data/bookings";
 import { openPatientFile, queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
 //JJQR - AI (Nov 25, 2026) - desktop parity: upload to one visit + Reprint
 import { VisitUploadModal } from "@/components/doctor/VisitUploadModal";
+import { formatUploadedManila } from "@/lib/visit-upload"; //JJQR - AI (2026-11-25) - owner: Manila upload times //JJQR - END
 import { loadBookingReprintAvailability, printLabOrdersForBooking, printMedicalCertificateForBooking } from "@/lib/consult-print";
 //JJQR - END
 import { printPrescription } from "@/lib/print-forms";
@@ -594,7 +595,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                                   <div key={f.kind + f.id} className="flex items-center justify-between gap-sm rounded-md border border-outline-variant px-sm py-xs">
                                     <span className="min-w-0">
                                       <span className="block break-words font-semibold text-on-surface">{f.title}</span>
-                                      <span className="block text-[12px] text-on-surface-variant">{f.kind === "lab-result" ? "Lab result" : "Document"} · uploaded {f.uploadedAt.slice(0, 10)}</span>
+                                      <span className="block text-[12px] text-on-surface-variant">{f.kind === "lab-result" ? "Lab result" : "Document"} · {/* //JJQR - AI (2026-11-25) - owner: upload date in Manila time, not raw UTC */}uploaded {formatUploadedManila(f.uploadedAt, false)}{/* //JJQR - END */}</span>
                                     </span>
                                     <button type="button" onClick={() => openFile(f.kind, f.id)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Open</button>
                                   </div>

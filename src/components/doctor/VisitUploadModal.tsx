@@ -11,7 +11,7 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { uploadPatientDocument, uploadPatientLabResult } from "@/lib/data/patientFiles";
 
-import { MAX_UPLOAD_FILES, checkUploadFiles, uploadTitle } from "@/lib/visit-upload"; // rules shared with the tests
+import { MAX_UPLOAD_FILES, checkUploadFiles, uploadTitle, defaultUploadTitle } from "@/lib/visit-upload"; // rules shared with the tests
 
 export function VisitUploadModal({
   isOpen, onClose, onUploaded, patientId, bookingId, visitDate, kind = "lab", suggestedTitle,
@@ -35,9 +35,13 @@ export function VisitUploadModal({
 
   // code review: reset only when the pop-up OPENS (not when the suggested title changes while it is open — that wiped the picked files)
   const wasOpen = useRef(false);
+  //JJQR - AI (2026-11-25) - owner: remember the title we filled in ourselves, so picking other files can replace it (never a title the doctor typed)
+  const autoTitle = useRef("");
+  //JJQR - END
   useEffect(() => {
     if (isOpen && !wasOpen.current) {
       setFiles([]); setTitle(suggestedTitle ?? ""); setError(""); setSaved(0); setSending(false);
+      autoTitle.current = ""; //JJQR - AI (2026-11-25) - owner: a fresh pop-up has no auto-filled title yet //JJQR - END
       if (inputRef.current) inputRef.current.value = "";
     }
     wasOpen.current = isOpen;
@@ -48,7 +52,13 @@ export function VisitUploadModal({
     setError(checkUploadFiles(picked) ?? "");
     setFiles(picked);
     setSaved(0);
-    if (!title.trim() && picked.length === 1) setTitle(picked[0].name.replace(/\.[^.]+$/, ""));
+    //JJQR - AI (2026-11-25) - owner: several files with no suggested title opened with an empty Title; pre-fill "Lab results <visit date>" / "Documents <visit date>" (one file = its name, as before). Same as the desktop.
+    if (!title.trim() || title === autoTitle.current) {
+      const t = defaultUploadTitle(kind, visitDate, picked, suggestedTitle);
+      autoTitle.current = t;
+      setTitle(t);
+    }
+    //JJQR - END
   }
 
   async function upload() {

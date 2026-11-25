@@ -27,3 +27,29 @@ export function uploadTitle(title: string, i: number, n: number): string {
   return n === 1 ? title.trim() : `${title.trim()} (${i + 1} of ${n})`;
 }
 //JJQR - END
+
+//JJQR - AI (2026-11-25) - owner: several files with no suggested title opened with an empty Title. Same rule as the desktop's PatientFileUpload:
+// the suggested title (e.g. the ordered tests) when there is one; one file = its name without the extension; several = "Lab results <visit date>" / "Documents <visit date>".
+export function defaultUploadTitle(kind: "lab" | "doc", visitDate: string, files: { name: string }[], suggested?: string): string {
+  const s = suggested?.trim();
+  if (s) return s;
+  if (files.length === 1) return files[0].name.replace(/\.[^.]+$/, "");
+  if (files.length === 0) return "";
+  return `${kind === "lab" ? "Lab results" : "Documents"} ${visitDate}`;
+}
+//JJQR - END
+
+//JJQR - AI (2026-11-25) - owner: upload times were shown in raw UTC; show them in Manila time. The server sends UTC (a value without a zone is read as UTC).
+// withTime: "YYYY-MM-DD HH:mm" (uploads panel), otherwise "YYYY-MM-DD" (chart's Results & files line).
+export function formatUploadedManila(iso: string, withTime = true): string {
+  if (!iso) return "";
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
+  if (Number.isNaN(d.getTime())) return withTime ? iso.slice(0, 16).replace("T", " ") : iso.slice(0, 10);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(d).map((p) => [p.type, p.value]),
+  );
+  const date = `${parts.year}-${parts.month}-${parts.day}`;
+  return withTime ? `${date} ${parts.hour}:${parts.minute}` : date;
+}
+//JJQR - END
