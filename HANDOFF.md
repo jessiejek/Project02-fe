@@ -125,6 +125,8 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
 | c06a80b, 3c17dc2 … 895dceb, 01947a4 | 25 Nov | START-HERE + HANDOFF.md | docs |
 | 5560dd1 | 25 Nov (Grok) | START-HERE rule 8: say the Manila time before every ship step; never ask "are you sure?" | owner |
 | 2283986 | 25 Nov (Grok) | `PatientFileUpload.cs`: several files with no suggested title pre-fill **"Lab results <visit date>" / "Documents <visit date>"** (still editable; "(1 of 3)" per file). Same rule as the web. **Not compiled yet** (box is Linux): build-check on the Windows laptop (dev build + QA copy) | owner, J-1 finding |
+| b6a74bc | 25 Nov (Grok) | Chart **New Prescription / Copy** into a visit that already has a prescription asks **"This visit already has a prescription. Replace it?"** (Cancel / Replace; Cancel = nothing saved), same as the web. **Not compiled yet** (App layer, box is Linux) | owner: fix all for tonight |
+| b79fe4a | 25 Nov (Grok) | "Consultation saved" fee line: no typed amount = the **live total** (what Complete charged, ₱400 after switching to Follow-up), not the fee computed when the visit opened (₱500). Same as the web. **Not compiled yet** | owner |
 
 **Local `main` = `5a454cf`** (4 commits ahead of GitHub `main` `a0822d1`; never pushed). **Handoff branch = local `main` + everything after**, pushed.
 
@@ -156,6 +158,11 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
     - **`682d9e2`:** web code review fixes (8 findings).
     - **`4d033ac` (Grok, 25 Nov):** several files with no suggested title pre-fill "Lab results <visit date>" / "Documents <visit date>" (`lib/visit-upload.ts` `defaultUploadTitle`, same rule as the desktop); upload times shown in **Manila time** (`formatUploadedManila`, `timeZone: "Asia/Manila"`) in the Lab Orders "Uploaded results" panel and the chart's Results & files line (were raw UTC); 2 new tests.
     - **`05e9770` (Grok, 25 Nov):** fixed the 2 ESLint `react-hooks/set-state-in-effect` errors (`VisitFilesPanel.tsx`, chart Reprint check in `doctor/patients/[id]/page.tsx`): the state reset now runs right after the effect instead of inside it. No behavior change; eslint 0 errors on the touched files, `tsc` clean, same 13 old test failures.
+    - **`1a83ebf` (Grok, 25 Nov) Sig line:** chart Print Preview, consultation View, Patient history and the patient's Prescriptions page show the printed form's text (`lib/rx-preview.ts`, using `print-forms-html.ts` `sigFreeText` + `rxDisplayName`): "Amoxicillin 250mg/5mL #1 bottle · Sig. PO Take 5 mL…" (was "Sig. <strength> <instructions>"). The patient's own print now includes the route. Printed form output unchanged.
+    - **`cde95ec` (Grok) "Consultation saved" fee:** saved amount, else the form's amount at Complete, else the booking fee (`lib/clinical/saved-fee.ts`). Was the booking fee loaded at page open (₱500 vs ₱400). The View mode of older visits still uses the booking's fee from the server.
+    - **`107bfdb` (Grok) prescription overwrite:** `PrescriptionForm` checks the visit (`GET /api/prescription-groups?bookingId=`) before Confirm & Save when it didn't load that visit's prescription itself; if one exists it closes the confirm pop-up and asks **"This visit already has a prescription. Replace it?"** (Cancel / Replace). Cancel = nothing saved; Replace = the pop-up closes, then saves. No question when the visit has none or when editing that prescription. **Not covered:** the consultation's silent autosave/flush (no pop-up there); it only replaces when another computer created the visit's prescription after the page opened.
+    - **`185e7fe` (Grok) iPad print pop-ups:** `lib/print-window.ts` `printAfterLoading`: the print window opens IN the tap with "Preparing the print…", then the data loads and the print is written into that window (`printHtml` / `printForm` take it via `takeReservedPrintWindow`). Nothing to print = the window closes and the real message shows. Blocked = alert "The print window was blocked. Allow pop-ups for this site (iPad: Settings → Safari → turn off Block Pop-ups), then try again." Used by: chart Reprint lab request / certificate, Print Preview, appointment Print Rx / Labs, consultation Print Rx / Labs and Confirm & Print certificate, prescription form Print. The desktop app's hidden-frame print is unchanged.
+    - **`e6093c2` (Grok):** the 2 old `set-state-in-effect` lint errors in `consultation2/[bookingId]/page.tsx`, no behavior change.
     - Plus `HANDOFF.md` commits.
 
 ---
@@ -231,8 +238,8 @@ Release builds default to the live server address, with demo off.
 
 | Part | What ships | Branch / commits |
 |---|---|---|
-| Desktop v0.2.46 | `7665d5b, 43c28cc, 93409be, 5a454cf` (local `main`) + `e3b0478, 4bf153a, dddf74a, 2283986` (code) + docs | `handoff/claude-to-grok-2026-11-25` (desktop) |
-| Web | `2e42d58` (features) + `682d9e2` (review fixes) + `4d033ac` (upload title + Manila times) + `05e9770` (lint fix) + `HANDOFF.md` | `handoff/claude-to-grok-2026-11-25` (web) |
+| Desktop v0.2.46 | `7665d5b, 43c28cc, 93409be, 5a454cf` (local `main`) + `e3b0478, 4bf153a, dddf74a, 2283986, b6a74bc, b79fe4a` (code) + docs | `handoff/claude-to-grok-2026-11-25` (desktop) |
+| Web | `2e42d58` (features) + `682d9e2` (review fixes) + `4d033ac` (upload title + Manila times) + `05e9770` (lint fix) + `1a83ebf` (Sig) + `cde95ec` (fee) + `107bfdb` (Rx replace question) + `185e7fe` (iPad print) + `e6093c2` (lint) + `HANDOFF.md` | `handoff/claude-to-grok-2026-11-25` (web) |
 | Backend | **nothing.** Don't merge or push its `main`: a push restarts the live server, and its branch only adds `HANDOFF.md` | — |
 
 **Held back on purpose:**
@@ -284,7 +291,8 @@ Release builds default to the live server address, with demo off.
 | Backend tests | 523 pass, 4 old queue-clash failures (old). |
 | Web tests | 13 old consultation-UI failures (old). ESLint and unit tests can't run on the Windows PC (Node 16). |
 | Mac build | **No longer a workflow step** (Mac is not a user platform; MacBoy is out of the workflow). Last result: 0 errors on MacBoy (Xcode 27.2) **before** `2283986`. The cloud release still builds Mac with **Xcode 26.0**, and a failure there publishes nothing (D). |
-| Known open issues | ~9 server **403s per page load** on some page (not identified); Mac print defaults to US Letter; two offline computers can issue the same queue number (flagged); web can't print the PTR; **no backups** (database or `App_Data/uploads`); no password-reset email; no uptime monitor; slow US host (6–9 s per request seen).<br>**Old web bugs found in J-1 (also on web `main` bd0f449, NOT fixed in this release):**<br>1. **Rx print preview shows the strength after "Sig."**: chart → visit → "Print prescription" (or Reprint → Prescription) opens "Print Preview" with `1. Paracetamol #10 · Sig. 500mg 1 tab every 6 hours…`; the real printed form is right (`Sig. PO 1 tab every 6 hours…`). Code: `Sig. {item.dosage} {item.instruction}` in `doctor/patients/[id]/page.tsx` (since Sep 2026), same pattern in consultation2 View mode (`Sig. {rx.dosage} {rx.instruction}`), `PatientHistoryModal.tsx`, `patient/prescriptions/page.tsx`.<br>2. **"Consultation saved" shows the old fee**: walk-in New + medical certificate (booking fee ₱500) → consult → switch to "Follow-up visit" → fill notes, Rx, certificate, No follow-up → step 8 and the Review say **Charge ₱400** (Follow-up ₱350 + certificate ₱50) → Confirm & Complete → summary says **"Professional fee: Charge ₱500"**. The saved booking and payment are correct (₱400); only the summary line is wrong: it falls back to `booking.totalFee` loaded when the page opened (consultation2 `page.tsx`, Nov 20–21 code).<br>3. **Web chart "New Prescription" on a visit that already has a prescription REPLACES it** (`/doctor/patients/<id>/prescriptions/create?bookingId=…` → `PUT /api/prescription-groups/by-booking`, which keeps one group per visit and replaces its lines; no warning). Old code. So the web can never show "Prescription 1 / 2"; only a desktop's local copy can have two groups. |
+| Known open issues | ~9 server **403s per page load** on some page (not identified); Mac print defaults to US Letter; two offline computers can issue the same queue number (flagged); web can't print the PTR; **no backups** (database or `App_Data/uploads`); no password-reset email; no uptime monitor; slow US host (6–9 s per request seen). |
+| **Fixed in this release (25 Nov, Grok), still to verify** | Found in J-1, old (also on `main` bd0f449); all four fixed on the handoff branches tonight:<br>1. **Sig line** (web `1a83ebf`): previews show "Sig. route + instructions" like the printed form. Desktop already showed name + strength, then the instructions (since 22 Nov); no change.<br>2. **"Consultation saved" fee** (web `cde95ec`, desktop `b79fe4a`): shows the amount charged (₱400), not the opening fee (₱500).<br>3. **Prescription overwrite** (web `107bfdb`, desktop `b6a74bc`): "This visit already has a prescription. Replace it?" before replacing. The server still keeps one prescription per visit (no backend change).<br>4. **iPad print pop-ups** (web `185e7fe`): the window opens in the tap; blocked = "Allow pop-ups" message.<br>**Verified on the box** (local fake-data stack, Chromium): 1, 2, 3 (Cancel keeps the old prescription, Replace saves; no question on a visit without one), 4 (window opens ~0.1 s after the tap with the API slowed by 4 s; blocked message). **Still to verify:** desktop `b6a74bc` + `b79fe4a` compile and click-through on Windows (QA copy, J-3); 4 on a real iPad in Safari (J-2). |
 
 ---
 
@@ -415,7 +423,7 @@ Release builds default to the live server address, with demo off.
      - consultation → step 4 Lab Orders → Upload results, in **portrait and landscape** (layout, buttons reachable, pop-up usable);
      - upload a **photo taken with the iPad camera** (iPad photos are HEIC): it **must arrive as JPG** (the server accepts PDF/JPG/PNG only);
      - **Open** a file;
-     - **Reprint**, and print via **AirPrint**.
+     - **Reprint**, and print via **AirPrint**: the print window must open straight away with "Preparing the print…" (fix `185e7fe`); if Safari still blocks it, the page says "Allow pop-ups for this site". Also try Print Preview → Print and the consultation's Print Rx.
 3. **Desktop click-through in the QA copy** (after clinic hours). Start the local backend + QA app (A).
    - Check:
      - consult → Lab Orders upload; Cancel is blocked while sending;
@@ -426,7 +434,7 @@ Release builds default to the live server address, with demo off.
    - Fix anything on the handoff branches (desktop or web), commit, and push **only** the handoff branch by exact name.
 4. **Ship in the window** with checklist E: desktop v0.2.46 + web; backend untouched.
 5. **Smoke test after the update** (after hours); update START-HERE section 2.
-6. **NEXT JOB after the release: prescription-overwrite warning.** Web chart "New Prescription" on a visit that already has a prescription silently REPLACES it (F, old bug 3). Add a clear warning (or ask the owner how it should behave) before anything else.
+6. **Prescription-overwrite warning: DONE in this release** (owner, 25 Nov: "fix all"): web `107bfdb`, desktop `b6a74bc` (F). After the release, check it live with a test patient; a later option is making "New Prescription" load and edit the visit's existing lines (owner's call).
 7. **Make the Windows test run green:**
    - `GoldenParityTests`: normalize line endings (e.g. `.gitattributes` `*.json text eol=lf` for the golden files, or compare ignoring `\r`).
    - Update or delete the stale `PaperQueueTests` case.
@@ -449,7 +457,7 @@ Release builds default to the live server address, with demo off.
 | Can the web run on the Windows PC? | No (Node 16). Use the Vercel Preview (test patient) or a machine with Node 20+. |
 | Can rollback install an older desktop version? | **No.** The updater only installs higher versions. Roll back by shipping v0.2.47 with the reverted code. |
 | Was J-1 (web) done on the live Preview? | **No.** The owner said no: uploads can't be deleted (`PatientFilesController` has GET/POST only) and the live disk has no backup. J-1 ran on a local fake-data stack (F). |
-| Sig-shows-strength and ₱500-vs-₱400: new? | **Old.** Both happen on web `main` bd0f449 too, and the handoff commits don't touch that code. Listed in F; not fixed in this release. |
+| Sig-shows-strength and ₱500-vs-₱400: new? | **Old.** Both happen on web `main` bd0f449 too. **Fixed in this release** (owner, 25 Nov evening): web `1a83ebf`, `cde95ec`; desktop `b79fe4a`. See F. |
 | Several files, empty title? / Upload times in UTC? | Fixed: desktop `2283986`, web `4d033ac` (title "Lab results <date>" / "Documents <date>"); web shows Manila time. Desktop already showed local time. |
 | Mac build? | **No longer a workflow step**: Mac is not a user platform and MacBoy is out of the workflow (25 Nov). Last result 0 errors before `2283986`. The release still builds Mac; a failure there blocks the Windows update (D). |
 | Who uses what? | Windows desktop app + the website in Safari on an iPad. No iPad app, no Mac users (A, I-24). |
