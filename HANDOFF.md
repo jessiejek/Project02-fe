@@ -368,7 +368,7 @@ Release builds default to the live server address, with demo off.
      - Cancel booking, Record payment, Reschedule, Register a new patient, Prescription edit/template, an Admin dialog: each closes cleanly, with no full-window overlay;
      - Templates: delete then edit, double-tap.
    - Fix anything he reports on the handoff branch.
-2. **Ship v0.2.46 (desktop only)** with the checklist in E. Only after "ship", only 11 PM–midnight.
+2. **Ship desktop v0.2.46 + the web update** with the checklist in E (no backend push). Only after "ship", only 11 PM–midnight.
 3. **After the update reaches the doctor's laptop:** a quick smoke test after hours, then update START-HERE section 2.
 4. **Make the Windows test run green:**
    - `GoldenParityTests`: normalize line endings, e.g. `.gitattributes` `*.json text eol=lf` for the golden files, or compare ignoring `\r`.
