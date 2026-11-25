@@ -197,7 +197,7 @@ Release builds default to the live server address, with demo off.
 **Next release: desktop v0.2.46 + web update (no backend change)**
 - **Contents:** desktop commits `7665d5b, 43c28cc, 93409be, 5a454cf, e3b0478, 4bf153a, dddf74a, c06a80b`. The first four are on desktop **local `main`, not pushed**; the last four are on the handoff branch.
 - **Backend:** nothing. The uploads use the existing endpoints, and per-group printing is local.
-- **Web:** commit `2e42d58` (web handoff branch): same features as the desktop: Lab Orders "Upload results" in the step title bar + 75% tests / 25% "Uploaded results"; chart visit "Results & files" + Upload result / document; Lab Results / Documents tabs show the Visit + Open; "Reprint" button in the chart left panel (each prescription, lab request, medical certificate); "Patient chart" link (new tab) after "View Patient History". Type-check (tsc) clean; **not yet seen in a browser** (Node 16 on the Windows PC cannot run Next 16).
+- **Web:** commits `2e42d58` + `682d9e2` (review fixes) on the web handoff branch: same features as the desktop: Lab Orders "Upload results" in the step title bar + 75% tests / 25% "Uploaded results"; chart visit "Results & files" + Upload result / document; Lab Results / Documents tabs show the Visit + Open; "Reprint" button in the chart left panel (each prescription, lab request, medical certificate); "Patient chart" link (new tab) after "View Patient History". Type-check (tsc) clean; **not yet seen in a browser** (Node 16 on the Windows PC cannot run Next 16).
 - **Held back / not included:**
   - `SyncResultPage` ("Sync now" progress) still answers before it closes. Left on purpose: it shows the result in place.
   - Mac A5 paper default.
@@ -243,7 +243,7 @@ Release builds default to the live server address, with demo off.
 | Production (backend, web, desktop v0.2.45) | **Working, live.** |
 | v0.2.46: upload in Lab Orders, 75/25 split, per-visit files, Reprint button | Built; **the owner saw it in the QA copy and said "perfect"**. |
 | v0.2.46: review round 3 fixes, per-prescription print, the 7 pop-up fixes | Built, tests pass, **NOT yet clicked through on screen.** |
-| Web update (`2e42d58`): Lab Orders upload, chart files per visit, Reprint, Patient chart link | Built, `tsc` clean; **NOT seen in a browser yet** (Node 16 on the Windows PC). Must be checked before or right after shipping (a Vercel Preview of the web handoff branch can be opened safely; it talks to the live API, so use a test patient only). |
+| Web update (`2e42d58` + review fixes `682d9e2`): Lab Orders upload, chart files per visit, Reprint, Patient chart link | Built, `tsc` clean, upload-rule tests `src/lib/visit-upload.test.mjs` pass; code review (8 findings) all fixed; **NOT seen in a browser yet** (Node 16 on the Windows PC). Must be checked before or right after shipping (a Vercel Preview of the web handoff branch can be opened safely; it talks to the live API, so use a test patient only). |
 | Desktop tests (Windows) | `ClinicNode.Tests`: 467 pass, **11 fail** (`GoldenParityTests` CRLF line endings on Windows — old, not a regression), 6 skipped. `ClinicNode.Api.Tests`: 132 pass, **1 fail** (`PaperQueueTests.Offline_with_no_reserved_number…`, stale since reserved queue blocks were removed — old). |
 | Backend tests | 523 pass, 4 old queue-clash failures (old). |
 | Web tests | 13 old consultation-UI failures (old); tsc clean; ESLint can't run on the Windows PC (Node 16). |
