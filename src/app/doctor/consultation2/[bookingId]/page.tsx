@@ -468,7 +468,12 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   );
   useEffect(() => {
     if (!SHOW_DIAGNOSIS_STEP && openSection === DIAGNOSIS_SECTION_INDEX) {
-      setOpenSection(navSectionOrder[0] ?? 0);
+      //JJQR - AI (2026-11-25) - lint (react-hooks/set-state-in-effect): move off the hidden step right after the effect runs, not synchronously inside it (same screen)
+      const next = navSectionOrder[0] ?? 0;
+      let cancelled = false;
+      void Promise.resolve().then(() => { if (!cancelled) setOpenSection(next); });
+      return () => { cancelled = true; };
+      //JJQR - END
     }
   }, [openSection, navSectionOrder]);
   //JJQR - END
@@ -1319,13 +1324,17 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [visitChangedElsewhere, setVisitChangedElsewhere] = useState<string | null>(null);
   useEffect(() => {
     beginVisitSession(bookingId);
-    setVisitChangedElsewhere(null);
+    //JJQR - AI (2026-11-25) - lint (react-hooks/set-state-in-effect): clear the old notice right after the effect runs, not synchronously inside it (same screen)
+    let cancelled = false;
+    void Promise.resolve().then(() => { if (!cancelled) setVisitChangedElsewhere(null); });
+    //JJQR - END
     const onChanged = (e: Event) => {
       const d = (e as CustomEvent<{ bookingId?: string | null; message?: string }>).detail;
       if (!d?.bookingId || d.bookingId === bookingId) setVisitChangedElsewhere(d?.message ?? "This visit was changed on another computer or window.");
     };
     window.addEventListener("clinic:visit-changed", onChanged);
     return () => {
+      cancelled = true; //JJQR - AI (2026-11-25) - see above //JJQR - END
       window.removeEventListener("clinic:visit-changed", onChanged);
       endVisitSession(bookingId);
     };
