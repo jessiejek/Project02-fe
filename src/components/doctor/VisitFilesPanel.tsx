@@ -14,6 +14,13 @@ export function VisitFilesPanel({ bookingId, version }: { bookingId: string; ver
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
 
+  // code review: files can be uploaded from the chart (opened in a new tab by "Patient chart") — reload when the doctor comes back to this tab
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === "visible") setRetry((n) => n + 1); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
   // one load per visit (and after an upload: `version` changes); a failure is shown once with Try again
   useEffect(() => {
     let cancelled = false;

@@ -153,6 +153,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   const [uploadFor, setUploadFor] = useState<{ bookingId: string; date: string; kind: "lab" | "doc" } | null>(null);
   const [reprintOpen, setReprintOpen] = useState(false);
   const [reprintInfo, setReprintInfo] = useState<Record<string, { hasLabs: boolean; hasCert: boolean }>>({});
+  const [reprintChecked, setReprintChecked] = useState(false);
   const [chartError, setChartError] = useState("");
   const [printing, setPrinting] = useState(false);
   //JJQR - END
@@ -307,13 +308,31 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   }, [id, doctorId, loadAttempt]);
 
   //JJQR - AI (Nov 25, 2026) - Reprint: find out which visits have a lab request / certificate (once, when the view opens)
+  // code review: depends on the visit ids (not the array, which is new after every reload), skips visits already checked,
+  // and asks at most 4 visits at a time (2 requests each) so a long history does not flood the slow server.
+  const bookingIdsKey = patientBookings.map((b) => b.id).join(",");
   useEffect(() => {
-    if (!reprintOpen || patientBookings.length === 0) return;
+    if (!reprintOpen) return;
+    const todo = bookingIdsKey ? bookingIdsKey.split(",").filter((bid) => !(bid in reprintInfo)) : [];
+    if (todo.length === 0) { setReprintChecked(true); return; }
     let cancelled = false;
-    Promise.all(patientBookings.map(async (b) => [b.id, await loadBookingReprintAvailability(b.id).catch(() => ({ hasLabs: false, hasCert: false }))] as const))
-      .then((rows) => { if (!cancelled) setReprintInfo(Object.fromEntries(rows)); });
+    setReprintChecked(false);
+    const found: Record<string, { hasLabs: boolean; hasCert: boolean }> = {};
+    let next = 0;
+    const worker = async () => {
+      while (!cancelled && next < todo.length) {
+        const bid = todo[next++];
+        found[bid] = await loadBookingReprintAvailability(bid).catch(() => ({ hasLabs: false, hasCert: false }));
+      }
+    };
+    Promise.all(Array.from({ length: Math.min(4, todo.length) }, worker)).then(() => {
+      if (cancelled) return;
+      setReprintInfo((prev) => ({ ...prev, ...found }));
+      setReprintChecked(true);
+    });
     return () => { cancelled = true; };
-  }, [reprintOpen, patientBookings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reprintInfo is read only to skip visits already checked
+  }, [reprintOpen, bookingIdsKey]);
   //JJQR - END
 
   if (loadError) return <AppShell role="doctor"><ErrorState title="Patient chart unavailable" message="This chart could not be loaded. Please try again." onRetry={() => { setLoadError(false); setLoaded(false); setLoadAttempt(n => n+1); }} /></AppShell>;
@@ -351,7 +370,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
     ...patientLabResults.filter((l) => l.bookingId === bookingId).map((l) => ({ id: l.id, title: l.resultTitle, uploadedAt: l.uploadedAt, kind: "lab-result" as const })),
     ...patientDocuments.filter((d) => d.bookingId === bookingId).map((d) => ({ id: d.id, title: d.title, uploadedAt: d.uploadedAt, kind: "document" as const })),
   ].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
-  const visitDateOf = (bookingId: string) => patientBookings.find((b) => b.id === bookingId)?.appointmentDate ?? "—";
+  // code review: this chart lists only this doctor's visits; a file from another doctor's visit says so instead of "—"
+  const visitDateOf = (bookingId: string) => patientBookings.find((b) => b.id === bookingId)?.appointmentDate ?? "with another doctor";
   const openFile = (kind: "document" | "lab-result", fileId: string) => {
     setChartError("");
     openPatientFile(kind, fileId).catch((e) => setChartError(e instanceof Error ? e.message : "Could not open the file."));
@@ -405,8 +425,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                   </div>
                 ))}
               </dl>
-              {/* //JJQR - AI (Nov 25, 2026) - owner: "Reprint" button in the left panel (desktop: under "Print patient card"; the web has no patient card) //JJQR - END */}
+              {/* //JJQR - AI (Nov 25, 2026) - owner: "Reprint" button in the left panel (desktop: under "Print patient card"; the web has no patient card) */}
               <Button variant="secondary" className="mt-md w-full" onClick={() => { setChartError(""); setReprintOpen(true); }}>Reprint</Button>
+              {/* //JJQR - END */}
             </Card>
 
             {latestVisit && (
@@ -564,7 +585,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                               {referredBookingId === v.booking.id && (
                                 <Link href={`/doctor/consultation/${v.booking.id}/vitals`} className="text-label-md text-primary hover:underline">Add vitals</Link>
                               )}
-                              {/* //JJQR - AI (Nov 25, 2026) - owner: results belong to ONE consultation — this visit's files + Upload buttons that tag new files to THIS visit //JJQR - END */}
+                              {/* //JJQR - AI (Nov 25, 2026) - owner: results belong to ONE consultation — this visit's files + Upload buttons that tag new files to THIS visit */}
                               <p className="pt-sm text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Results &amp; files</p>
                               {filesOf(v.booking.id).length === 0 ? (
                                 <p className="text-on-surface-variant">No results or files for this visit yet.</p>
@@ -587,6 +608,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                                   <button type="button" onClick={() => setUploadFor({ bookingId: v.booking.id, date: v.booking.appointmentDate, kind: "doc" })} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Upload document</button>
                                 </div>
                               )}
+                              {/* //JJQR - END */}
                             </div>
                           </div>
                         )}
@@ -596,7 +618,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                 </div>
               )
             )}
-          {/* //JJQR - AI (Nov 25, 2026) - desktop parity: each file shows the visit it belongs to + Open; uploading is done inside that visit or in the consult's Lab Orders step //JJQR - END */}
+          {/* //JJQR - AI (Nov 25, 2026) - desktop parity: each file shows the visit it belongs to + Open; uploading is done inside that visit or in the consult's Lab Orders step */}
           {(tab === "labs" || tab === "documents") && !reprintOpen && (
             <p className="mb-sm text-body-sm text-on-surface-variant">
               To add a {tab === "labs" ? "result" : "document"}, open the visit on the Visits tab and press {tab === "labs" ? "Upload result" : "Upload document"}, or upload it from the consultation&apos;s Lab Orders step.
@@ -638,7 +660,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               </div>
             )
           )}
-          {/* //JJQR - AI (Nov 25, 2026) - owner: Reprint view (opened by the left panel's "Reprint" button): every visit with something printable, one button per printout //JJQR - END */}
+          {/* //JJQR - END */}
+          {/* //JJQR - AI (Nov 25, 2026) - owner: Reprint view (opened by the left panel's "Reprint" button): every visit with something printable, one button per printout */}
           {reprintOpen && (
             <div className="space-y-md">
               <div className="flex flex-wrap items-start justify-between gap-sm">
@@ -648,12 +671,14 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                 </div>
                 <button type="button" onClick={() => setReprintOpen(false)} className="text-label-md text-primary hover:underline">← Back to Visits</button>
               </div>
-              {visits.length === 0 ? (
-                <EmptyState icon="print" message="Nothing to reprint yet." />
-              ) : (
+              {/* code review: also say "nothing to reprint" when the visits exist but none has a prescription, lab request or certificate */}
+              {(() => {
+                const printable = visits.filter((v) => v.rx.length > 0 || reprintInfo[v.booking.id]?.hasLabs || reprintInfo[v.booking.id]?.hasCert);
+                if (printable.length === 0 && (reprintChecked || visits.length === 0))
+                  return <EmptyState icon="print" message="Nothing to reprint yet. Prescriptions, lab requests and medical certificates from this patient's visits will be listed here." />;
+                return (
                 <div className="space-y-sm">
-                  {visits
-                    .filter((v) => v.rx.length > 0 || reprintInfo[v.booking.id]?.hasLabs || reprintInfo[v.booking.id]?.hasCert)
+                  {printable
                     .map((v) => {
                       const info = reprintInfo[v.booking.id];
                       return (
@@ -675,11 +700,13 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                         </div>
                       );
                     })}
-                  {Object.keys(reprintInfo).length === 0 && <p className="text-body-sm text-on-surface-variant">Checking lab requests and certificates…</p>}
+                  {!reprintChecked && <p className="text-body-sm text-on-surface-variant">Checking lab requests and certificates…</p>}
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
+          {/* //JJQR - END */}
           {tab === "vaccinations" && !reprintOpen && (
             patientVaccinations.length === 0 ? (
               <EmptyState icon="vaccines" message="No vaccinations recorded yet." />
@@ -796,7 +823,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         )}
       </Modal>
 
-      {/* //JJQR - AI (Nov 25, 2026) - upload to the visit whose button was pressed (one or several files) //JJQR - END */}
+      {/* //JJQR - AI (Nov 25, 2026) - upload to the visit whose button was pressed (one or several files) */}
       {uploadFor && (
         <VisitUploadModal
           isOpen
@@ -808,6 +835,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           kind={uploadFor.kind}
         />
       )}
+      {/* //JJQR - END */}
 
       <Modal
         isOpen={deleteRxGroupId !== null}

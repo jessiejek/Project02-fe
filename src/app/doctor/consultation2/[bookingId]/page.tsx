@@ -2843,12 +2843,13 @@ Return to patient queue
               View Patient History
             </Button>
             {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Patient chart" right after "View Patient History". Opens in a new tab and WITHOUT
-                this booking (read-only prescriptions there), so nothing typed here is lost and this page's autosave can't overwrite chart edits. //JJQR - END */}
+                this booking (read-only prescriptions there), so nothing typed here is lost and this page's autosave can't overwrite chart edits. */}
             {booking && (
               <a href={`/doctor/patients/${booking.patientId}`} target="_blank" rel="noopener" className={buttonStyles("secondary", "!px-sm !py-sm")}>
                 Patient chart
               </a>
             )}
+            {/* //JJQR - END */}
             {/*JJQR - AI (Nov 20, 2026) - print bar follows live Rx items */}
             {(effectiveRxItems.length > 0 || labOrders.length > 0) && consultPrintButtons("contents", "!px-sm !py-sm")}
             {/*JJQR - END */}
@@ -2934,13 +2935,14 @@ Return to patient queue
                       )}
                       {/* //JJQR - END */}
                     </h2>
-                    {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Upload results" sits in the Lab Orders title bar (right) //JJQR - END */}
+                    {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Upload results" sits in the Lab Orders title bar (right) */}
                     {i === 4 && booking && (
                       <Button onClick={() => setLabUploadOpen(true)}>
                         <Icon name="upload_file" className="text-[16px]" />
                         Upload results
                       </Button>
                     )}
+                    {/* //JJQR - END */}
                   </div>
 
                   {isOpen && i === 0 && (
@@ -3183,14 +3185,9 @@ Return to patient queue
 
                   {isOpen && i === 4 && (
                     //JJQR - AI (Nov 25, 2026) - owner (desktop parity): 75% the test selection / 25% the results uploaded for THIS consultation
+                    // (tests first in the page order, so on a narrow screen they come before the uploads box)
                     <div className="mt-md grid items-start gap-md lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
-                    {booking && (
-                      <div className="lg:order-2">
-                        <VisitFilesPanel bookingId={bookingId} version={labFilesVersion} />
-                      </div>
-                    )}
-                    {/* //JJQR - END */}
-                    <div className="space-y-md lg:order-1">
+                    <div className="space-y-md">
                       {labsSavedAt && <Toast key={labsSavedAt} variant="success" message={`Lab request saved at ${labsSavedAt}.`} />}
 
                       {renalCue && (
@@ -3283,6 +3280,8 @@ Return to patient queue
                         <p className="text-label-md text-on-surface-variant">No tests selected (optional). Saved with the consultation.</p>
                       )}
                     </div>
+                    {booking && <VisitFilesPanel bookingId={bookingId} version={labFilesVersion} />}
+                    {/* //JJQR - END */}
                     </div>
                   )}
 
@@ -3953,7 +3952,7 @@ Return to patient queue
         )}
       </Modal>
 
-      {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): upload one or several results, tagged to THIS consultation; title prefilled with the ordered tests //JJQR - END */}
+      {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): upload one or several results, tagged to THIS consultation; title prefilled with the ordered tests */}
       {booking && (
         <VisitUploadModal
           isOpen={labUploadOpen}
@@ -3966,6 +3965,7 @@ Return to patient queue
           suggestedTitle={labOrders.map((l) => l.testName.trim()).filter(Boolean).join(", ") || undefined}
         />
       )}
+      {/* //JJQR - END */}
 
       <Modal
         isOpen={labsConfirmPrint !== null}

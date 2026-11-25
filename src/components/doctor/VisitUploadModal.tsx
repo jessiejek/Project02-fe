@@ -11,31 +11,7 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { inputStyles, labelStyles } from "@/components/ui/fieldStyles";
 import { uploadPatientDocument, uploadPatientLabResult } from "@/lib/data/patientFiles";
 
-export const MAX_UPLOAD_FILES = 10;
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
-const TYPES: Record<string, string> = { ".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png" };
-
-function extOf(name: string): string {
-  const i = name.lastIndexOf(".");
-  return i < 0 ? "" : name.slice(i).toLowerCase();
-}
-
-/** Checks the picked files like the desktop does; returns a message, or null when they can be uploaded. */
-export function checkUploadFiles(files: { name: string; size: number }[]): string | null {
-  if (files.length === 0) return "Choose at least one file.";
-  if (files.length > MAX_UPLOAD_FILES) return `Choose up to ${MAX_UPLOAD_FILES} files at a time (you chose ${files.length}). Nothing was uploaded.`;
-  for (const f of files) {
-    if (!TYPES[extOf(f.name)]) return `"${f.name}" is not a PDF, JPG or PNG file. Nothing was uploaded.`;
-    if (f.size === 0) return `"${f.name}" is empty. Nothing was uploaded.`;
-    if (f.size > MAX_UPLOAD_BYTES) return `"${f.name}" is larger than 10 MB. Scan or save it smaller, then try again. Nothing was uploaded.`;
-  }
-  return null;
-}
-
-/** Title of file i of n: the typed title, plus "(i of n)" when several files go up together. */
-export function uploadTitle(title: string, i: number, n: number): string {
-  return n === 1 ? title.trim() : `${title.trim()} (${i + 1} of ${n})`;
-}
+import { MAX_UPLOAD_FILES, checkUploadFiles, uploadTitle } from "@/lib/visit-upload"; // rules shared with the tests
 
 export function VisitUploadModal({
   isOpen, onClose, onUploaded, patientId, bookingId, visitDate, kind = "lab", suggestedTitle,
@@ -57,10 +33,14 @@ export function VisitUploadModal({
   const [sending, setSending] = useState(false);
   const [saved, setSaved] = useState(0); // a retry after a partial failure skips the files already saved
 
+  // code review: reset only when the pop-up OPENS (not when the suggested title changes while it is open — that wiped the picked files)
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (!isOpen) return;
-    setFiles([]); setTitle(suggestedTitle ?? ""); setError(""); setSaved(0); setSending(false);
-    if (inputRef.current) inputRef.current.value = "";
+    if (isOpen && !wasOpen.current) {
+      setFiles([]); setTitle(suggestedTitle ?? ""); setError(""); setSaved(0); setSending(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+    wasOpen.current = isOpen;
   }, [isOpen, suggestedTitle]);
 
   function pick(list: FileList | null) {
