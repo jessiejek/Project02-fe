@@ -1,238 +1,263 @@
-# HANDOFF — Claude → Grok (25 Nov 2026, Manila time)
+# HANDOFF — Claude → Grok (final version, 25 Nov 2026 evening, Manila time)
 
-Same file in all three repos (`Project02-Desktop`, `Project02-be`, `Project02-fe`), on branch **`handoff/claude-to-grok-2026-11-25`**.
-Longer docs (desktop repo): `docs/handoff/00-START-HERE.md` (state + rules), `1-SYSTEM-OVERVIEW.md`, `2-OPERATIONS-RUNBOOK.md`, `5-TODO-AND-RISKS.md`, `6-WEB-DESKTOP-PARITY.md`, `7-OFFLINE-MODE-AUDIT.md`. Where they disagree, **this file, then 00-START-HERE.md** win.
-**No passwords, keys or connection strings are in any repo or in this file.** The owner keeps them outside git and types every password himself.
+This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `Project02-fe`), on branch **`handoff/claude-to-grok-2026-11-25`**.
+
+**Reading order:**
+1. This file.
+2. `Project02-Desktop/docs/handoff/00-START-HERE.md`. Its section 2 was rewritten to match this file.
+3. `Project02-Desktop/CLAUDE.md`.
+
+**Older long docs** (`1-SYSTEM-OVERVIEW.md`, `2-OPERATIONS-RUNBOOK.md`, `5-TODO-AND-RISKS.md`, `6-WEB-DESKTOP-PARITY.md`, `7-OFFLINE-MODE-AUDIT.md`) are background only. **If anything disagrees, this file wins.**
+
+**No passwords, keys or connection strings are in any repo or in this file.** The owner types every password himself.
+
+**Section K answers every question asked so far. If something isn't covered here, say "not found" and ask the owner; don't guess.**
 
 ---
 
-## 0. TL;DR (read this if nothing else)
-- The system is **LIVE** at a real clinic (Grace Medical Clinic: one doctor and a front desk). The doctor works on the **same Windows laptop** this was developed on.
-- **Production is untouched by this handoff.** Backend, web and desktop production are exactly as released on **24 Nov 2026**: desktop **v0.2.45**, backend `main` **e4494a3**, web `main` **bd0f449**.
-- **Waiting to ship: desktop v0.2.46 AND the matching web update.** Desktop: every commit after `a0822d1` on the handoff branch (template editor fixes, uploads tagged to a consultation, Reprint, 3 code review rounds, pop-up fixes). **Web:** commit `2e42d58` on the web handoff branch brings the same features to the website (Lab Orders upload 75/25, chart files per visit, Reprint button, Patient chart link). **Backend: no change** (uses existing endpoints).
-- **Ship rules:** only after the owner says **"ship"**, and only between **11:00 PM and 12:00 midnight Manila time**.
-- **Next step #1:** the owner clicks through v0.2.46 in the test copy (section J). Then ship it in the window.
+## 0. TL;DR
+
+- The system is **LIVE** at Grace Medical Clinic (one doctor and a front desk). **The doctor works on the same Windows laptop** where this was developed.
+- **Production right now** (shipped 24 Nov 2026, untouched since):
+
+  | Part | Live version |
+  |---|---|
+  | Desktop | **v0.2.45** (tag on commit `a0822d1`) |
+  | Backend | `main` = **`e4494a3`** |
+  | Web | `main` = **`bd0f449`** |
+
+- **Next release = desktop v0.2.46 + a web update. The backend has NO change.** All the work is committed on the handoff branches, which are already pushed to GitHub.
+- **Ship rules:**
+  - only when the owner says **"ship"**;
+  - only between **11:00 PM and 12:00 midnight Manila**;
+  - **never 8:00 AM–9:00 PM**, even if he insists. Refuse and remind him (rule I-2).
+- **Your first job (J-1):** help the owner check the web change in a Vercel **Preview**, and click through the desktop change in the **QA copy**. Fix what he finds on the handoff branches. Then ship in the window, with the checklist in E.
 
 ---
 
 ## A. System map
 
-| Repo (github.com/jessiejek/…) | Purpose | Stack | Deploys production when… |
+| Repo (github.com/jessiejek/…) | Purpose | Stack | What deploys production |
 |---|---|---|---|
-| `Project02-be` | API + database for everything | ASP.NET Core **.NET 10**, EF Core; **SQL Server** in production (myASP.NET host, USA, FTP upload); **SQLite** for local dev | a **push to `main`**. GitHub Action `deploy-backend.yml` first applies missing EF migrations to the live database (it refuses DROPs unless `allow_destructive_db` is ticked), then FTP-uploads the app. The site is **down for a few seconds**. |
-| `Project02-fe` | Web app (admin, staff, doctor, patient portal) | **Next.js 16**, TypeScript, on **Vercel** | a **push to `main`** (Vercel, about 1 min). Other branches only get a Vercel *Preview* copy. |
-| `Project02-Desktop` | Desktop app "Clinic Node" for the clinic computers, offline-first | **.NET MAUI 10**: WinUI (Windows, unpackaged) and Mac Catalyst. Folder `ClinicNode/`. Local **SQLite** per computer, synced with the server | a **pushed tag `vX.Y.Z`**. `release-desktop.yml` builds Windows (Inno Setup installer) and Mac in the cloud, signs them and publishes the update feed in `Project02-releases`, in about 20–25 min. **Windows computers update themselves silently.** |
-| `Project02-releases` | Public update feed `latest.json` + the last 3 installers | static files | written only by the desktop release workflow. **Not cloned on the Windows PC; not touched in this handoff.** |
+| `Project02-be` | API + database | ASP.NET Core **.NET 10**, EF Core. **SQL Server** in production (myASP.NET host, USA, FTP upload). **SQLite** for local dev. | A **push to `main`**. GitHub Action `deploy-backend.yml` applies missing migrations to the live database first (it refuses DROPs unless run by hand with `allow_destructive_db`), then uploads the app over FTP. **The live server is down for a few seconds.** |
+| `Project02-fe` | Website (admin, staff, doctor, patient portal) | **Next.js 16**, TypeScript, **Vercel** | A **push to `main`** (about 1 min). Any other pushed branch only gets a Vercel *Preview* at a separate address. |
+| `Project02-Desktop` | Desktop app "Clinic Node" for clinic computers, offline-first | **.NET MAUI 10**: WinUI (Windows, unpackaged) + Mac Catalyst. Folder `ClinicNode/`. Each computer has its own **SQLite**, synced with the server. | A **pushed tag `vX.Y.Z`** → `release-desktop.yml` (about 20–25 min). **Windows computers update themselves silently.** |
+| `Project02-releases` | Public update feed `latest.json` + the last 3 installers | static files | Written **only** by the desktop release workflow (force-push to its `main`). Never touch it by hand. Not cloned on the Windows PC. |
 
 **How they connect**
-- The web and the desktop both call the backend REST API (JWT sign-in). Live screens use SignalR "live" events (e.g. `PaymentUpdated`).
-- **The desktop compiles against the backend's source.** Its projects reference `Project02-be` projects, and the cloud build checks out `Project02-be` **main**. So ship the backend before any desktop release that needs new backend code. (v0.2.46 needs none.)
-- The desktop is offline-first:
-  - Services are registered `AddOnlineFirst<IInterface, ApiImpl, LocalImpl>`: try the server, and fall back to local SQLite if it can't be reached.
+- The web and the desktop both call the backend REST API (JWT sign-in), plus SignalR live events.
+- **The desktop compiles against the backend's source.** Its projects reference `Project02-be`, and the cloud build checks out backend **`main`**. If a desktop change ever needs backend code, ship the backend first. **v0.2.46 needs none.**
+- **Desktop offline-first design:**
+  - `AddOnlineFirst<IInterface, ApiImpl, LocalImpl>`: try the server, and fall back to local SQLite if it can't be reached.
   - `SyncService` pulls and pushes clinic data.
+  - `SchemaRepair` adds missing local columns.
   - Clinic settings reach the desktop through the sync aggregate `clinic_setting`.
-  - `SchemaRepair` adds missing local columns automatically.
-- **Printing is done locally** on each computer, from its synced SQLite copy. The form layout must match the web **byte for byte**: `Project02-fe/src/lib/print-forms-html.ts` ⇄ `Project02-Desktop/ClinicNode/ClinicNode.Core/Printing/ClinicFormsHtml.cs`, checked by golden tests.
-- Patient files (lab results, documents) live **on the server** (`/api/patient-lab-results`, `/api/patient-documents`). The desktop downloads them on demand; they need Online mode.
+- **Printing** is done locally on each computer: the desktop prints from its synced SQLite, the web from the API. The form layout must match **byte for byte** between web `src/lib/print-forms-html.ts` and desktop `ClinicNode.Core/Printing/ClinicFormsHtml.cs` (golden tests).
+- **Patient files** (lab results, documents) are stored **on the backend server's disk**, never in Git, Vercel or the desktop.
+  - Folder: `App_Data/uploads/<patientId>/<bookingId>/<unixMillis>-<sanitizedName>`.
+  - The original name, title, visit and uploader are in the database tables `patient_lab_results` / `patient_documents`.
+  - The deploy (`deploy/publish.sh`) uploads files one by one and **never deletes or mirrors** that folder.
+  - **There is no backup schedule yet.**
 
-**Run locally (Windows PC paths: `D:\sidequest\…`)**
+**Run locally** (Windows PC paths: `D:\sidequest\…`)
 
-| Repo | Command | Notes |
+| What | How | Notes |
 |---|---|---|
-| Backend | `dotnet run --project src/ClinicApp.Api --no-launch-profile` with env `ASPNETCORE_ENVIRONMENT=Development`, `Database__Provider=Sqlite`, `ConnectionStrings__DefaultConnection=Data Source=<some temp file>.db`, `Jwt__Secret=<any random 48 bytes, base64>`, `ASPNETCORE_URLS=http://localhost:5055` | Development seeds **fake** accounts `admin@`, `staff@`, `doctor@`, `patient@clinic.test` (password = `DevDataSeeder.DevPassword` in `src/ClinicApp.Infrastructure/DevDataSeeder.cs`; never type it for the owner). Tests: `dotnet test` (see F). |
-| Web | `npm install`, then `npm run dev` (needs `NEXT_PUBLIC_API_URL`, see `.env.example`) | `npm run test:unit`, `npm run test:e2e`. ESLint/unit tests can't run on the Windows PC (Node 16 there). |
-| Desktop (dev build) | `dotnet build ClinicNode/ClinicNode.App/ClinicNode.App.csproj -f net10.0-windows10.0.19041.0` | Mac: `-f net10.0-maccatalyst` (can only be built on a Mac). Tests: `dotnet test ClinicNode/ClinicNode.Tests` and `dotnet test ClinicNode/ClinicNode.Api.Tests`. **Don't `dotnet test ClinicNode.slnx` on Windows**: it tries the Mac target and errors. |
-| Desktop **QA copy** (safe on the doctor's laptop) | separate worktree `D:\sidequest\Project02-Desktop-qa` (its manifest Identity Name is changed to `ph.clinicnode.qa` = its own data folder; **never commit that**). Publish: `dotnet publish ClinicNode/ClinicNode.App/ClinicNode.App.csproj -f net10.0-windows10.0.19041.0 -c Release -r win-x64 --self-contained true -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:ClinicWindowsOnly=true -p:ApplicationId=ph.clinicnode.qa -o C:\Users\Public\ClinicNodeQA\app-qa`, then run `ClinicNode.App.exe` with env `CLINIC_NODE_CLOUD_URL=http://localhost:5055` | Talks only to the local fake-data server. The doctor's real app is `C:\Users\<user>\AppData\Local\Programs\Clinic Node\ClinicNode.App.exe`: **never stop or touch it.** |
+| Backend | `dotnet run --project src/ClinicApp.Api --no-launch-profile` with env `ASPNETCORE_ENVIRONMENT=Development`, `Database__Provider=Sqlite`, `ConnectionStrings__DefaultConnection=Data Source=<temp file>.db`, `Jwt__Secret=<random 48 bytes, base64>`, `ASPNETCORE_URLS=http://localhost:5055` | Development seeds **fake** accounts `admin@ / staff@ / doctor@ / patient@clinic.test`. Their password is the constant `DevPassword` in `src/ClinicApp.Infrastructure/DevDataSeeder.cs`. Never type it for the owner; point him to the file. |
+| Web | `npm install`, then `npm run dev` (env names in `.env.example`) | Needs **Node 20+**. The Windows PC has Node 16: `npx tsc --noEmit -p .` works, but `next dev` and `npm run test:unit` don't. |
+| Desktop dev build | `dotnet build ClinicNode/ClinicNode.App/ClinicNode.App.csproj -f net10.0-windows10.0.19041.0` | Mac target only on a Mac. Tests: `dotnet test ClinicNode/ClinicNode.Tests` and `dotnet test ClinicNode/ClinicNode.Api.Tests`. **Never `dotnet test ClinicNode.slnx` on Windows** (it tries the Mac target and errors). |
+| **Desktop QA copy** (safe on the doctor's laptop) | Worktree `D:\sidequest\Project02-Desktop-qa`. Its `Platforms/Windows/Package.appxmanifest` Identity Name is changed to `ph.clinicnode.qa` (own data folder; **never commit that**). Copy changed files in from the main checkout **and touch their timestamps**, then publish: `dotnet publish ClinicNode/ClinicNode.App/ClinicNode.App.csproj -f net10.0-windows10.0.19041.0 -c Release -r win-x64 --self-contained true -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:ClinicWindowsOnly=true -p:ApplicationId=ph.clinicnode.qa -o C:\Users\Public\ClinicNodeQA\app-qa`. Run `C:\Users\Public\ClinicNodeQA\app-qa\ClinicNode.App.exe` with env `CLINIC_NODE_CLOUD_URL=http://localhost:5055`. | Talks only to the local fake-data backend. **The doctor's real app is `%LOCALAPPDATA%\Programs\Clinic Node\ClinicNode.App.exe`. Never stop or touch it.** When stopping a QA app, filter processes by the path `C:\Users\Public\ClinicNodeQA\`. |
+| Sample data (QA server) | Fake patient **"Ana Santos"** has a visit on **2026-11-25** with 2 prescription lines, a lab request (CBC, Chest X-ray PA) and an issued medical certificate. That visit also has test uploads. | Only on the local SQLite QA database (Claude's temporary folder). It may not exist on another machine; recreate it through the app if needed. |
 
 ---
 
 ## B. Work done per repo
 
-**How the sessions were told apart:** this Windows PC cloned the repos on 23 Nov (desktop and backend 09:10–09:16, web 24 Nov 19:45). Commits in this clone's reflog marked `commit:` were made by the **Windows Claude session**. Everything else came from GitHub and is attributed to the **Mac Claude session (inferred from git)**.
+**How the sessions were told apart (inferred from git):**
+- The Windows PC cloned the repos on 23 Nov (desktop and backend 09:10–09:16, web 24 Nov 19:45).
+- Commits recorded as `commit:` in this clone's reflog = **Windows Claude session**.
+- Everything that came from GitHub = **Mac Claude session**.
 
 ### Project02-Desktop
-**Mac session (inferred from git; the most recent first)**
-- 24 Nov (pulled here at 19:45):
-  - Hand-over docs `docs/handoff/*` and `CLAUDE.md` (1606bdc).
-  - Templates: detach the reused search box (e3ce743).
+
+**Mac session (inferred from git), newest first**
+- **24 Nov**, pulled here at 19:45:
+  - Hand-over docs + `CLAUDE.md` (1606bdc).
+  - Templates search-box detach (e3ce743).
   - Queue numbers carry on from the last number, with no reserved blocks (504e254).
-  - Admin waiver gives no receipt number, and old tests fixed (15deedb).
-  - Printing:
-    - "Include PTR in print", off by default (009207d, 303620a).
-    - A5 default paper (0d05d44).
-    - "Preparing the print…" message (c0d9c2e).
-    - Licence number printing (c01a63f).
-    - Crisp form pictures (733213b).
-    - Lab request on A5 with the clinic's tests (93139c0, 67dedc1).
-    - Admin > Settings > Printing: clinic-wide print mode and backgrounds, per-document on/off (54b62fe, 31199ca).
+  - Admin waiver gives no receipt number (15deedb).
+  - Print work: "Include PTR in print", off by default (009207d, 303620a); A5 default (0d05d44); "Preparing the print…" (c0d9c2e); licence number (c01a63f); crisp form pictures (733213b); lab request on A5 with the clinic's tests (93139c0, 67dedc1); Admin > Settings > Printing (54b62fe, 31199ca).
   - Set-password wording (215f3b6).
-- 23 Nov: Windows crash hardening, "Windows laptop fixes 0.2.29/0.2.30" (ddef562, b308064, a96767b).
-- 22–23 Nov, before the clone:
-  - OTA update system: signed feed, one-click update, "Updating" page (1b9efe2 … 89385ed).
-  - Release CI (fb61e38).
-  - Windows Setup.exe through Inno Setup (975065a); Mac DMG (4357886).
-  - Profiles: editable name, email and fee (bad301c, f0b86ac, ddd4aae).
-  - Speed: HTTP/2, one shared connection pool, parallel loads (9454bd6, 3d7615b).
+- **23 Nov:** Windows crash hardening, "0.2.29/0.2.30" (ddef562, b308064, a96767b).
+- **22–23 Nov:**
+  - OTA updates: signed feed, one-click update, Updating page (1b9efe2 … 89385ed).
+  - Release CI (fb61e38); Windows Setup.exe (975065a); Mac DMG (4357886).
+  - Profiles (bad301c, f0b86ac, ddd4aae).
+  - Speed: HTTP/2, shared connection pool (9454bd6, 3d7615b).
   - UI polish (3bf6622, df46d86, 69973d6).
-  - Sign-in disposed-handler fix (f2d5012).
-- Older history: see `git log`. Phases 1–4: offline mode, sync, review items, patient merge.
+  - Sign-in fix (f2d5012).
+- Older: phases 1–4 (offline mode, sync, review items, patient merge). See `git log`.
 
 **Windows session**
 
 | Commit | Date | What | Why |
 |---|---|---|---|
-| 394cb0a | 23 Nov | Walk-in no longer goes blank after registering or picking a patient; bigger consult work area | WinUI two-parents crash (`_search` reused) |
-| 22908cf | 23 Nov | Patient chart visits sorted by date and time, not queue number | owner request |
-| e17d154 | 24 Nov | Templates: no crash switching tab / All tabs / Cards (`DetachSearch` before `Clear`) | 0xC000027B on Windows |
-| fa7d6f8 | 24 Nov | Doctor: "Walk-In" in the menu (route `doctor-walk-in`); **Cancel booking** with reason radios (Patient left / changed mind / Duplicate / Others + text of 5+ characters) on Today, Appointments and the appointment page (`CancelReasonDialog`); faster "Mark all reviewed" (`ISyncStatus.ResolveConflictsAsync`, one transaction) | owner requests |
-| 8250433 | 24 Nov | Admin > Settings > Payments: "Mark the visit paid when the doctor completes it" | owner request |
-| 1266b28 | 24 Nov | Admin > Settings > **Consultation**: which parts are required to complete a visit (default Clinical notes; the fee is always required); a follow-up with no date = no follow-up | doctor didn't want vitals required |
-| ec1bcf3, a0822d1 | 24 Nov | START-HERE notes for v0.2.44 / v0.2.45 | docs |
-| 7665d5b | 25 Nov | Template editor always opens in the app frame and closes however it was opened (`LeaveAsync`; Save failed with "PopAsync is not supported"); opt-in live CRUD QA test `ClinicNode.Api.Tests/TemplatesLiveServerQaTests.cs` (runs only if `CLINIC_QA_SERVER` is a localhost URL) | owner screenshots after Delete |
-| 43c28cc | 25 Nov | Review fixes: editor never stays stuck, one redraw per search tap, QA tests clean up after themselves | code review round 1 |
-| 93409be | 25 Nov | `StaffDialog` closes first, then answers (`FinishAsync`); `LeaveAsync` returns false → buttons work again; double-tap opens one editor (`_opening`); leftover-dialog cleanup Windows-only and `StaffDialog`-only | code review round 2 (likely root cause of the overlay editor) |
-| 5a454cf | 25 Nov | First version of the doctor's upload (PDF/JPG/PNG) + Reprint + "Patient chart" button in the consult header; `IApiClient.UploadAsync` (multipart), `IDoctorPatientsService.UploadFileAsync` | owner request |
-| e3b0478 | 25 Nov | `IPrintDocumentFactory.PrescriptionGroupAsync`: print the chosen prescription group (the default is still the newest) | review: a visit with 2 groups printed only the newer one |
-| 4bf153a | 25 Nov | **Uploads tagged to ONE consultation**: `ChartFile.BookingId`; consult step 4 **Lab Orders** has "Upload results" in the title bar (1–10 files, 10 MB each), a **75% tests / 25% "Uploaded results"** split; the chart's visit Details has "Results & files" + Upload result / document (not on Cancelled / NoShow / Expired / Rescheduled visits); the Lab Results / Documents tabs show a Visit column and no longer upload; **Reprint button** under "Print patient card" (every prescription, lab request and certificate per visit); "Patient chart" from the consult opens **without** the booking (no Rx edit there); review fixes (no reload storm, timeout warning, file cap, "not on this computer yet" message) | owner: "if I upload to his Nov 25 consult the result is in that consult, not 14, not 24"; code review round 3 |
-| dddf74a | 25 Nov | Every pop-up **closes first, then answers**, and Back / X / Esc do nothing while its work is being sent: `CancelReasonDialog`, `RecordPaymentPage`, `QuickRegisterPage`, Reschedule (`StaffBookingDetailPage`), the two Prescription-form dialogs, `AdminDialog`, `ClinicDialog` (shared helper `Views/Staff/ModalClose.cs`) | owner: "I asked you to fix those"; prevents overlays and a possible double payment |
-| c06a80b | 25 Nov | START-HERE section 2 updated | docs |
+| 394cb0a | 23 Nov | Walk-in no longer goes blank after registering or picking a patient; bigger consult area | WinUI two-parents crash |
+| 22908cf | 23 Nov | Chart visits sorted by date and time | owner |
+| e17d154 | 24 Nov | Templates: no crash switching tab / All tabs / Cards | 0xC000027B |
+| fa7d6f8 | 24 Nov | Doctor "Walk-In" in the menu; Cancel booking with reason radios (Patient left / changed mind / Duplicate / Others + 5+ characters) on Today, Appointments and the appointment page; faster "Mark all reviewed" | owner |
+| 8250433 | 24 Nov | Admin > Settings > Payments: mark paid when the doctor completes | owner |
+| 1266b28 | 24 Nov | Admin > Settings > Consultation: which parts are required (default Clinical notes; fee always) | doctor didn't want vitals required |
+| ec1bcf3, a0822d1 | 24 Nov | START-HERE notes v0.2.44 / v0.2.45 (**a0822d1 = v0.2.45 = GitHub `main`**) | docs |
+| 7665d5b | 25 Nov | Template editor opens in the app frame and closes however it was opened (`LeaveAsync`); opt-in QA `TemplatesLiveServerQaTests.cs` | "PopAsync is not supported" after Delete |
+| 43c28cc | 25 Nov | Review round 1 fixes (editor never stuck, one redraw, QA cleanup) | code review |
+| 93409be | 25 Nov | Review round 2: `StaffDialog` closes first, then answers; `LeaveAsync` un-sticks; one editor per double-tap | likely root cause of the overlay editor |
+| 5a454cf | 25 Nov | First version of upload + Reprint + "Patient chart" button; `IApiClient.UploadAsync`, `IDoctorPatientsService.UploadFileAsync` | owner |
+| e3b0478 | 25 Nov | `IPrintDocumentFactory.PrescriptionGroupAsync`: print one chosen prescription group | review: only the newest group printed |
+| 4bf153a | 25 Nov | **Uploads tagged to ONE consultation**: `ChartFile.BookingId`; Lab Orders "Upload results" in the title bar + 75/25 split; chart visit "Results & files"; no uploads on dead visits; Reprint button in the left panel; "Patient chart" opens without the booking; review round 3 fixes | owner: "Nov 25 result stays in Nov 25" |
+| dddf74a | 25 Nov | All pop-ups close first, then answer, and can't be dismissed while sending (`ModalClose.cs`) | owner: "I asked you to fix those" |
+| c06a80b, 3c17dc2 … 895dceb, 01947a4 | 25 Nov | START-HERE + HANDOFF.md | docs |
+
+**Local `main` = `5a454cf`** (4 commits ahead of GitHub `main` `a0822d1`; never pushed). **Handoff branch = local `main` + everything after**, pushed.
 
 ### Project02-be
 - **Mac session (inferred from git):**
   - Self-registration closed by default (1e40297, `Registration__PatientSelfSignUp`).
-  - Print settings: `print_configs`, lab tests, on/off switches (d555453, 7c94d5d, 91ecd0b).
-  - Sync fix for patient code clashes (c8d7537).
-  - Set password with no forced change (3031b19, a3ce92f).
-  - Privacy-notice audit (81dfed3).
-  - Auth rate-limit cap (4f608c6).
-  - Profiles and email change (79aa19b).
-  - CI: migrate the database before deploy (96e6949, 0c1e16a); gentler FTP (d29346b).
-  - Forwarded headers (9f7813e, ca453aa); the doctor's own fee (f1c55b5).
-  - Phase 4: review items, patient merge (3e0f3a9 …).
+  - Print settings table and endpoints (d555453, 7c94d5d, 91ecd0b).
+  - Sync code-clash fix (c8d7537).
+  - Set password (3031b19, a3ce92f); privacy-notice audit (81dfed3); auth rate-limit cap (4f608c6); profiles (79aa19b).
+  - CI migrates the database before deploy (96e6949, 0c1e16a); gentler FTP (d29346b); forwarded headers (9f7813e); the doctor's own fee (f1c55b5); phase 4 review items and patient merge.
+  - The **patient file upload endpoints** are older: `0706866`, **9 Sep 2026**, last changed 20 Nov.
 - **Windows session:**
-  - **6eee685:** `ClinicSetting.AutoPaidOnComplete` + `PUT api/settings/auto-paid-on-complete` (Admin, audited). `Billing/AutoPaidOnComplete.cs`: when the doctor completes, an Unpaid payment with Amount > 0 becomes Paid, Cash, exact amount, no OR. Called from `QueueController.SetStatus`, which broadcasts `PaymentUpdated`. Tests `AutoPaidOnCompleteTests` (4).
-  - **e4494a3:** `ClinicSetting.ConsultRequired` (comma list `notes,vitals,prescription`; null = notes; `""` = fee only) + `PUT api/settings/consult-required` (Admin, audited). **Not enforced by the server**: the web and desktop apply it. Tests `ConsultRequiredTests` (3).
-  - A commit "doctor runs the queue online: check in / cancel" (8b936f7) was made and then **reset away** (owner: staff and doctor both add walk-ins; no server change wanted).
+  - **6eee685:** auto-paid on complete (`ClinicSetting.AutoPaidOnComplete`, `PUT api/settings/auto-paid-on-complete`, `Billing/AutoPaidOnComplete.cs`, 4 tests).
+  - **e4494a3:** `ClinicSetting.ConsultRequired` + `PUT api/settings/consult-required` (3 tests; **not enforced by the server**, the apps apply it).
+  - A commit widening doctor check-in/cancel on the server (8b936f7) was **reset away**. The owner didn't want it.
+- **25 Nov: no backend code change at all.** The handoff branch adds only `HANDOFF.md`.
 
 ### Project02-fe
 - **Mac session (inferred from git):**
-  - Web prints like the desktop: Admin print settings, PTR off by default, real A5 PDF (82c5719 and earlier print commits).
-  - Online patient registration closed (e1de8c1).
-  - Set password button (19b52ca).
-  - Data Privacy Act notice on registration (df2f206).
-  - Profiles (4b0bf3c, 20aaaa9); Admin Sync review page (0fdcda1).
-  - Consult always shows every step (2367b13); stale-form protection (3b97d98).
+  - Web prints like the desktop (82c5719 and earlier).
+  - Online registration closed (e1de8c1); Set password (19b52ca); privacy notice (df2f206).
+  - Profiles (4b0bf3c, 20aaaa9); Sync review page (0fdcda1).
+  - Consult shows all steps (2367b13); stale-form protection (3b97d98).
 - **Windows session:**
-  - **d50f752:** Admin > Settings > Payments tick box (`setAutoPaidOnComplete`).
-  - **bd0f449:** Admin > Settings > Consultation tab (Clinical notes / Vital signs / Prescription ticks, Professional fee locked); `consultation2/[bookingId]/page.tsx` uses `requiredSectionsFor(clinicRow?.consult_required)`; `diagnosis-hidden.test.mjs` updated.
+  - **d50f752:** Payments tick box.
+  - **bd0f449:** Consultation tab (= live web `main`).
+  - **25 Nov, on the handoff branch:**
+    - **`2e42d58`:** the desktop's upload / Reprint features on the website.
+    - **`682d9e2`:** web code review fixes (8 findings).
+    - Plus `HANDOFF.md` commits.
 
 ---
 
 ## C. Database
 
-**How it deploys:** only the backend has a real schema. EF Core migrations live in `Project02-be/src/ClinicApp.Infrastructure/Migrations/`.
-- A push to backend `main` runs `deploy-backend.yml`, which generates an idempotent script for **missing** migrations only and applies it to the **live SQL Server** **before** uploading the code. It refuses DROP statements unless the workflow is run by hand with `allow_destructive_db = true`.
-- There is a short window where the database is new and the code is still old, so **migrations must be additive**.
-- **Local dev:** SQLite (`Database__Provider=Sqlite`), created by the app.
-- **Desktop:** each computer has its own SQLite (`clinic-node.db`), and `SchemaRepair` adds missing columns at start-up.
-- **No database change is part of v0.2.46.**
+**How it deploys**
+- Only the backend has a real schema: EF Core migrations in `Project02-be/src/ClinicApp.Infrastructure/Migrations/`.
+- A push to backend `main` applies the **missing** migrations to the live SQL Server **before** uploading the code. Because of that window, **migrations must be additive.**
+- Local dev uses SQLite. Each desktop has its own SQLite `clinic-node.db`, kept in shape by `SchemaRepair`.
+- **No database change is part of the next release.**
 
-| Migration (Project02-be) | What it does | Production |
+| Migration (Project02-be) | What | Production |
 |---|---|---|
-| `20261124143644_AddConsultRequired` | `clinic_settings.consult_required` (nullable text) | **Applied 24 Nov** (backend deploys 145/146) |
+| `20261124143644_AddConsultRequired` | `clinic_settings.consult_required` (nullable text) | **Applied 24 Nov** (deploys 145/146) |
 | `20261124120624_AddAutoPaidOnComplete` | `clinic_settings.auto_paid_on_complete` (bool, default false) | **Applied 24 Nov** |
-| `20261124005004_AddPrintConfig` | `print_configs` table (print mode, backgrounds, lab tests, on/off) | Applied (Mac session, inferred from git: deployed with backend main) |
-| `20261122081514_AddPatientMergedInto` | `patients.merged_into_patient_id` | Applied (inferred) |
-| `20261122080550_AddSyncReviewItems` | sync review items table | Applied (inferred) |
-| `20261121132750_SoapTemplateCategory` … `20261121064610_CloudSync`, `20261121015340_QueueLanes`, `20261120*` and older | cloud sync columns, OR-number unique, queue lanes, ICD-10 WHO list, template copies, Rx as-needed … | Applied (inferred: production runs `main`, and the CI applies every missing migration) |
+| `20261124005004_AddPrintConfig` | `print_configs` table | Applied (inferred from git: on `main`, and CI applies all missing migrations) |
+| `20261122081514_AddPatientMergedInto`, `20261122080550_AddSyncReviewItems` | patient merge, sync review items | Applied (inferred) |
+| `20261121*`, `20261120*` and older | cloud sync, OR-number unique, queue lanes, ICD-10, templates, Rx as-needed … | Applied (inferred) |
 
-- Everything on backend `main` is in production. Nothing is pending.
-- Rule: **additive only.** If a DROP is ever needed, ask the owner, take a backup, and use the manual workflow with the tick.
-- The owner can only run plain SQL (`SELECT` / `DELETE`) in the host's SQL Studio. No transactions, `IF`, `THROW` or `SET`.
+- Rules: **additive only.** A DROP needs the owner's OK, a backup, and the manual workflow tick.
+- The owner can only run plain `SELECT`/`DELETE` in the host's SQL Studio (no transactions, `IF`, `THROW` or `SET`).
 
 ---
 
 ## D. Desktop
 
-**What changes for users in v0.2.46** (all already committed on the handoff branch)
-- **Doctor, consultation:**
-  - New **"Patient chart"** button next to "Patient history". It saves first, then opens the chart (read-only for prescriptions).
-  - Step **4. Lab Orders** has **Upload results** in the title bar, the tests on the left 75%, and **Uploaded results** on the right 25% (Open buttons).
-- **Doctor, patient chart:**
-  - Each visit's **Details** has **Results & files**, which shows only that visit's files, with Upload result / Upload document.
-  - The **Reprint** button sits under "Print patient card" and opens a list: patient card, and per visit Prescription (1, 2 … when there are several), Lab request and Medical certificate.
+**What users get in v0.2.46**
+- **Consultation:**
+  - **"Patient chart"** button right after "Patient history". It saves first, then opens the chart **without** the booking, so prescriptions are read-only there.
+  - Step **4. Lab Orders**: **"Upload results"** in the title bar; tests on the left 75%, **"Uploaded results"** on the right 25%.
+- **Patient chart:**
+  - Each visit's Details has **"Results & files"** (that visit only), with Upload result / Upload document.
+  - The **Reprint** button sits under "Print patient card" (left panel).
   - The Lab Results / Documents tabs show which visit each file belongs to.
-- **Templates:** the editor no longer opens full-screen or gets stuck after Delete; a double-tap opens one editor.
-- **Every pop-up** (cancel booking, record payment, register patient, reschedule, prescription edit/template, admin dialogs) closes before the screen behind reacts, and can't be dismissed while it's saving.
+- **Templates:** no stuck or full-screen editor; a double-tap opens one editor.
+- **Every pop-up** closes before the screen behind reacts, and can't be dismissed while saving.
 
 **Build and packaging**
-- **Cloud (the real release):** tag `vX.Y.Z` → `release-desktop.yml`:
-  - **Windows job** (`windows-latest`): checks out desktop + backend `main`, MAUI workload, Inno Setup, publish win-x64 self-contained, builds the installer.
-  - **Mac job** (`macos-latest`, Xcode 26.0): builds Mac Catalyst, signs the update feed (`UPDATE_SIGNING_KEY`), and publishes `latest.json` + installers to `Project02-releases` (`RELEASES_TOKEN`).
+- **Release workflow `release-desktop.yml`** (tag `v*`), all-or-nothing:
+  1. **Job `windows`** (`windows-latest`): checks out desktop + backend `main`, MAUI workload, Inno Setup, publish win-x64 self-contained, installer saved as an artifact.
+  2. **Job `mac`** (`needs: windows`, `macos-latest`, Xcode 26.0): builds Mac Catalyst, signs `latest.json` (`UPDATE_SIGNING_KEY`), and **only as its last step** force-pushes the feed + installers to `Project02-releases` (`RELEASES_TOKEN`).
+  - So **if the Windows job fails, the Mac job never runs; if the Mac job fails, nothing is published.** No half release.
   - Backend checkout uses `BE_READ_TOKEN`.
-- `build-windows.yml`: a manual Windows compile check only.
-- **Local:** `packaging/windows` (one-script build + Inno Setup), `packaging/mac` (DMG + free signing identity), `packaging/release` (release script). See `packaging/README.md`.
-- **Update feed:** `https://raw.githubusercontent.com/jessiejek/Project02-releases/main/latest.json`. GitHub caches it for about 5 min, so check the releases repo commits, not the raw file.
+- `build-windows.yml` is a manual Windows compile check only. It publishes nothing.
+- **There is no safe Mac compile check without publishing.** Starting the release workflow by hand publishes. The Mac build of the 25 Nov changes will first be tried during the release, and the all-or-nothing design covers that.
+- Local scripts: `packaging/windows` (Inno Setup), `packaging/mac` (DMG + signing identity), `packaging/release`. See `packaging/README.md`.
+- **Updater:** `ClinicNode.Core/Update/UpdateChecker.cs` installs **only a higher version** (`latest > current`). A rollback must be a **new higher version**.
+- Feed: `https://raw.githubusercontent.com/jessiejek/Project02-releases/main/latest.json`. It's cached for about 5 min, so check the releases repo commits instead.
 
-**Desktop-specific config (names only):**
-- `CLINIC_NODE_CLOUD_URL` (server address override)
+**Desktop config names:**
+- `CLINIC_NODE_CLOUD_URL` (server address)
 - `CLINIC_NODE_DEMO`
 - `CLINIC_NODE_DEV_LOG`
 - `CLINIC_NODE_UPDATE_FEED`
 - `CLINIC_NODE_TEST_DROP_RESPONSES` (debug builds only)
-- `CLINIC_QA_SERVER` (opt-in live QA tests)
-- `CLINIC_SYNC_IT_*` (sync integration tests)
-- `CLINIC_REALDB_DIR`, `CLINIC_COPY_DIR` (tools)
+- `CLINIC_QA_SERVER` (opt-in live QA tests, localhost only)
+- `CLINIC_SYNC_IT_*`
+- `CLINIC_REALDB_DIR`, `CLINIC_COPY_DIR`
 
 Release builds default to the live server address, with demo off.
 
-**Data and logs:** `errors.log` and `print-errors.log` sit next to `clinic-node.db` (Windows: the app's data folder; Mac: `~/Library/ClinicNode/`).
+**Logs:** `errors.log` and `print-errors.log` sit next to `clinic-node.db` (Windows: the app's data folder; Mac: `~/Library/ClinicNode/`).
 
 ---
 
 ## E. Releases
 
-**Already in production (shipped 24 Nov 2026):** desktop **v0.2.44** and **v0.2.45**; backend `main` e4494a3 (deploys 145/146); web `main` bd0f449.
+**Live (shipped 24 Nov 2026):** desktop v0.2.44 → **v0.2.45**; backend `e4494a3`; web `bd0f449`.
 
-**Next release: desktop v0.2.46 + web update (no backend change)**
-- **Contents:** desktop commits `7665d5b, 43c28cc, 93409be, 5a454cf, e3b0478, 4bf153a, dddf74a, c06a80b`. The first four are on desktop **local `main`, not pushed**; the last four are on the handoff branch.
-- **Backend:** nothing. The uploads use the existing endpoints, and per-group printing is local.
-- **Web:** commits `2e42d58` + `682d9e2` (review fixes) on the web handoff branch: same features as the desktop: Lab Orders "Upload results" in the step title bar + 75% tests / 25% "Uploaded results"; chart visit "Results & files" + Upload result / document; Lab Results / Documents tabs show the Visit + Open; "Reprint" button in the chart left panel (each prescription, lab request, medical certificate); "Patient chart" link (new tab) after "View Patient History". Type-check (tsc) clean; **not yet seen in a browser** (Node 16 on the Windows PC cannot run Next 16).
-- **Held back / not included:**
-  - `SyncResultPage` ("Sync now" progress) still answers before it closes. Left on purpose: it shows the result in place.
-  - Mac A5 paper default.
-  - Backups schedule.
-  - Hosting speed (USA host, 6–9 s per request seen).
+**Next release: desktop v0.2.46 + web update. NO backend change.**
 
-**Release order and checklist (run only after the owner says "ship", only 11:00 PM–12:00 AM Manila)**
-1. ☐ The owner has clicked through v0.2.46 in the QA copy (J #1), or explicitly said ship anyway.
-2. ☐ Desktop repo: `git checkout main`, then `git merge --ff-only handoff/claude-to-grok-2026-11-25`. It is a fast-forward: the branch is `main` + 4 commits + `HANDOFF.md`.
-3. ☐ Build on Windows: `dotnet build ClinicNode/ClinicNode.App/ClinicNode.App.csproj -f net10.0-windows10.0.19041.0` → 0 errors.
-4. ☐ Tests: `dotnet test ClinicNode/ClinicNode.Tests` and `dotnet test ClinicNode/ClinicNode.Api.Tests`. Expect **only** the known failures (F).
+| Part | What ships | Branch / commits |
+|---|---|---|
+| Desktop v0.2.46 | `7665d5b, 43c28cc, 93409be, 5a454cf` (local `main`) + `e3b0478, 4bf153a, dddf74a` (code) + docs | `handoff/claude-to-grok-2026-11-25` (desktop) |
+| Web | `2e42d58` (features) + `682d9e2` (review fixes) + `HANDOFF.md` | `handoff/claude-to-grok-2026-11-25` (web) |
+| Backend | **nothing.** Don't merge or push its `main`: a push restarts the live server, and its branch only adds `HANDOFF.md` | — |
+
+**Held back on purpose:**
+- `SyncResultPage` ("Sync now" progress) still answers before it closes. It shows the result in place; decide with the owner.
+- Server-side enforcement of the app-only upload rules (no dead visits, max 10 files, title required). The server already enforces the visit, the patient, the type, the 10 MB limit and access.
+- Mac A5 paper default; backups; faster hosting.
+
+**Checklist (only after "ship", only 11:00 PM–12:00 midnight Manila; say the current Manila time before each step)**
+1. ☐ Steps J-1 and J-2 are done, or the owner explicitly said ship anyway.
+2. ☐ **Desktop:**
+   - `git fetch`; confirm GitHub `main` is still `a0822d1` and local `main` is `5a454cf`.
+   - `git checkout main`, then `git merge --ff-only handoff/claude-to-grok-2026-11-25`.
+3. ☐ Build: `dotnet build ClinicNode/ClinicNode.App/ClinicNode.App.csproj -f net10.0-windows10.0.19041.0` → 0 errors.
+4. ☐ Tests: `dotnet test ClinicNode/ClinicNode.Tests` and `dotnet test ClinicNode/ClinicNode.Api.Tests` → only the known failures (F).
 5. ☐ `git tag v0.2.46`, then `git push origin main v0.2.46`.
-   - ☐ **Web (same night, same window):** in `Project02-fe`: `git checkout main`, `git merge --ff-only handoff/claude-to-grok-2026-11-25`, then `git push origin main` (Vercel deploys in about 1 min). Check the doctor chart and a consultation in the browser right after. The web branch also adds `HANDOFF.md` to web main: harmless.
-   - **Never** `git push --all` / `--tags`.
-   - **Don't push backend `main`**: nothing to ship there, and a backend push restarts the live server.
-6. ☐ Wait about 20–25 min. Confirm the `Project02-releases` commit shows 0.2.46. Give the owner the installer links.
-7. ☐ After the doctor's laptop updates (silently), smoke test after hours: open a consult → Lab Orders → upload; chart → Reprint.
-8. ☐ Update `docs/handoff/00-START-HERE.md` section 2 ("SHIPPED …").
+   - Exact refs: allowed. **Never** `--all` / `--tags`.
+   - Wait about 20–25 min, then confirm a new `Project02-releases` commit with 0.2.46, and give the owner the installer links.
+6. ☐ **Web, same window:** in `Project02-fe`: `git fetch`; confirm `main` = `bd0f449`; `git checkout main`; `git merge --ff-only handoff/claude-to-grok-2026-11-25`; `git push origin main`. Vercel deploys in about 1 min. Check the doctor chart and a consultation's Lab Orders right after.
+7. ☐ **Do NOT touch backend `main`.**
+8. ☐ After the doctor's laptop updates (silently), a quick smoke test after hours, then update START-HERE section 2 ("SHIPPED …").
 
 **Rollback**
-- **Desktop:** publish a **new higher version** from the previous code: `git revert` the bad commits, tag `v0.2.47`, push in the window. (Assumed: the updater installs newer versions only — check the update checker in `ClinicNode` before relying on a lower version.) The v0.2.45 installers stay in `Project02-releases` (the last 3 are kept) for manual reinstall.
-- **Backend:** `git revert` on `main` + push (in the window). Migrations are additive, so old code runs on the new schema.
-- **Web:** Vercel "Promote" a previous deployment, or revert + push.
+- **Desktop:** `git revert` the bad commits, tag **v0.2.47** (it must be higher; see D), and push in the window. The v0.2.45 installer stays in `Project02-releases` for a manual reinstall.
+- **Web:** Vercel → Deployments → **Promote** the previous production deployment (instant), or revert + push.
+- **Backend:** nothing shipped. If ever needed: revert on `main` + push in the window (migrations are additive).
 
 **Kept on purpose (don't remove)**
 
 | What | Why |
 |---|---|
-| `IPrintDocumentFactory.PrescriptionAsync(bookingId)` | default = newest group, still used by the consult screen and Today |
-| `IDoctorPatientsService.DownloadFileAsync` / `UploadFileAsync` default methods returning null/false | offline (local) implementation = "needs Online mode" |
-| `IApiClient.DownloadAsync` / `UploadAsync` default methods that throw | so test doubles need no change |
-| `DoctorPatientChartPage.OpenAsync(…, tab: "reprint")` | opens the Reprint view (no longer a tab) |
-| `ConsultSteps` defaults | null `consult_required` = Clinical notes only; the fee is always required |
-| Patient self-registration code | closed by `Registration__PatientSelfSignUp=false` (default), not deleted |
-| `TemplatesLiveServerQaTests.cs` | opt-in; returns at once unless `CLINIC_QA_SERVER` is set to localhost |
+| `IPrintDocumentFactory.PrescriptionAsync(bookingId)` | default = newest group; the consult screen and Today use it |
+| Default interface methods: `IDoctorPatientsService.DownloadFileAsync` / `UploadFileAsync` (return null / false), `IApiClient.DownloadAsync` / `UploadAsync` (throw) | the offline local implementation means "needs Online mode"; test doubles need no change |
+| `DoctorPatientChartPage.OpenAsync(…, tab: "reprint")` | opens the Reprint view (not a tab) |
+| `ConsultSteps` defaults | null `consult_required` = Clinical notes; the fee is always required |
+| Patient self-registration code | closed by `Registration__PatientSelfSignUp=false`, not deleted |
+| `TemplatesLiveServerQaTests.cs` | opt-in; returns at once unless `CLINIC_QA_SERVER` is a localhost URL |
 
 ---
 
@@ -240,153 +265,180 @@ Release builds default to the live server address, with demo off.
 
 | Area | State |
 |---|---|
-| Production (backend, web, desktop v0.2.45) | **Working, live.** |
-| v0.2.46: upload in Lab Orders, 75/25 split, per-visit files, Reprint button | Built; **the owner saw it in the QA copy and said "perfect"**. |
-| v0.2.46: review round 3 fixes, per-prescription print, the 7 pop-up fixes | Built, tests pass, **NOT yet clicked through on screen.** |
-| Web update (`2e42d58` + review fixes `682d9e2`): Lab Orders upload, chart files per visit, Reprint, Patient chart link | Built, `tsc` clean, upload-rule tests `src/lib/visit-upload.test.mjs` pass; code review (8 findings) all fixed; **NOT seen in a browser yet** (Node 16 on the Windows PC). Must be checked before or right after shipping (a Vercel Preview of the web handoff branch can be opened safely; it talks to the live API, so use a test patient only). |
-| Desktop tests (Windows) | `ClinicNode.Tests`: 467 pass, **11 fail** (`GoldenParityTests` CRLF line endings on Windows — old, not a regression), 6 skipped. `ClinicNode.Api.Tests`: 132 pass, **1 fail** (`PaperQueueTests.Offline_with_no_reserved_number…`, stale since reserved queue blocks were removed — old). |
+| Production (desktop v0.2.45, backend, web) | **Working, live.** |
+| Desktop: upload in Lab Orders, 75/25, chart files per visit, Reprint | Built; **the owner saw it in the QA copy and said "perfect"**. |
+| Desktop: review round 3 fixes, per-prescription print, 7 pop-up fixes, template fixes | Built, tests pass, **NOT clicked through on screen.** |
+| Web `2e42d58` + `682d9e2` | `tsc` clean; `src/lib/visit-upload.test.mjs` passes (run compiled on Node 16); 8 review findings fixed. **NOT seen in a browser yet.** |
+| Desktop tests (Windows) | `ClinicNode.Tests`: 467 pass, **11 fail** (`GoldenParityTests`, CRLF line endings on Windows — old), 6 skipped. `ClinicNode.Api.Tests`: 132 pass, **1 fail** (`PaperQueueTests.Offline_with_no_reserved_number…`, stale since reserved queue blocks were removed — old). |
 | Backend tests | 523 pass, 4 old queue-clash failures (old). |
-| Web tests | 13 old consultation-UI failures (old); tsc clean; ESLint can't run on the Windows PC (Node 16). |
-| Mac build | **Not verified** for 25 Nov changes (can't build Mac on the Windows PC). The cloud release builds it. |
-| Known open issues | ~9 server **403s per page load** on some page (page not identified); Mac print dialog defaults to US Letter; two offline computers can issue the same queue number (flagged); web can't print the PTR; no backup schedule, password-reset email or uptime monitor. |
+| Web tests | 13 old consultation-UI failures (old). ESLint and unit tests can't run on the Windows PC (Node 16). |
+| Mac build | Not tried with the 25 Nov changes; first tried during the release (all-or-nothing, see D). |
+| Known open issues | ~9 server **403s per page load** on some page (not identified); Mac print defaults to US Letter; two offline computers can issue the same queue number (flagged); web can't print the PTR; **no backups** (database or `App_Data/uploads`); no password-reset email; no uptime monitor; slow US host (6–9 s per request seen). |
 
 ---
 
 ## G. Key files
 
-**Project02-Desktop** (`ClinicNode/…`)
+**Project02-Desktop** (`ClinicNode/…` unless shown)
 
 | Path | Purpose |
 |---|---|
-| `CLAUDE.md`, `docs/handoff/00-START-HERE.md` | rules + live state (section 2 is the running log) |
-| `ClinicNode.App/Views/Doctor/ConsultationPage.xaml(.cs)`, `.Ui.cs`, `.Gaps.cs`, `.Safety.cs` | consultation workspace (steps, autosave, print) |
-| `ClinicNode.App/Views/Doctor/ConsultationPage.LabUploads.cs` | Lab Orders 75/25 split + "Uploaded results" panel + upload |
-| `ClinicNode.App/Views/Doctor/Extra/DoctorPatientChartPage.cs` | patient chart: visits, Results & files, Reprint view |
-| `ClinicNode.App/Views/Doctor/Extra/PatientFileUpload.cs` | shared picker + multi-file upload tagged to one visit |
-| `ClinicNode.App/Views/Staff/StaffUi.cs` (`StaffDialog`) | shared confirm/input pop-up (close first, then answer) |
-| `ClinicNode.App/Views/Staff/ModalClose.cs` | close-then-answer helper for the other pop-ups |
+| `HANDOFF.md`, `CLAUDE.md`, `docs/handoff/00-START-HERE.md` | handoff, rules, running state log |
+| `ClinicNode.App/Views/Doctor/ConsultationPage.xaml(.cs)`, `.Ui.cs`, `.Gaps.cs`, `.Safety.cs` | consultation (steps, autosave, print; `SectionTitle` = step title bar; `OnOpenChart`, `_backFromChart`) |
+| `ClinicNode.App/Views/Doctor/ConsultationPage.LabUploads.cs` | Lab Orders 75/25 + "Uploaded results" + upload |
+| `ClinicNode.App/Views/Doctor/Extra/DoctorPatientChartPage.cs` | chart: visits, Results & files, Reprint view, `CanUploadTo`, `PrintLocalAsync` |
+| `ClinicNode.App/Views/Doctor/Extra/PatientFileUpload.cs` | picker + multi-file upload to one visit |
+| `ClinicNode.App/Views/Staff/StaffUi.cs` (`StaffDialog`), `Views/Staff/ModalClose.cs` | pop-ups: close first, then answer |
 | `ClinicNode.App/Views/Doctor/Extra2/DoctorTemplateEditorPage.cs`, `DoctorTemplatesWorkspacePage.cs` | templates (`LeaveAsync`, `_opening`, `DetachSearch`) |
-| `ClinicNode.App/Controls/UiTurn.cs`, `BusyButton.cs` | Windows-safe redraw on the next UI turn; busy buttons |
+| `ClinicNode.App/Controls/UiTurn.cs`, `BusyButton.cs` | Windows-safe redraw; busy buttons |
 | `ClinicNode.Api/Http/ApiClient.cs` | HTTP client (JWT refresh, `DownloadAsync`, `UploadAsync`) |
 | `ClinicNode.Api/Services/ApiDoctorExtraAppointments.cs` | `ApiDoctorPatientsService` (chart, file up/download) |
 | `ClinicNode.Core/DoctorExtra/DoctorPatientsService.cs` | chart records (`ChartFile.BookingId`) + local implementation |
-| `ClinicNode.Core/Printing/ClinicFormsPrintDocumentFactory.cs`, `ClinicFormsHtml.cs` | printed forms (must match the web byte for byte) |
-| `ClinicNode.App/MauiProgram.cs`, `Doctor/DoctorExtraModule.cs` | DI registration (`AddOnlineFirst`) |
-| `.github/workflows/release-desktop.yml` | tag → Mac + Windows release + feed |
-| `ClinicNode.Api.Tests/TemplatesLiveServerQaTests.cs` | opt-in live template CRUD QA against a local server |
+| `ClinicNode.Core/Printing/ClinicFormsPrintDocumentFactory.cs`, `ClinicFormsHtml.cs` | printed forms (`PrescriptionGroupAsync`) |
+| `ClinicNode.Core/Update/UpdateChecker.cs` | OTA: higher version only |
+| `ClinicNode.App/MauiProgram.cs`, `ClinicNode.App/Doctor/DoctorExtraModule.cs` | DI (`AddOnlineFirst`) |
+| `.github/workflows/release-desktop.yml` | tag → Windows then Mac → feed (all-or-nothing) |
 
 **Project02-be**
 
 | Path | Purpose |
 |---|---|
-| `src/ClinicApp.Api/Controllers/SettingsController.cs` | auto-paid + consult-required settings |
-| `src/ClinicApp.Api/Controllers/QueueController.cs` | status changes (auto-paid on Completed) |
-| `src/ClinicApp.Api/Billing/AutoPaidOnComplete.cs` | marks the payment paid on completion |
-| `src/ClinicApp.Api/Controllers/PatientFilesController.cs` | lab result / document upload, list, download (PDF/JPG/PNG, 10 MB, signature check) |
-| `src/ClinicApp.Domain/Entities/Admin.cs` | `ClinicSetting` (incl. `AutoPaidOnComplete`, `ConsultRequired`) |
-| `src/ClinicApp.Infrastructure/Migrations/` | EF migrations (additive only) |
-| `src/ClinicApp.Infrastructure/DevDataSeeder.cs` | fake Development accounts |
-| `src/ClinicApp.Infrastructure/QueueSequencer.cs` | queue numbers |
-| `.github/workflows/deploy-backend.yml` | push main → migrate live database → FTP |
+| `src/ClinicApp.Api/Controllers/PatientFilesController.cs` | upload / list / download lab results and documents (`bookingId` required, patient access check) |
+| `src/ClinicApp.Infrastructure/Files/LocalFileStorageService.cs`, `FileSignature.cs` | disk storage, safe names, type/signature check, 10 MB |
+| `src/ClinicApp.Api/Program.cs` (`FileStorage:RootPath`, default `App_Data/uploads`) | storage location |
+| `src/ClinicApp.Api/Controllers/SettingsController.cs`, `QueueController.cs`, `Billing/AutoPaidOnComplete.cs` | settings; auto-paid on Completed |
+| `src/ClinicApp.Domain/Entities/Admin.cs` | `ClinicSetting` |
+| `src/ClinicApp.Infrastructure/Migrations/`, `DevDataSeeder.cs`, `QueueSequencer.cs` | migrations, fake dev accounts, queue numbers |
+| `.github/workflows/deploy-backend.yml`, `deploy/publish.sh`, `deploy/migrate-db.sh` | push `main` → migrate → FTP (never deletes uploads) |
 
 **Project02-fe**
 
 | Path | Purpose |
 |---|---|
-| `src/app/admin/settings/page.tsx` | Admin settings (Payments, Consultation, Printing) |
-| `src/app/doctor/consultation2/[bookingId]/page.tsx` | web consultation (`requiredSectionsFor`) |
-| `src/lib/data/admin.ts` | `setAutoPaidOnComplete`, `setConsultRequired` |
-| `src/lib/print-forms-html.ts` | **source of truth** for printed form layout |
-| `.env.example` | env names for the web |
+| `src/app/doctor/consultation2/[bookingId]/page.tsx` | web consultation (Lab Orders upload + 75/25, "Patient chart" link, `requiredSectionsFor`) |
+| `src/app/doctor/patients/[id]/page.tsx` | web chart (Results & files per visit, Reprint view, Visit column + Open) |
+| `src/components/doctor/VisitUploadModal.tsx`, `VisitFilesPanel.tsx` | upload pop-up (1–10 files, can't close while sending); uploads panel (reloads on tab return) |
+| `src/lib/visit-upload.ts` (+ `.test.mjs`) | upload rules |
+| `src/lib/consult-print.ts` | print by booking (`printMedicalCertificateForBooking`, `loadBookingReprintAvailability`) |
+| `src/lib/data/patientFiles.ts` | upload / list / open patient files |
+| `src/lib/print-forms-html.ts` | **source of truth** for printed forms |
+| `src/app/admin/settings/page.tsx`, `src/lib/data/admin.ts` | Admin settings |
 
 ---
 
 ## H. Config and gotchas
 
 **Environment variable names (never values)**
-- **Backend:** `ConnectionStrings__DefaultConnection`, `Database__Provider`, `Jwt__Secret` / `Jwt__Issuer` / `Jwt__Audience`, `Email__*` (SMTP), `ClientBaseUrl`, `Cors__AllowedOrigins`, `FileStorage__*`, `RateLimiting__*`, `Registration__PatientSelfSignUp`, `ASPNETCORE_ENVIRONMENT`, `ASPNETCORE_URLS`.
+- **Backend:** `ConnectionStrings__DefaultConnection`, `Database__Provider`, `Jwt__Secret` / `Jwt__Issuer` / `Jwt__Audience`, `Email__*`, `ClientBaseUrl`, `Cors__AllowedOrigins`, `FileStorage__RootPath` / `FileStorage__PublicPathPrefix` / `FileStorage__MaxFileSizeBytes`, `RateLimiting__*`, `Registration__PatientSelfSignUp`, `ASPNETCORE_ENVIRONMENT`, `ASPNETCORE_URLS`.
   - CI secrets: `DB_PASS`, `FTP_HOST`, `FTP_USER`, `FTP_PASS`.
   - CI vars: `BACKEND_URL`, `FTP_PORT`, `FTP_REMOTE_DIR`.
 - **Web:** `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_AUTH_MODE`, `NEXT_PUBLIC_APP_VERSION`, `NEXT_PUBLIC_BUILD_TIME`, `NEXT_PUBLIC_SHOW_VERSION`, `NEXT_PUBLIC_LOCAL_NODE`, `NEXT_PUBLIC_ENABLE_SW_DEV`, `CLINIC_LOCAL_NODE`, `JWT_SECRET`, `DOTNET_JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE`, `TZ`.
 - **Desktop:** see D. CI secrets: `BE_READ_TOKEN`, `RELEASES_TOKEN`, `UPDATE_SIGNING_KEY`.
-- **Ports:** the local QA server uses `http://localhost:5055`.
+- **Ports:** the local QA backend uses `http://localhost:5055`.
 
-**Gotchas that cost us time**
-1. **WinUI crash patterns** (most "it crashes on Windows" bugs):
+**Gotchas that cost time**
+1. **WinUI crashes:**
    - A control with two parents: detach before `Clear`/re-add.
-   - Redrawing inside the handler of a control that the redraw removes: use `UiTurn.Next(...)`.
-   - Hard crashes (0xC000027B) do **not** reach `errors.log`. Diagnose with a *temporary* `AppDomain.FirstChanceException` logger in `Platforms/Windows/App.xaml.cs`, and **never commit it**.
-2. **A pop-up that answers before it closes:** the caller redraws or navigates under a modal, and Windows shows pages as full-window overlays. Always close first, then answer (`ModalClose` / `StaffDialog.FinishAsync`).
-3. **On Windows, `OnAppearing` fires again when any modal closes.** Don't redraw a step in `OnAppearing` unconditionally, or typed text is wiped. See `_backFromChart` in `ConsultationPage`.
-4. **Line endings:** files edited with sed/perl on Windows end up LF while git expects CRLF. That's fine to commit (git normalizes), but **`git apply` of a diff into the QA worktree failed silently**. Copy the changed files instead, and **touch their timestamps**, or the incremental build reuses stale DLLs.
-5. **Don't `dotnet test ClinicNode.slnx` on Windows** (it tries Mac Catalyst). Test the two projects separately.
-6. **The doctor uses the dev laptop during clinic hours.** No on-screen testing then. Use the QA copy + local fake server. **Never stop the doctor's real app.**
-7. **Raw `latest.json` is cached** about 5 min; check the releases repo commits instead.
-8. **PowerShell 5.1:** no `&&`; quoting breaks commit messages. Use `git commit -F <file>` (UTF-8 **without BOM**).
-9. **Deploy gap:** the database migrates before the code uploads, so migrations must work with old code (additive).
-10. **Vercel:** any pushed branch gets a Preview build; only `main` is production.
+   - Redrawing inside the handler of a control the redraw removes: use `UiTurn.Next(...)`.
+   - Hard crashes (0xC000027B) skip `errors.log`. Diagnose with a *temporary* `AppDomain.FirstChanceException` logger in `Platforms/Windows/App.xaml.cs`, and **never commit it**.
+2. **A pop-up that answers before it closes** makes Windows show pages as full-window overlays. Always close first, then answer.
+3. **On Windows, `OnAppearing` fires again when any modal closes.** Don't redraw unconditionally there (it wipes typed text); see `_backFromChart`.
+4. **Line endings:** sed/perl on Windows writes LF. Git normalizes on commit, which is fine. But `git apply` into the QA worktree **failed silently**: copy the files and **touch their timestamps**, or the build reuses stale DLLs. Some web files are CRLF, so use exact-text editing.
+5. **Don't `dotnet test ClinicNode.slnx` on Windows.**
+6. **The doctor uses the dev laptop during clinic hours.** No on-screen testing then. Never stop her app.
+7. **`latest.json` is cached** for about 5 min.
+8. **PowerShell 5.1:** no `&&`. Write commit messages to a file and use `git commit -F <file>` (UTF-8 **without BOM**).
+9. **Deploy gap:** the database migrates before the code is uploaded, so migrations must be additive.
+10. **Vercel:** any pushed branch gets a Preview build. A Preview **talks to the live API**: test with a TEST patient only.
+11. **Node 16 on the Windows PC:** the web can only be type-checked (`npx tsc --noEmit -p .`). Unit tests: compile `visit-upload.ts` with `npx tsc … --types "" --skipLibCheck --noResolve`, then `node --test`.
 
 ---
 
-## I. Decisions and rules to keep (don't change without asking the owner)
+## I. Decisions and rules to keep (ask the owner before changing any)
 
 | # | Rule / decision | Why |
 |---|---|---|
-| 1 | **Never tag, deploy or push `main` without the owner saying "ship" / "release" / "push".** | live clinic |
-| 2 | **Shipping only 11:00 PM–12:00 midnight Manila**, even after "ship". | a deploy restarts the server and Windows updates silently mid-consult |
-| 3 | **Batch work into one release.** | each release = 20–25 min + a silent update on clinic PCs |
-| 4 | **The owner types all passwords**; never type, repeat, log or commit one; no real patient data in logs, commits or tests. | security, privacy law |
-| 5 | **Say where a UI control goes in one line, then build exactly that.** | owner preference; he rejects "nearby" placements |
-| 6 | Wrap new code in `//JJQR - AI (date) - why … //JJQR - END`. | codebase convention |
-| 7 | On Windows, check every redraw for a reused control with an old parent; redraw on the next UI turn. | WinUI crashes |
-| 8 | Plain English, short bullets, show proof before saying "done". | owner is not a programmer |
-| 9 | **Staff AND doctor can both add walk-ins** (doctor via the menu "Walk-In"); the server's check-in/cancel rules were **not** widened. | owner: "that's the deal" |
-| 10 | Cancel booking uses reason radios; "Others" enables a text box (5+ characters). | owner request |
-| 11 | Auto-paid on complete is an **Admin switch, off by default**; marks Cash, exact amount, no OR. | owner request |
-| 12 | Consultation required parts are Admin-configurable; **default = Clinical notes + fee; vitals not required; fee always required; a follow-up with no date = no follow-up.** | the doctor doesn't want vitals required |
-| 13 | **Every uploaded file belongs to exactly one consultation (visit).** Uploads happen in that visit (chart visit Details) or in the consult's Lab Orders step, never "to the latest visit". Not on Cancelled / NoShow / Expired / Rescheduled visits. | owner: "Nov 25 result stays in Nov 25" |
-| 14 | Lab Orders layout: **Upload results in the step title bar; 75% tests / 25% uploads.** 1–10 files, PDF/JPG/PNG, 10 MB each. | owner choice |
-| 15 | **Reprint = a button under "Print patient card"** in the chart's left panel (not a tab). | owner choice |
-| 16 | "Patient chart" from the consult opens **without** the booking (no prescription editing there). | prevents the consult autosave overwriting chart edits |
-| 17 | Pop-ups close first, then answer; no dismiss while their work is sending. | Windows overlays, duplicate uploads, double payments |
-| 18 | Printed forms: web `print-forms-html.ts` is the source of truth; the desktop must match byte for byte. | golden tests |
-| 19 | Database migrations additive only; DROPs need the owner + a backup + the manual workflow tick. | live data |
-| 20 | Never touch a database directly for QA; use the app UI or the local fake server. Test scripts in the repo must be opt-in and localhost-only. | live data |
-| 21 | The QA copy (`ph.clinicnode.qa`) and its manifest change are **never committed**. | it would change the real app's identity |
+| 1 | Never tag, deploy, merge into `main` or push `main` without the owner saying "ship" / "release" / "push". | live clinic |
+| 2 | **Ship only 11:00 PM–12:00 midnight Manila. NEVER 8:00 AM–9:00 PM.** "Ship" = pushing `main` in any repo, a `v*` tag, merging into `main`, or running a deploy/release workflow. **If the owner says "ship" outside the window: refuse, say the current Manila time and when the window opens, and hold firm even if he insists.** Say the Manila time before every ship step. Pushing a non-main branch by exact name is fine any time. | deploys restart the server; Windows updates silently mid-consult |
+| 3 | Push exact refs only (`git push origin <branch>`, or `git push origin main v0.2.46` at ship time). Never `--all` / `--tags`. | avoid accidental deploys |
+| 4 | Batch work into one release. | each release = 20–25 min + a silent update |
+| 5 | **The owner types all passwords.** Never ask for, type, repeat, log or commit one. No real patient data in logs, commits or tests. | security, privacy law |
+| 6 | Say where a UI control goes in one line, then build exactly that. | owner preference |
+| 7 | Wrap new code in `//JJQR - AI (date) - why … //JJQR - END` (TSX: `{/* //JJQR … */}` … `{/* //JJQR - END */}`). | convention |
+| 8 | Windows: never reuse a control with an old parent; redraw on the next UI turn; pop-ups close first, then answer. | WinUI crashes |
+| 9 | Plain English, short bullets, proof (log, screenshot, test) before "done". | owner is not a programmer |
+| 10 | Staff AND doctor both add walk-ins (doctor: menu "Walk-In"); the server rules were **not** widened. | owner |
+| 11 | Cancel booking: reason radios; "Others" enables a text box (5+ characters). | owner |
+| 12 | Auto-paid on complete: Admin switch, off by default; marks Cash, exact amount, no OR. | owner |
+| 13 | Consultation required parts: Admin-configurable; default Clinical notes + fee; vitals not required; fee always required; a follow-up with no date = no follow-up. | doctor |
+| 14 | **Every uploaded file belongs to exactly one consultation (visit).** Upload only inside that visit (chart) or in that consultation's Lab Orders step, never "to the latest visit". Not on Cancelled / NoShow / Expired / Rescheduled visits. | owner: "Nov 25 result stays in Nov 25" |
+| 15 | Lab Orders: **"Upload results" in the step title bar (right); 75% tests / 25% uploads**; 1–10 files, PDF/JPG/PNG, 10 MB each. Same on desktop and web. | owner |
+| 16 | **Reprint = a button in the chart's left panel** (desktop: under "Print patient card"), not a tab. Each prescription is printed on its own. | owner |
+| 17 | "Patient chart" from the consult opens **without** the booking (web: new tab). | stops the consult's autosave overwriting chart edits |
+| 18 | **Desktop and web stay feature-equal** for these doctor features. | owner: "whatever we did for desktop, make it in web" |
+| 19 | Printed forms: web `print-forms-html.ts` is the source of truth; the desktop matches byte for byte. | golden tests |
+| 20 | Migrations additive only; a DROP needs the owner + a backup + the manual tick. | live data |
+| 21 | Never touch a database directly for QA; use the app or the local fake server. Repo test scripts must be opt-in and localhost-only. | live data |
+| 22 | The QA copy (`ph.clinicnode.qa`) and its manifest change are **never committed**. | it would change the real app's identity |
+| 23 | Don't merge or push backend `main` for this release (nothing changed). | avoids a pointless server restart |
 
 ---
 
 ## J. Next steps (priority order)
 
-1. **Web check:** open the Vercel *Preview* of the web handoff branch (or run the web locally with Node 20+). Check the doctor chart (Reprint, visit Results & files, Upload) and a consultation Lab Orders step (Upload results, 75/25). Use a TEST patient only: the Preview talks to the live API.
-1. 1. **Owner click-through of v0.2.46 in the QA copy** (after clinic hours, or while the doctor isn't using the laptop).
-   - Start the local server and QA app (A).
-   - Things to try:
-     - consult → Lab Orders → Upload results (1 file, then 3 files; Cancel is blocked while sending);
-     - chart → visit Details → Upload result; the file appears only in that visit;
-     - chart → Reprint → print the patient card, Prescription 1 / 2, lab request, certificate (sample visit: fake patient "Ana Santos", 25 Nov);
-     - Cancel booking, Record payment, Reschedule, Register a new patient, Prescription edit/template, an Admin dialog: each closes cleanly, with no full-window overlay;
-     - Templates: delete then edit, double-tap.
-   - Fix anything he reports on the handoff branch.
-2. **Ship desktop v0.2.46 + the web update** with the checklist in E (no backend push). Only after "ship", only 11 PM–midnight.
-3. **After the update reaches the doctor's laptop:** a quick smoke test after hours, then update START-HERE section 2.
-4. **Make the Windows test run green:**
-   - `GoldenParityTests`: normalize line endings, e.g. `.gitattributes` `*.json text eol=lf` for the golden files, or compare ignoring `\r`.
-   - Update or delete the stale `PaperQueueTests` case (reserved queue blocks no longer exist).
-5. **Find the page causing ~9 server 403s per load:** watch the network calls per page, then hide or skip the calls the role isn't allowed to make.
-6. **Decide on `SyncResultPage`:** it answers before it closes, probably on purpose. Confirm with the owner and align with `ModalClose` if needed.
-7. **Open items from START-HERE section 6:** Mac A5 default, backup schedule (tools in `accounts-tools`; the owner runs them), password-reset email, uptime monitor, faster hosting.
+1. **Check the web change (Vercel Preview).**
+   - Vercel already builds a Preview for the pushed web handoff branch: Vercel dashboard → Project02-fe → Deployments → branch `handoff/claude-to-grok-2026-11-25`.
+   - **The Preview talks to the LIVE API, so use a TEST patient only, never a real patient.**
+   - Sign in as the doctor; the owner types the password.
+   - Check:
+     - a consultation → step 4 Lab Orders: Upload results is top right; 75/25; upload 1 file, then 3; the pop-up can't close while sending; files appear on the right;
+     - "Patient chart" opens in a new tab; uploading there and coming back refreshes the right panel;
+     - the chart: a visit's Results & files + Upload; no Upload on cancelled visits; the Lab Results / Documents Visit column + Open; Reprint lists each prescription, lab request and certificate;
+     - a narrow window: the tests show before the uploads.
+   - If no test patient exists, ask the owner how he wants to create one (Admin → Patients → Add). Don't use real data.
+2. **Desktop click-through in the QA copy** (after clinic hours). Start the local backend + QA app (A).
+   - Check:
+     - consult → Lab Orders upload; Cancel is blocked while sending;
+     - chart → visit Details → Upload, and the file shows only there;
+     - Reprint → patient card, Prescription 1/2, lab request, certificate (fake "Ana Santos", 25 Nov);
+     - Cancel booking, Record payment, Reschedule, Register patient, Prescription edit/template, an Admin dialog: each closes cleanly, with no full-window overlay;
+     - Templates: delete then edit; double-tap.
+   - Fix anything on the handoff branches (desktop or web), commit, and push **only** the handoff branch by exact name.
+3. **Ship in the window** with checklist E: desktop v0.2.46 + web; backend untouched.
+4. **Smoke test after the update** (after hours); update START-HERE section 2.
+5. **Make the Windows test run green:**
+   - `GoldenParityTests`: normalize line endings (e.g. `.gitattributes` `*.json text eol=lf` for the golden files, or compare ignoring `\r`).
+   - Update or delete the stale `PaperQueueTests` case.
+6. **Backups** for the database **and `App_Data/uploads`** on the host. Plan it with the owner; he runs the tools (`accounts-tools`).
+7. Find the page causing ~9 server 403s per load; decide `SyncResultPage`; optionally have the server enforce the app-only upload rules (dead visits, 10 files); Mac A5 default; password-reset email; uptime monitor; faster hosting.
 
 ---
 
-## Starter prompt for Grok (copy everything below this line)
+## K. Questions already asked and answered (don't re-ask)
 
-> You are taking over a LIVE clinic system from Claude. Before doing anything:
-> 1. In each repo — `Project02-Desktop`, `Project02-be`, `Project02-fe` (github.com/jessiejek) — check out branch `handoff/claude-to-grok-2026-11-25` and read `HANDOFF.md` fully, then `Project02-Desktop/docs/handoff/00-START-HERE.md` and `Project02-Desktop/CLAUDE.md`.
-> 2. Confirm what is already done (sections B, E, F) — **do not redo finished work** and do not rewrite working code.
-> 3. Treat every rule and decision in **section I as fixed**. If you think one should change, ask the owner first; never change it on your own.
-> 4. Never push to `main`, never push a tag, never deploy, unless the owner says "ship" — and even then only between 11:00 PM and 12:00 midnight Manila time. Push only the exact branch name: `git push origin handoff/claude-to-grok-2026-11-25`. Never `git push --all` or `--tags`.
-> 5. The owner types all passwords. Never ask for, print, store or commit passwords, tokens, keys, connection strings or real patient data.
-> 6. The doctor uses the Windows dev laptop during clinic hours: no on-screen testing then, never stop her app; use the QA copy and the local fake-data server (section A).
-> 7. Answer the owner in plain English with short bullets; say exactly where any UI control goes before building it.
-> Then start with **section J, next step #1**: tell the owner what to click through in the QA copy for v0.2.46, help him run it, and fix what he finds on the handoff branch.
+| Question | Answer |
+|---|---|
+| Is `git push origin main v0.2.46` allowed, given "exact names only"? | **Yes.** It names exact refs. Only `--all` / `--tags` are banned. Pushing `main` then the tag separately is also fine. |
+| "4 commits ahead": against what? | Desktop **local `main` (`5a454cf`) is 4 commits ahead of GitHub `main` (`a0822d1`)**. The handoff branch is local `main` + more (about 14 commits ahead of GitHub `main`). Check both before the fast-forward merge (E-2). |
+| START-HERE section 2 said uploads go to "the latest visit" / "uncommitted". | **Fixed** in commit `01947a4`: section 2 now matches this file. Uploads belong to one visit. |
+| What if the Mac release job fails? | **Nothing is published.** The Mac job runs after Windows and force-pushes the feed only as its last step. If Windows fails, the Mac job never runs. No safe Mac compile check exists without publishing; don't run the workflow by hand. |
+| Did 25 Nov need backend changes? | **No.** The upload endpoints exist since 9 Sep 2026 (`0706866`). `bookingId` is required per file (that's what makes "one visit" work), with list-by-booking, type/size/signature checks, patient access checks and disk storage. The upload test ran against backend code identical to live `main`. |
+| Where are uploaded files stored, and how are names handled? | On the backend host's disk, `App_Data/uploads/<patientId>/<bookingId>/<unixMillis>-<name>`. The name is reduced to `[A-Za-z0-9._-]` (others become `_`), with a timestamp prefix (never overwrites). The original name and title are in the database. Deploys never delete the folder. No backups yet. |
+| Does the web need the template / pop-up fixes? | **No.** Those were Windows desktop crash fixes. Only the doctor features were copied to the web. |
+| Can the web run on the Windows PC? | No (Node 16). Use the Vercel Preview (test patient) or a machine with Node 20+. |
+| Can rollback install an older desktop version? | **No.** The updater only installs higher versions. Roll back by shipping v0.2.47 with the reverted code. |
+
+---
+
+## Starter prompt for Grok (the owner pastes this)
+
+> You are taking over a LIVE clinic system from Claude. Read before doing anything:
+> 1. In each repo — Project02-Desktop, Project02-be, Project02-fe (github.com/jessiejek) — check out `handoff/claude-to-grok-2026-11-25` and read `HANDOFF.md` fully (same file in each), then `Project02-Desktop/docs/handoff/00-START-HERE.md` and `Project02-Desktop/CLAUDE.md`.
+> 2. Section K answers the questions already asked; don't re-ask them. If something truly isn't covered, write "not found" and ask; don't guess.
+> 3. Don't redo finished work (B, E, F). Treat every rule in section I as fixed; ask the owner before changing any.
+> 4. Ship only when the owner says "ship" AND it is 11:00 PM–12:00 midnight Manila. NEVER 8:00 AM–9:00 PM. If he says "ship" at the wrong time, refuse, tell him the Manila time and when the window opens, and hold firm. Say the Manila time before every ship step.
+> 5. Push exact refs only; never `--all` or `--tags`. Never touch backend `main` for this release.
+> 6. The owner types all passwords. Never ask for, print, store or commit passwords, keys, tokens, connection strings or real patient data. A Vercel Preview uses the live API: test patients only.
+> 7. Don't test on screen while the doctor uses the Windows laptop; never stop her app; use the QA copy + local fake-data backend (section A).
+> 8. Plain English, short bullets, proof before "done". Say exactly where a UI control goes before building it.
+> Reply first with 5 short bullets: production state, what's waiting to ship, the ship rules, what is not verified yet, and next step #1. Then wait for the owner's OK and start with section J step 1.
