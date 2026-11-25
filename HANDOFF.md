@@ -117,6 +117,8 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
 | 4bf153a | 25 Nov | **Uploads tagged to ONE consultation**: `ChartFile.BookingId`; Lab Orders "Upload results" in the title bar + 75/25 split; chart visit "Results & files"; no uploads on dead visits; Reprint button in the left panel; "Patient chart" opens without the booking; review round 3 fixes | owner: "Nov 25 result stays in Nov 25" |
 | dddf74a | 25 Nov | All pop-ups close first, then answer, and can't be dismissed while sending (`ModalClose.cs`) | owner: "I asked you to fix those" |
 | c06a80b, 3c17dc2 … 895dceb, 01947a4 | 25 Nov | START-HERE + HANDOFF.md | docs |
+| 5560dd1 | 25 Nov (Grok) | START-HERE rule 8: say the Manila time before every ship step; never ask "are you sure?" | owner |
+| 2283986 | 25 Nov (Grok) | `PatientFileUpload.cs`: several files with no suggested title pre-fill **"Lab results <visit date>" / "Documents <visit date>"** (still editable; "(1 of 3)" per file). Same rule as the web. **Not compiled yet** (box is Linux): build-check on MacBoy + Windows QA copy | owner, J-1 finding |
 
 **Local `main` = `5a454cf`** (4 commits ahead of GitHub `main` `a0822d1`; never pushed). **Handoff branch = local `main` + everything after**, pushed.
 
@@ -146,6 +148,7 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
   - **25 Nov, on the handoff branch:**
     - **`2e42d58`:** the desktop's upload / Reprint features on the website.
     - **`682d9e2`:** web code review fixes (8 findings).
+    - **`4d033ac` (Grok, 25 Nov):** several files with no suggested title pre-fill "Lab results <visit date>" / "Documents <visit date>" (`lib/visit-upload.ts` `defaultUploadTitle`, same rule as the desktop); upload times shown in **Manila time** (`formatUploadedManila`, `timeZone: "Asia/Manila"`) in the Lab Orders "Uploaded results" panel and the chart's Results & files line (were raw UTC); 2 new tests.
     - Plus `HANDOFF.md` commits.
 
 ---
@@ -220,8 +223,8 @@ Release builds default to the live server address, with demo off.
 
 | Part | What ships | Branch / commits |
 |---|---|---|
-| Desktop v0.2.46 | `7665d5b, 43c28cc, 93409be, 5a454cf` (local `main`) + `e3b0478, 4bf153a, dddf74a` (code) + docs | `handoff/claude-to-grok-2026-11-25` (desktop) |
-| Web | `2e42d58` (features) + `682d9e2` (review fixes) + `HANDOFF.md` | `handoff/claude-to-grok-2026-11-25` (web) |
+| Desktop v0.2.46 | `7665d5b, 43c28cc, 93409be, 5a454cf` (local `main`) + `e3b0478, 4bf153a, dddf74a, 2283986` (code) + docs | `handoff/claude-to-grok-2026-11-25` (desktop) |
+| Web | `2e42d58` (features) + `682d9e2` (review fixes) + `4d033ac` (upload title + Manila times) + `HANDOFF.md` | `handoff/claude-to-grok-2026-11-25` (web) |
 | Backend | **nothing.** Don't merge or push its `main`: a push restarts the live server, and its branch only adds `HANDOFF.md` | — |
 
 **Held back on purpose:**
@@ -268,12 +271,12 @@ Release builds default to the live server address, with demo off.
 | Production (desktop v0.2.45, backend, web) | **Working, live.** |
 | Desktop: upload in Lab Orders, 75/25, chart files per visit, Reprint | Built; **the owner saw it in the QA copy and said "perfect"**. |
 | Desktop: review round 3 fixes, per-prescription print, 7 pop-up fixes, template fixes | Built, tests pass, **NOT clicked through on screen.** |
-| Web `2e42d58` + `682d9e2` | `tsc` clean; `src/lib/visit-upload.test.mjs` passes (run compiled on Node 16); 8 review findings fixed. **NOT seen in a browser yet.** |
+| Web `2e42d58` + `682d9e2` + `4d033ac` | **J-1 done 25 Nov on a LOCAL fake-data stack** (Linux box: backend Development + SQLite on :5055, web on :3000, web `main` on :3001 for comparison; never the live API or Preview). Passed: Lab Orders "Upload results" top right + 75/25; 1 then 3 files, pop-up can't close while sending; "Patient chart" opens in a new tab and the panel reloads on return; chart Results & files per visit; no Upload on a cancelled visit; Lab Results / Documents Visit column + Open; Reprint lists prescription / lab request / certificate; narrow window shows tests first. **Two fixes made** (`4d033ac`): pre-filled title for several files; Manila upload times (proof: API `2026-11-25T09:28:43Z` shows "Uploaded 2026-11-25 17:28", also in a UTC browser). Web unit tests (Node 24): 328 tests, 315 pass, **13 fail = exactly the same 13 as web `main`**; `tsc` clean. ESLint: 2 `react-hooks/set-state-in-effect` errors in `VisitFilesPanel.tsx` / chart `page.tsx` from `2e42d58`/`682d9e2` (not from `4d033ac`; Next build does not run ESLint). **Prescription 1 / 2 on the web could not be tested**: the server keeps ONE prescription group per visit (see open issues). |
 | Desktop tests (Windows) | `ClinicNode.Tests`: 467 pass, **11 fail** (`GoldenParityTests`, CRLF line endings on Windows — old), 6 skipped. `ClinicNode.Api.Tests`: 132 pass, **1 fail** (`PaperQueueTests.Offline_with_no_reserved_number…`, stale since reserved queue blocks were removed — old). |
 | Backend tests | 523 pass, 4 old queue-clash failures (old). |
 | Web tests | 13 old consultation-UI failures (old). ESLint and unit tests can't run on the Windows PC (Node 16). |
-| Mac build | Not tried with the 25 Nov changes; first tried during the release (all-or-nothing, see D). |
-| Known open issues | ~9 server **403s per page load** on some page (not identified); Mac print defaults to US Letter; two offline computers can issue the same queue number (flagged); web can't print the PTR; **no backups** (database or `App_Data/uploads`); no password-reset email; no uptime monitor; slow US host (6–9 s per request seen). |
+| Mac build | `dotnet build -f net10.0-maccatalyst` on the owner's Mac (MacBoy, **Xcode 27.2**): **0 errors** for the handoff branch **before** `2283986`. `2283986` (one C# expression) not built yet. Note the cloud release pins **Xcode 26.0** (D). |
+| Known open issues | ~9 server **403s per page load** on some page (not identified); Mac print defaults to US Letter; two offline computers can issue the same queue number (flagged); web can't print the PTR; **no backups** (database or `App_Data/uploads`); no password-reset email; no uptime monitor; slow US host (6–9 s per request seen).<br>**Old web bugs found in J-1 (also on web `main` bd0f449, NOT fixed in this release):**<br>1. **Rx print preview shows the strength after "Sig."**: chart → visit → "Print prescription" (or Reprint → Prescription) opens "Print Preview" with `1. Paracetamol #10 · Sig. 500mg 1 tab every 6 hours…`; the real printed form is right (`Sig. PO 1 tab every 6 hours…`). Code: `Sig. {item.dosage} {item.instruction}` in `doctor/patients/[id]/page.tsx` (since Sep 2026), same pattern in consultation2 View mode (`Sig. {rx.dosage} {rx.instruction}`), `PatientHistoryModal.tsx`, `patient/prescriptions/page.tsx`.<br>2. **"Consultation saved" shows the old fee**: walk-in New + medical certificate (booking fee ₱500) → consult → switch to "Follow-up visit" → fill notes, Rx, certificate, No follow-up → step 8 and the Review say **Charge ₱400** (Follow-up ₱350 + certificate ₱50) → Confirm & Complete → summary says **"Professional fee: Charge ₱500"**. The saved booking and payment are correct (₱400); only the summary line is wrong: it falls back to `booking.totalFee` loaded when the page opened (consultation2 `page.tsx`, Nov 20–21 code).<br>3. **Web chart "New Prescription" on a visit that already has a prescription REPLACES it** (`/doctor/patients/<id>/prescriptions/create?bookingId=…` → `PUT /api/prescription-groups/by-booking`, which keeps one group per visit and replaces its lines; no warning). Old code. So the web can never show "Prescription 1 / 2"; only a desktop's local copy can have two groups. |
 
 ---
 
@@ -427,6 +430,10 @@ Release builds default to the live server address, with demo off.
 | Does the web need the template / pop-up fixes? | **No.** Those were Windows desktop crash fixes. Only the doctor features were copied to the web. |
 | Can the web run on the Windows PC? | No (Node 16). Use the Vercel Preview (test patient) or a machine with Node 20+. |
 | Can rollback install an older desktop version? | **No.** The updater only installs higher versions. Roll back by shipping v0.2.47 with the reverted code. |
+| Was J-1 (web) done on the live Preview? | **No.** The owner said no: uploads can't be deleted (`PatientFilesController` has GET/POST only) and the live disk has no backup. J-1 ran on a local fake-data stack (F). |
+| Sig-shows-strength and ₱500-vs-₱400: new? | **Old.** Both happen on web `main` bd0f449 too, and the handoff commits don't touch that code. Listed in F; not fixed in this release. |
+| Several files, empty title? / Upload times in UTC? | Fixed: desktop `2283986`, web `4d033ac` (title "Lab results <date>" / "Documents <date>"); web shows Manila time. Desktop already showed local time. |
+| Mac build? | 0 errors on MacBoy (Xcode 27.2) before `2283986`; rebuild after it. |
 
 ---
 
