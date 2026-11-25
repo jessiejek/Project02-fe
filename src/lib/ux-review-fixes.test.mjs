@@ -88,9 +88,12 @@ test("dashboard: Assessment/Plan flag only when BOTH are blank (Complete does no
 //JJQR - AI (Nov 25, 2026) - GAV-2: the cut is now per date group (ATTENTION_GROUP_MAX_ROWS) and still says so
 test("dashboard: a date group cut short says so", () => {
   const src = dashboard();
-  assert.match(src, /g\.items\.length > ATTENTION_GROUP_MAX_ROWS/);
+  //JJQR - AI (2026-11-26) - why: owner (t79u): rows render through renderAttentionRows (today's card + each earlier date in "Earlier days");
+  // the date headers (aria-expanded) live in LeftoverQueue.tsx now
+  assert.match(src, /items\.length > ATTENTION_GROUP_MAX_ROWS/);
   assert.match(src, /more — view all/);
-  assert.match(src, /aria-expanded=\{open\}/);
+  assert.match(read("../components/queue/LeftoverQueue.tsx"), /aria-expanded=\{open\}/);
+  //JJQR - END
 });
 //JJQR - END
 

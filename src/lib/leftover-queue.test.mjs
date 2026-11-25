@@ -43,3 +43,21 @@ test("errors in plain words", () => {
   assert.equal(leftoverErrorText(405, ""), LEFTOVER_OLD_SERVER);
 });
 //JJQR - END
+
+//JJQR - AI (2026-11-26) - why: earlier days are their own groups (Queue + Needs attention per date), never mixed into today
+test("earlier days merge leftovers and Needs attention by date; today and future are never included", async () => {
+  const { earlierDays, isEarlierDayOpen, dayCountLabel } = await import("./leftover-queue.ts");
+  const g = groupLeftovers([e("a", "2026-11-24"), e("b", "2026-11-24"), e("c", "2026-11-22")], TODAY);
+  const days = earlierDays(g, [{ date: "2026-11-24", count: 1 }, { date: "2026-11-23", count: 2 }, { date: TODAY, count: 5 }, { date: "2026-11-26", count: 1 }], TODAY);
+  assert.deepEqual(days.map((d) => [d.header, d.countLabel, d.queue.length, d.attentionCount]), [
+    ["Tue, Nov 24", "2 in queue · 1 needs attention", 2, 1],
+    ["Mon, Nov 23", "2 need attention", 0, 2],
+    ["Sun, Nov 22", "1 in queue", 1, 0],
+  ]);
+  assert.equal(isEarlierDayOpen(days, "2026-11-24", {}), true);
+  assert.equal(isEarlierDayOpen(days, "2026-11-23", {}), false);
+  assert.equal(isEarlierDayOpen(days, "2026-11-24", { "2026-11-24": false }), false);
+  assert.equal(dayCountLabel(0, 0), "");
+  assert.deepEqual(earlierDays([], [], TODAY), []);
+});
+//JJQR - END

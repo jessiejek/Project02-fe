@@ -270,7 +270,8 @@ export default function StaffQueuePage() {
           </div>
         )}
         {/*JJQR - AI (2026-11-25) - why: GAV-4 — staff see the clinic's earlier-day patients not finished (same scope as this page's today queue; owner default, can change) */}
-        {!loading && <LeftoverQueue role="staff" onChanged={() => { void refresh(); }} className="!mt-0" />}
+        {/*JJQR - AI (2026-11-26) - why: owner (t78u): now its own "Earlier days" card under today's queue, one group per date (that day's Queue) //JJQR - END */}
+        {!loading && <LeftoverQueue role="staff" onChanged={() => { void refresh(); }} />}
         {/*JJQR - END */}
       </div>
 

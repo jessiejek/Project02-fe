@@ -82,6 +82,48 @@ export function isLeftoverOpen(groups: LeftoverGroup[], date: string, toggled: R
   return groups[0]?.date === date;
 }
 
+//JJQR - AI (2026-11-26) - why: owner (t78u/t79u) "yesterday's queue should not cross over TODAY's". Earlier days get their OWN section below today's
+// card: one collapsible group per earlier date ("Wed, Nov 25"), and under it that day's Queue (leftover rows) and that day's Needs attention.
+// earlierDays() merges the two by date; today and future dates never appear here. Most recent day open, older closed, a toggle wins.
+export interface EarlierDay {
+  date: string;
+  header: string; // "Wed, Nov 25"
+  countLabel: string; // "2 in queue · 1 needs attention"
+  queue: LeftoverEntry[];
+  attentionCount: number;
+}
+
+export function dayCountLabel(queue: number, attention: number): string {
+  const parts: string[] = [];
+  if (queue > 0) parts.push(`${queue} in queue`);
+  if (attention > 0) parts.push(`${attention} need${attention === 1 ? "s" : ""} attention`);
+  return parts.join(" · ");
+}
+
+export function earlierDays(leftovers: LeftoverGroup[], attention: { date: string; count: number }[], today: string): EarlierDay[] {
+  const byDate = new Map<string, { queue: LeftoverEntry[]; attentionCount: number }>();
+  for (const g of leftovers) {
+    if (!g.date || g.date >= today || g.items.length === 0) continue;
+    byDate.set(g.date, { queue: g.items, attentionCount: 0 });
+  }
+  for (const a of attention) {
+    if (!a.date || a.date >= today || a.count <= 0) continue;
+    const cur = byDate.get(a.date) ?? { queue: [], attentionCount: 0 };
+    cur.attentionCount += a.count;
+    byDate.set(a.date, cur);
+  }
+  return [...byDate.keys()].sort().reverse().map((date) => {
+    const d = byDate.get(date)!;
+    return { date, header: leftoverDay(date, today), countLabel: dayCountLabel(d.queue.length, d.attentionCount), queue: d.queue, attentionCount: d.attentionCount };
+  });
+}
+
+export function isEarlierDayOpen(days: EarlierDay[], date: string, toggled: Record<string, boolean>): boolean {
+  if (date in toggled) return toggled[date];
+  return days[0]?.date === date;
+}
+//JJQR - END
+
 function manilaTime(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return "";

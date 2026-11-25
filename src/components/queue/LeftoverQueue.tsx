@@ -2,10 +2,12 @@
 // above Needs attention: "⚠ Not finished on an earlier day · N patients", one group per visit date (most recent open), rows with the queue's columns
 // plus a date chip, and Continue (solid) · Move to today (outline) · Mark no-show (red link). Scope = the caller's existing today queue (the server
 // decides: a doctor's own, staff the clinic's). An older server without the endpoint → the section is simply not shown.
+//JJQR - AI (2026-11-26) - why: owner rejected the block INSIDE today's card (t78u "yesterday's queue should not cross over TODAY's"): it is now its own
+// "Earlier days" card below today's, one group per date with that day's Queue and Needs attention (t79u). //JJQR - END
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { buttonStyles } from "@/components/ui/buttonStyles";
 import { FormAlert } from "@/components/ui/FormAlert";
@@ -15,12 +17,20 @@ import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { todayManila } from "@/lib/clock";
 import { moveLeftoverToToday, queryLeftovers, updateQueueEntry } from "@/lib/data/queue";
-import { groupLeftovers, isLeftoverOpen, leftoverErrorText, leftoverStatus, leftoverTotal, LEFTOVER_GENERIC, patientsLabel, type LeftoverEntry } from "@/lib/leftover-queue";
+import { earlierDays, groupLeftovers, isEarlierDayOpen, leftoverErrorText, leftoverStatus, LEFTOVER_GENERIC, patientsLabel, type LeftoverEntry } from "@/lib/leftover-queue"; //JJQR - AI (2026-11-26) - why: per-day groups //JJQR - END
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 
 const SMALL = "!min-h-8 !px-sm !py-0 text-label-md whitespace-nowrap";
 
-export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" | "staff"; onChanged?: () => void; className?: string }) {
+//JJQR - AI (2026-11-26) - why: earlier days' Needs attention (doctor dashboard) goes under the same date group as that day's queue
+export interface EarlierAttention {
+  date: string;
+  count: number;
+  render: () => ReactNode;
+}
+//JJQR - END
+
+export function LeftoverQueue({ role, onChanged, className, attention }: { role: "doctor" | "staff"; onChanged?: () => void; className?: string; attention?: EarlierAttention[] }) {
   const [items, setItems] = useState<LeftoverEntry[]>([]);
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -42,7 +52,10 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
   useClinicHubEvent("PatientCheckedIn", load);
 
   const groups = groupLeftovers(items, today);
-  const total = leftoverTotal(groups);
+  //JJQR - AI (2026-11-26) - why: the card also shows when only earlier Needs attention items exist
+  const attentionTotal = (attention ?? []).reduce((n, a) => n + (a.date < today ? a.count : 0), 0);
+  const total = groups.reduce((n, g) => n + g.items.length, 0) + attentionTotal;
+  //JJQR - END
   if (total === 0 && !error && !note) return null;
 
   async function run(e: LeftoverEntry, work: () => Promise<string>) {
@@ -93,53 +106,55 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
     );
   };
 
-  // the table needs ~768px: in the narrow dashboard queue card (and on a phone) the rows are a compact list; switched by the CARD width (@container), not the screen
+  //JJQR - AI (2026-11-26) - why: owner (t78u/t79u) "yesterday's queue should not cross over TODAY's". This is now its OWN card ("Earlier days"), placed
+  // below today's card by each page, never inside it. One collapsible group per earlier date ("Wed, Nov 25"); inside it "Queue" (that day's unfinished
+  // patients, same row actions) and, on the doctor dashboard, "Needs attention" (that day's items, rendered by the page through `attention`).
+  // The table needs ~768px: in a narrow card (and on a phone) the rows are a compact list; switched by the CARD width (@container), not the screen.
+  const days = earlierDays(groups, (attention ?? []).map((a) => ({ date: a.date, count: a.count })), today);
+  const renderAttention = (date: string) => attention?.find((a) => a.date === date)?.render();
   return (
-    <section aria-label="Not finished on an earlier day" data-testid="leftover-queue" className={cn("@container mt-lg", className)}>
+    <section aria-label="Earlier days" data-testid="leftover-queue" className={cn("@container rounded-xl border border-outline-variant bg-surface-container-lowest p-md sm:p-lg", className)}>
       {note && <Toast variant="success" key={note} message={note} />}
+      <div className="mb-sm flex flex-wrap items-baseline justify-between gap-sm">
+        <h3 className="text-label-lg font-semibold text-on-surface">Earlier days</h3>
+        <span className="text-label-sm text-on-surface-variant">Not finished or not cleared on their own day · separate from today</span>
+      </div>
       {error && <div className="mb-sm"><FormAlert>{error}</FormAlert></div>}
-      {total > 0 && (
-        <>
-          <div className="flex min-h-10 items-center gap-sm rounded-t-lg border border-status-warning-border bg-status-warning-surface/50 px-md text-label-md font-semibold text-status-warning">
-            <span aria-hidden="true">⚠</span>
-            <span>Not finished on an earlier day · {patientsLabel(total)}</span>
-            <span className="ml-auto hidden text-label-sm font-normal @lg:inline">Date shown under each queue number</span>
-          </div>
-          <div className="overflow-hidden rounded-b-lg border border-t-0 border-status-warning-border bg-surface-container-lowest">
-            {groups.map((g, gi) => {
-              const open = isLeftoverOpen(groups, g.date, toggled);
-              return (
-                <div key={g.date} className={cn(gi > 0 && "border-t border-outline-variant/60")}>
-                  <button
-                    type="button"
-                    aria-expanded={open}
-                    onClick={() => setToggled((t) => ({ ...t, [g.date]: !open }))}
-                    className="flex min-h-9 w-full items-center gap-sm px-md text-left text-label-md font-semibold text-on-surface hover:bg-surface-container-low"
-                  >
-                    <span aria-hidden="true" className="w-3 text-on-surface-variant">{open ? "▾" : "▸"}</span>
-                    <span>{g.header}</span>
-                    <span className="ml-auto text-label-sm font-normal text-on-surface-variant">{g.countLabel}</span>
-                  </button>
-                  {open && (
-                    <>
-                      <ul className="divide-y divide-outline-variant/40 border-t border-outline-variant/40 @3xl:hidden">
-                        {g.items.map((e) => {
+      <div className="space-y-sm">
+        {days.map((d) => {
+          const open = isEarlierDayOpen(days, d.date, toggled);
+          return (
+            <div key={d.date} data-testid={`earlier-day-${d.date}`} className="overflow-hidden rounded-lg border border-outline-variant/60">
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setToggled((t) => ({ ...t, [d.date]: !open }))}
+                className="flex min-h-10 w-full items-center gap-sm bg-surface-container-low px-md text-left text-label-md font-semibold text-on-surface hover:bg-surface-container"
+              >
+                <span aria-hidden="true" className="w-3 text-on-surface-variant">{open ? "▾" : "▸"}</span>
+                <span>{d.header}</span>
+                <span className="ml-auto text-label-sm font-normal text-on-surface-variant">{d.countLabel}</span>
+              </button>
+              {open && (
+                <div className="divide-y divide-outline-variant/40 border-t border-outline-variant/40">
+                  {d.queue.length > 0 && (
+                    <div>
+                      <p className="px-md pb-xs pt-sm text-label-sm font-semibold text-on-surface-variant">Queue · {patientsLabel(d.queue.length)}</p>
+                      <ul className="divide-y divide-outline-variant/40 @3xl:hidden">
+                        {d.queue.map((e) => {
                           const st = leftoverStatus(e, today);
                           return (
                             <li key={e.booking_id} className="space-y-sm px-md py-sm" aria-busy={busyId === e.booking_id || undefined}>
-                              <div className="flex items-start justify-between gap-sm">
-                                <div className="min-w-0">
-                                  <p className="text-body-md font-semibold tabular-nums text-on-surface">{e.queue_number} · {e.patient_name}</p>
-                                  <p className="text-label-sm text-on-surface-variant">{e.visit_type === "FollowUp" ? "Follow-up" : "New"} · {st.pill} {st.since}</p>
-                                </div>
-                                <DateChip label={g.chip} />
+                              <div className="min-w-0">
+                                <p className="text-body-md font-semibold tabular-nums text-on-surface">{e.queue_number} · {e.patient_name}</p>
+                                <p className="text-label-sm text-on-surface-variant">{e.visit_type === "FollowUp" ? "Follow-up" : "New"} · {st.pill} {st.since}</p>
                               </div>
                               {actions(e)}
                             </li>
                           );
                         })}
                       </ul>
-                      <table className="hidden w-full table-fixed border-t border-outline-variant/40 @3xl:table">
+                      <table className="hidden w-full table-fixed @3xl:table">
                         <thead>
                           <tr className="bg-surface-container-low text-left text-label-sm text-on-surface-variant">
                             <th className="w-24 px-md py-xs font-medium">Queue</th>
@@ -150,14 +165,11 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-outline-variant/40 text-body-md text-on-surface">
-                          {g.items.map((e) => {
+                          {d.queue.map((e) => {
                             const st = leftoverStatus(e, today);
                             return (
                               <tr key={e.booking_id} className="align-middle" aria-busy={busyId === e.booking_id || undefined}>
-                                <td className="px-md py-sm">
-                                  <span className="block font-semibold tabular-nums">{e.queue_number}</span>
-                                  <DateChip label={g.chip} />
-                                </td>
+                                <td className="px-md py-sm font-semibold tabular-nums">{e.queue_number}</td>
                                 <td className="min-w-0 px-sm py-sm">
                                   <span className="block truncate font-semibold">{e.patient_name}</span>
                                   {e.patient_code && <span className="block truncate font-mono text-label-sm text-on-surface-variant">{e.patient_code}</span>}
@@ -173,14 +185,21 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
                           })}
                         </tbody>
                       </table>
-                    </>
+                    </div>
+                  )}
+                  {d.attentionCount > 0 && (
+                    <div>
+                      <p className="px-md pb-xs pt-sm text-label-sm font-semibold text-on-surface-variant">Needs attention · {d.attentionCount} item{d.attentionCount === 1 ? "" : "s"}</p>
+                      {renderAttention(d.date)}
+                    </div>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {/*JJQR - END */}
       <Modal
         isOpen={noShowTarget !== null}
         onClose={() => setNoShowTarget(null)}
@@ -201,7 +220,4 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
   );
 }
 
-function DateChip({ label }: { label: string }) {
-  return <span className="mt-xs inline-block rounded-sm border border-status-warning-border bg-status-warning-surface px-xs text-[11px] font-semibold leading-4 text-status-warning">{label}</span>;
-}
 //JJQR - END

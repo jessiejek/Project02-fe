@@ -23,11 +23,11 @@ import { queryDoctorEarnings, queryReport, type DoctorEarningsRow } from "@/lib/
 import { queryBookings } from "@/lib/data/bookings";
 import { queryDayStatus, setDayStatus as saveDayStatus } from "@/lib/data/scheduling";
 import { queryQueue, type QueueBoard } from "@/lib/data/queue";
-import { LeftoverQueue } from "@/components/queue/LeftoverQueue"; //JJQR - AI (2026-11-25) - why: GAV-4 leftover patients //JJQR - END
+import { LeftoverQueue, type EarlierAttention } from "@/components/queue/LeftoverQueue"; //JJQR - AI (2026-11-25) - why: GAV-4 leftover patients //JJQR - END
 import { queryConsultations, type ConsultationRow } from "@/lib/data/clinical";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 import { compareQueueNumbers, isPriorityQueueNumber } from "@/lib/queue-lane"; //JJQR - AI (Nov 21, 2026) - priority lane
-import { ATTENTION_GROUP_MAX_ROWS, attentionFrom, groupAttention, isGroupOpen, itemsLabel, MARK_RECEIVED_DETAIL, markReceivedQuestion, pesoLabel, type AttentionEntry } from "@/lib/attention-groups"; //JJQR - AI (Nov 25, 2026) - GAV-2 Needs attention by date
+import { ATTENTION_GROUP_MAX_ROWS, attentionFrom, groupAttention, itemsLabel, MARK_RECEIVED_DETAIL, markReceivedQuestion, pesoLabel, type AttentionEntry } from "@/lib/attention-groups"; //JJQR - AI (Nov 25, 2026) - GAV-2 Needs attention by date
 //JJQR - AI (Nov 25, 2026) - doctor "Mark received"
 import { Modal } from "@/components/ui/Modal";
 import { markReceivedByDoctor } from "@/lib/data/payments";
@@ -91,8 +91,7 @@ export default function DoctorDashboardPage() {
   // unpaid completed visits from earlier days (today's come from the queue board), and names for those days
   const [unpaidOlder, setUnpaidOlder] = useState<{ booking_id: string; patient_name: string; appointment_date: string; amount_due: number }[]>([]);
   const [bookingNames, setBookingNames] = useState<Record<string, string>>({});
-  // which date headers the doctor opened / closed (today starts open, older dates closed)
-  const [attentionToggled, setAttentionToggled] = useState<Record<string, boolean>>({});
+  //JJQR - AI (2026-11-26) - why: the date headers moved to the "Earlier days" card (LeftoverQueue keeps its own open / closed state) //JJQR - END
   //JJQR - AI (Nov 25, 2026) - doctor "Mark received" on a completed, unpaid row: the row being confirmed, saving flag (stops a double tap),
   // the confirm box's error, rows already marked (hidden at once, before the refresh lands) and the "marked received" note
   const [receiveTarget, setReceiveTarget] = useState<{ bookingId: string; name: string; amount: number } | null>(null);
@@ -450,7 +449,50 @@ export default function DoctorDashboardPage() {
       href: `/doctor/consultation2/${c.booking_id}?mode=view`,
     });
   const attentionGroups = groupAttention(attentionEntries, attentionToday);
-  const attentionCount = attentionGroups.reduce((n, g) => n + g.items.length, 0);
+  //JJQR - AI (2026-11-26) - why: owner (t79u): today's Needs attention stays in today's card; each earlier date's Needs attention moves under that date
+  // in the "Earlier days" card (with that day's queue). Same rows and actions as before, rendered by one function for both places.
+  const todayAttention = attentionGroups.find((g) => g.isToday);
+  const renderAttentionRows = (items: AttentionEntry[]) => (
+    <div>
+      {items.slice(0, ATTENTION_GROUP_MAX_ROWS).map((it) => (
+        <div key={it.key} className="flex flex-wrap items-center justify-between gap-sm border-t border-outline-variant/40 px-sm py-xs">
+          <div className="min-w-0">
+            <p className="text-body-md font-semibold text-on-surface">{it.name}</p>
+            <p className="text-body-sm text-on-surface">{it.what}</p>
+            {it.note && <p className="text-label-sm text-on-surface-variant">{it.note}</p>}
+          </div>
+          {/*JJQR - AI (Nov 25, 2026) - unpaid: "Mark received" opens a small confirm box (no navigation) */}
+          {it.kind === "unpaid" ? (
+            <Button
+              className="shrink-0"
+              disabled={receiving}
+              onClick={() => {
+                if (receiving) return;
+                setReceiveError("");
+                setReceiveTarget({ bookingId: it.key.slice("unpaid-".length), name: it.name, amount: it.amount ?? 0 });
+              }}
+            >
+              {it.action}
+            </Button>
+          ) : (
+            <Link href={it.href} className={buttonStyles("secondary", "shrink-0")}>
+              {it.action}
+            </Link>
+          )}
+          {/*JJQR - END */}
+        </div>
+      ))}
+      {items.length > ATTENTION_GROUP_MAX_ROWS && (
+        <Link href="/doctor/appointments" className="block border-t border-outline-variant/40 px-sm py-xs text-label-md font-semibold text-primary hover:underline">
+          +{items.length - ATTENTION_GROUP_MAX_ROWS} more — view all
+        </Link>
+      )}
+      </div>
+  );
+  const earlierAttention: EarlierAttention[] = attentionGroups
+    .filter((g) => !g.isToday)
+    .map((g) => ({ date: g.date, count: g.items.length, render: () => renderAttentionRows(g.items) }));
+  //JJQR - END
   //JJQR - END
   //JJQR - END
 
@@ -495,7 +537,10 @@ export default function DoctorDashboardPage() {
         {receivedNote && <Toast variant="success" key={receivedNote} message={receivedNote} />}
         {/*JJQR - END */}
 
-        <Card className="!p-md xl:col-start-1 xl:row-span-4 sm:!p-lg">
+        {/*JJQR - AI (2026-11-26) - why: today's card and the separate "Earlier days" card stack in the left column (the wrapper takes the old row-span) */}
+        <div className="flex min-w-0 flex-col gap-lg xl:col-start-1 xl:row-span-4">
+        {/*JJQR - END */}
+        <Card className="!p-md sm:!p-lg">
           <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
             <h3 className="text-label-lg font-semibold text-on-surface">Your patient queue</h3>
             <div className="flex flex-wrap gap-sm text-label-sm text-on-surface-variant">
@@ -535,74 +580,20 @@ export default function DoctorDashboardPage() {
             </div>
           )}
 
-          {/*JJQR - AI (2026-11-25) - why: GAV-4 (approved pro mockup): earlier-day patients not finished, below today's queue, above Needs attention */}
-          <LeftoverQueue role="doctor" onChanged={() => { void loadQueue(); }} />
-          {/*JJQR - END */}
-
-          {/*JJQR - AI (Nov 25, 2026) - GAV-2 (approved mockup): Needs attention grouped by visit date (Manila). "Today · Nov 25" first and open; older
-              dates are headers that open / close; an item not cleared on its day stays under that date. Each row names the patient and has its action. */}
-          {attentionCount > 0 && (
-            <div className="mt-sm space-y-xs border-t border-outline-variant/30 pt-sm">
+          {/*JJQR - AI (2026-11-26) - why: owner (t78u/t79u) "yesterday's queue should not cross over TODAY's". This card shows TODAY only: today's queue
+              above and today's Needs attention below (flat list). Earlier days (their unfinished queue + their Needs attention) are in the separate
+              "Earlier days" card under this one, one group per date. */}
+          {todayAttention && todayAttention.items.length > 0 && (
+            <div className="mt-sm space-y-xs border-t border-outline-variant/30 pt-sm" data-testid="today-attention">
               <div className="flex items-center justify-between gap-sm">
-                <p className="text-label-sm font-semibold text-on-surface-variant">Needs attention</p>
+                <p className="text-label-sm font-semibold text-on-surface-variant">Needs attention · Today</p>
                 <span className="rounded-full border border-status-warning-border bg-status-warning-surface px-sm text-label-sm font-semibold text-status-warning">
-                  {itemsLabel(attentionCount)}
+                  {itemsLabel(todayAttention.items.length)}
                 </span>
               </div>
-              {attentionGroups.map((g) => {
-                const open = isGroupOpen(g, attentionToggled);
-                return (
-                  <div key={g.date} className="overflow-hidden rounded-lg border border-outline-variant/60">
-                    <button
-                      type="button"
-                      aria-expanded={open}
-                      onClick={() => setAttentionToggled((t) => ({ ...t, [g.date]: !open }))}
-                      className="flex min-h-9 w-full items-center gap-sm bg-surface-container-low px-sm py-xs text-left text-label-md font-semibold text-on-surface hover:bg-surface-container"
-                    >
-                      <span aria-hidden="true" className="w-3 text-on-surface-variant">{open ? "▾" : "▸"}</span>
-                      <span>{g.header}</span>
-                      <span className="ml-auto text-label-sm font-normal text-on-surface-variant">{g.countLabel}</span>
-                    </button>
-                    {open && (
-                      <div>
-                        {g.items.slice(0, ATTENTION_GROUP_MAX_ROWS).map((it) => (
-                          <div key={it.key} className="flex flex-wrap items-center justify-between gap-sm border-t border-outline-variant/40 px-sm py-xs">
-                            <div className="min-w-0">
-                              <p className="text-body-md font-semibold text-on-surface">{it.name}</p>
-                              <p className="text-body-sm text-on-surface">{it.what}</p>
-                              {it.note && <p className="text-label-sm text-on-surface-variant">{it.note}</p>}
-                            </div>
-                            {/*JJQR - AI (Nov 25, 2026) - unpaid: "Mark received" opens a small confirm box (no navigation) */}
-                            {it.kind === "unpaid" ? (
-                              <Button
-                                className="shrink-0"
-                                disabled={receiving}
-                                onClick={() => {
-                                  if (receiving) return;
-                                  setReceiveError("");
-                                  setReceiveTarget({ bookingId: it.key.slice("unpaid-".length), name: it.name, amount: it.amount ?? 0 });
-                                }}
-                              >
-                                {it.action}
-                              </Button>
-                            ) : (
-                              <Link href={it.href} className={buttonStyles("secondary", "shrink-0")}>
-                                {it.action}
-                              </Link>
-                            )}
-                            {/*JJQR - END */}
-                          </div>
-                        ))}
-                        {g.items.length > ATTENTION_GROUP_MAX_ROWS && (
-                          <Link href="/doctor/appointments" className="block border-t border-outline-variant/40 px-sm py-xs text-label-md font-semibold text-primary hover:underline">
-                            +{g.items.length - ATTENTION_GROUP_MAX_ROWS} more — view all
-                          </Link>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              <div className="overflow-hidden rounded-lg border border-outline-variant/60 [&>div>div:first-child]:border-t-0">
+                {renderAttentionRows(todayAttention.items)}
+              </div>
             </div>
           )}
           {/*JJQR - END */}
@@ -634,6 +625,10 @@ export default function DoctorDashboardPage() {
           </Modal>
           {/*JJQR - END */}
         </Card>
+        {/*JJQR - AI (2026-11-26) - why: owner (t79u) "UNDER NOVEMBER 25 → Queue → list, → Needs attention → list": earlier days in their own card, below today's */}
+        <LeftoverQueue role="doctor" onChanged={() => { void loadQueue(); }} attention={earlierAttention} />
+        </div>
+        {/*JJQR - END */}
 
         <Card className="!p-md xl:col-start-2">
           <h3 className="mb-sm text-label-lg font-semibold text-on-surface">Availability</h3>
