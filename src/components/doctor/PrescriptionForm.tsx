@@ -18,7 +18,9 @@ import {
   updateRxTemplate,
   deleteRxTemplate,
   upsertRxGroupByBooking,
+  queryRxGroups, //JJQR - AI (2026-11-25) - check for a prescription already on the visit //JJQR - END
 } from "@/lib/data/clinical";
+import { needsRxReplaceConfirm, RX_REPLACE_QUESTION } from "@/lib/rx-replace"; //JJQR - AI (2026-11-25) - ask before replacing //JJQR - END
 import { queryClinicSettings } from "@/lib/data/admin";
 import { queryDoctorById } from "@/lib/data/doctors";
 import { queryPatientById } from "@/lib/data/patients";
@@ -850,6 +852,9 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
   const [saving, setSaving] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  //JJQR - AI (2026-11-25) - owner: "This visit already has a prescription. Replace it?" before a save would replace it
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  //JJQR - END
   const [toast, setToast] = useState<{ key: number; variant: ToastVariant; message: string } | null>(null);
   const [favorites, setFavorites] = useState<{ id: string; item: PrescriptionLineItem }[]>([]);
   const [templates, setTemplates] = useState<PrescriptionTemplate[]>([]);
@@ -1119,7 +1124,36 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
     setConfirmOpen(true);
   }
 
+  //JJQR - AI (2026-11-25) - owner: the server keeps one prescription per visit, so saving here REPLACED one made earlier (e.g. chart "New Prescription"
+  // on a visit that already has one). Check first; if there is one this form did not load, close this pop-up and ask (Cancel = nothing saved).
   async function confirmSave() {
+    if (!groupExistsRef.current && effectiveBookingId) {
+      setSaving(true);
+      let existing: Awaited<ReturnType<typeof queryRxGroups>>;
+      try {
+        existing = await queryRxGroups(null as never, { bookingId: effectiveBookingId });
+      } catch {
+        setSaving(false);
+        showToast("error", "Could not save the prescription. Try again.");
+        return;
+      }
+      setSaving(false);
+      if (needsRxReplaceConfirm(false, existing)) {
+        setConfirmOpen(false);
+        setReplaceOpen(true);
+        return;
+      }
+    }
+    await saveItems();
+  }
+
+  function replaceExisting() {
+    setReplaceOpen(false); // the pop-up closes first, then the save runs
+    void saveItems();
+  }
+  //JJQR - END
+
+  async function saveItems() {
     setSaving(true);
     try {
       const supabase = null as never;
@@ -1486,6 +1520,24 @@ function PrescriptionForm({ mode, patientName, patientId, doctorId, bookingId, g
       >
         <p className="text-body-md text-on-surface-variant">Are you sure you want to delete this template?</p>
       </Modal>
+
+      {/* //JJQR - AI (2026-11-25) - owner: ask before a save replaces the visit's existing prescription; Cancel = nothing saved */}
+      <Modal
+        isOpen={replaceOpen}
+        onClose={() => setReplaceOpen(false)}
+        title="Replace prescription?"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setReplaceOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={replaceExisting}>Replace</Button>
+          </>
+        }
+      >
+        <p className="text-body-md text-on-surface">{RX_REPLACE_QUESTION}</p>
+      </Modal>
+      {/* //JJQR - END */}
 
       <Modal
         isOpen={confirmOpen}
