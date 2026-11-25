@@ -19,6 +19,7 @@ import { FormAlert } from "@/components/ui/FormAlert";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import { inputStyles, labelStyles, hintStyles } from "@/components/ui/fieldStyles";
 import { formatClinicDate, formatClinicDateTime, formatClockTime, formatPeso } from "@/lib/format";
+import { isNoLongerUnpaid } from "@/lib/payment-conflict"; //JJQR - AI (Nov 25, 2026) - owner: second Record payment is refused //JJQR - END
 
 interface BookingView {
   id: string;
@@ -325,6 +326,10 @@ export default function StaffBookingDetailPage({ params }: { params: Promise<{ i
                   setReceiptOpen(true);
                 } catch (e) {
                   setPayError(e instanceof Error ? e.message : "Could not record the payment.");
+                  //JJQR - AI (Nov 25, 2026) - owner ("just trap the 2nd transaction"): someone else (e.g. the doctor's Mark received) recorded it first; the
+                  // server's 409 says "This visit is no longer unpaid (it was just recorded)." and the page reloads so it shows Paid
+                  if (isNoLongerUnpaid(e)) void load();
+                  //JJQR - END
                 } finally {
                   setPaySubmitting(false);
                 }
