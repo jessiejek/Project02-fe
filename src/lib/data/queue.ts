@@ -84,3 +84,29 @@ export async function updateQueueEntry(
 export async function cancelQueueEntry(bookingId: string, reason: string): Promise<void> {
   await api.put(`/api/queue/${bookingId}/cancel`, { reason });
 }
+
+//JJQR - AI (2026-11-25) - why: GAV-4 "Not finished on an earlier day" — earlier-day Waiting / On hold / In consultation visits (the caller's own
+// scope: a doctor's own, staff the clinic's) and "Move to today" (same booking, today's date, a new queue number; 409 if it already changed).
+export interface LeftoverBoard {
+  today: string;
+  from: string;
+  items: import("@/lib/leftover-queue").LeftoverEntry[];
+}
+
+export async function queryLeftovers(): Promise<LeftoverBoard> {
+  return api.get<LeftoverBoard>("/api/queue/leftovers");
+}
+
+export interface MovedToToday {
+  booking_id: string;
+  appointment_date: string;
+  queue_number: string;
+  status: string;
+  previous_date: string;
+  previous_queue_number: string;
+}
+
+export async function moveLeftoverToToday(bookingId: string): Promise<MovedToToday> {
+  return api.put<MovedToToday>(`/api/queue/${bookingId}/move-to-today`, {});
+}
+//JJQR - END

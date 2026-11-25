@@ -16,6 +16,7 @@ import { Icon } from "@/components/ui/Icon";
 import { buttonStyles } from "@/components/ui/buttonStyles";
 import { formatPeso } from "@/lib/format";
 import { queryQueue, updateQueueEntry, cancelQueueEntry, type QueueBoard, type QueueEntry } from "@/lib/data/queue";
+import { LeftoverQueue } from "@/components/queue/LeftoverQueue"; //JJQR - AI (2026-11-25) - why: GAV-4 leftover patients //JJQR - END
 import { ApiError } from "@/lib/api/client";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 import { isPriorityQueueNumber } from "@/lib/queue-lane"; //JJQR - AI (Nov 21, 2026) - priority lane
@@ -268,6 +269,9 @@ export default function StaffQueuePage() {
             </div>
           </div>
         )}
+        {/* //JJQR - AI (2026-11-25) - why: GAV-4 — staff see the clinic's earlier-day patients not finished (same scope as this page's today queue; owner default, can change) */}
+        {!loading && <LeftoverQueue role="staff" onChanged={() => { void refresh(); }} className="!mt-0" />}
+        {/* //JJQR - END */}
       </div>
 
       <Modal
