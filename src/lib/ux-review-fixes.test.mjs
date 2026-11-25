@@ -57,8 +57,10 @@ test("followUpViewLine: dated with no reason has no dangling dash; none says so"
 test("dashboard: every Needs attention row names the patient (no more identical rows)", () => {
   const src = dashboard();
   assert.match(src, /const attentionName = /);
-  assert.match(src, /attentionName\(c\.booking_id\)\} — Assessment and Plan are blank/);
-  assert.match(src, /attentionName\(c\.booking_id\)\} — follow-up due today/);
+  //JJQR - AI (Nov 25, 2026) - GAV-2: rows are now built as entries (name + what) and grouped by date
+  assert.match(src, /name: attentionName\(c\.booking_id\),\s+what: "Finish chart: Assessment and Plan are blank"/);
+  assert.match(src, /name: attentionName\(c\.booking_id\),\s+what: "Follow-up due today"/);
+  //JJQR - END
   // The old nameless rows are gone.
   assert.equal(src.includes(">Chart missing Assessment/Plan<"), false);
   assert.equal(src.includes(">Follow-up due today<"), false);
@@ -83,13 +85,14 @@ test("dashboard: Assessment/Plan flag only when BOTH are blank (Complete does no
   assert.equal(/assessment|plan/i.test(gate), false);
 });
 
-test("dashboard: lists cut at 5 say so for charts and follow-ups, like the unpaid list", () => {
+//JJQR - AI (Nov 25, 2026) - GAV-2: the cut is now per date group (ATTENTION_GROUP_MAX_ROWS) and still says so
+test("dashboard: a date group cut short says so", () => {
   const src = dashboard();
-  assert.match(src, /consultationsToday\.length > 5/);
-  assert.match(src, /followUpsDueToday\.length > 5/);
-  assert.match(src, /more charts to finish — view all/);
-  assert.match(src, /more follow-ups due — view all/);
+  assert.match(src, /g\.items\.length > ATTENTION_GROUP_MAX_ROWS/);
+  assert.match(src, /more — view all/);
+  assert.match(src, /aria-expanded=\{open\}/);
 });
+//JJQR - END
 
 test("ConsultationRow carries the follow-up reason so PRN can be told apart", () => {
   const src = read("./data/clinical.ts");

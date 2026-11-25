@@ -26,6 +26,7 @@ import { queryQueue, type QueueBoard } from "@/lib/data/queue";
 import { queryConsultations, type ConsultationRow } from "@/lib/data/clinical";
 import { useClinicHubEvent } from "@/lib/realtime/clinicHub";
 import { compareQueueNumbers, isPriorityQueueNumber } from "@/lib/queue-lane"; //JJQR - AI (Nov 21, 2026) - priority lane
+import { ATTENTION_GROUP_MAX_ROWS, attentionFrom, groupAttention, isGroupOpen, itemsLabel, type AttentionEntry } from "@/lib/attention-groups"; //JJQR - AI (Nov 25, 2026) - GAV-2 Needs attention by date
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
 
@@ -78,7 +79,14 @@ export default function DoctorDashboardPage() {
   const [customError, setCustomError] = useState(false);
 
   const [board, setBoard] = useState<QueueBoard>(EMPTY_BOARD);
-  const [consultationsToday, setConsultationsToday] = useState<ConsultationRow[]>([]);
+  //JJQR - AI (Nov 25, 2026) - GAV-2: charts left blank on an earlier day stay listed under their date (was today only)
+  const [chartsToFinish, setChartsToFinish] = useState<ConsultationRow[]>([]);
+  // unpaid completed visits from earlier days (today's come from the queue board), and names for those days
+  const [unpaidOlder, setUnpaidOlder] = useState<{ booking_id: string; patient_name: string; appointment_date: string; amount_due: number }[]>([]);
+  const [bookingNames, setBookingNames] = useState<Record<string, string>>({});
+  // which date headers the doctor opened / closed (today starts open, older dates closed)
+  const [attentionToggled, setAttentionToggled] = useState<Record<string, boolean>>({});
+  //JJQR - END
   const [followUpsDueToday, setFollowUpsDueToday] = useState<ConsultationRow[]>([]);
 
   // Clinic Overview — the same admin-dashboard stats (Admin Dashboard's
@@ -103,8 +111,9 @@ export default function DoctorDashboardPage() {
     // ever recorded just to show 20 rows.
     const windowStart = [monthStart, addDaysToDate(today, -31)].sort()[0];
     try {
+      const unpaidOlderRows = queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits"); //JJQR - AI (Nov 25, 2026) - one fetch, also used for the older Needs attention dates //JJQR - END
       const [unpaidRes, followUpsRes, recent] = await Promise.all([
-        queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits").then((rows) =>
+        unpaidOlderRows.then((rows) =>
           rows.filter((r) => (r.doctor_id as string) === meDoctorId && (r.appointment_date as string) >= monthStart),
         ),
         queryReport<Record<string, unknown>>(supabase, "v_pending_follow_ups").then((rows) =>
@@ -129,6 +138,20 @@ export default function DoctorDashboardPage() {
       setOnHoldThisMonth(monthBookings.filter((b) => b.status === "OnHold").length);
       setUnpaidCompletedMonth(unpaidRes.length);
       setFollowUpsDue7Days(followUpsRes.length);
+      //JJQR - AI (Nov 25, 2026) - GAV-2: earlier days' unpaid visits stay in Needs attention under their date (same report, last ATTENTION_DAYS_BACK days)
+      const attentionStart = attentionFrom(today);
+      setUnpaidOlder(
+          (await unpaidOlderRows)
+            .filter((r) => (r.doctor_id as string) === meDoctorId && (r.appointment_date as string) >= attentionStart && (r.appointment_date as string) < today)
+            .map((r) => ({
+              booking_id: r.booking_id as string,
+              patient_name: (r.patient_name as string) ?? "",
+              appointment_date: r.appointment_date as string,
+              amount_due: Number(r.amount_due) || 0,
+            })),
+      );
+      setBookingNames(Object.fromEntries(recent.filter((b) => b.patients).map((b) => [b.booking_id, `${b.patients!.first_name} ${b.patients!.last_name}`])));
+      //JJQR - END
 
       setRecentBookings(
         [...recent]
@@ -165,10 +188,13 @@ export default function DoctorDashboardPage() {
     const today = todayManila();
     try {
       const rows = await queryConsultations(supabase, { doctorId: meDoctorId });
-      setConsultationsToday(
+      //JJQR - AI (Nov 25, 2026) - GAV-2: also earlier days (last ATTENTION_DAYS_BACK days), shown under their own date
+      const from = attentionFrom(today);
+      //JJQR - END
+      setChartsToFinish(
         rows.filter(
           //JJQR - AI (Nov 20, 2026) - Complete does not require Assessment/Plan, so only flag a chart where BOTH are blank (one filled in is a finished chart)
-          (c) => c.bookings?.appointment_date === today && c.status === "Completed" && !c.assessment?.trim() && !c.plan?.trim(),
+          (c) => (c.bookings?.appointment_date ?? "") >= from && (c.bookings?.appointment_date ?? "") <= today && c.status === "Completed" && !c.assessment?.trim() && !c.plan?.trim(),
           //JJQR - END
         ),
       );
@@ -176,7 +202,7 @@ export default function DoctorDashboardPage() {
       setFollowUpsDueToday(rows.filter((c) => c.follow_ups?.follow_up_date === today && !isPrnFollowUp(c.follow_ups)));
       //JJQR - END
     } catch {
-      setConsultationsToday([]);
+      setChartsToFinish([]);
       setFollowUpsDueToday([]);
     }
   }, [meDoctorId]);
@@ -339,7 +365,47 @@ export default function DoctorDashboardPage() {
   const unpaidCompleted = board.items.filter((e) => e.status === "Completed" && Number(e.amount_due) > 0);
   //JJQR - AI (Nov 20, 2026) - the consultation list has no patient names; the queue board does, keyed by booking, so every "Needs attention" row can say WHO
   const patientNameByBooking = new Map(board.items.map((e) => [e.booking_id, e.patient_name]));
-  const attentionName = (bookingId: string) => patientNameByBooking.get(bookingId)?.trim() || "A patient";
+  const attentionName = (bookingId: string) => patientNameByBooking.get(bookingId)?.trim() || bookingNames[bookingId]?.trim() || "A patient";
+  //JJQR - AI (Nov 25, 2026) - GAV-2 (approved mockup): one list, grouped by visit date; today first and open, older dates collapsible
+  const attentionToday = todayManila();
+  const attentionEntries: AttentionEntry[] = [
+    ...unpaidCompleted.map((e) => ({ booking_id: e.booking_id, patient_name: e.patient_name, appointment_date: attentionToday, amount_due: Number(e.amount_due) })),
+    ...unpaidOlder,
+  ].map((u) => ({
+    key: `unpaid-${u.booking_id}`,
+    kind: "unpaid" as const,
+    date: u.appointment_date,
+    name: u.patient_name?.trim() || attentionName(u.booking_id),
+    what: `Record payment ₱${u.amount_due}`,
+    note: "Completed, unpaid",
+    action: "View appointment",
+    href: `/doctor/appointments/${u.booking_id}`,
+  }));
+  for (const c of chartsToFinish)
+    attentionEntries.push({
+      key: `chart-${c.consultation_id}`,
+      kind: "chart",
+      date: c.bookings?.appointment_date ?? "",
+      name: attentionName(c.booking_id),
+      what: "Finish chart: Assessment and Plan are blank",
+      note: "Completed visit",
+      action: "Finish chart",
+      href: `/doctor/consultation2/${c.booking_id}?mode=amend`,
+    });
+  for (const c of followUpsDueToday)
+    attentionEntries.push({
+      key: `followup-${c.consultation_id}`,
+      kind: "followup",
+      date: attentionToday,
+      name: attentionName(c.booking_id),
+      what: "Follow-up due today",
+      note: c.follow_ups?.reason?.trim() ?? "",
+      action: "View chart",
+      href: `/doctor/consultation2/${c.booking_id}?mode=view`,
+    });
+  const attentionGroups = groupAttention(attentionEntries, attentionToday);
+  const attentionCount = attentionGroups.reduce((n, g) => n + g.items.length, 0);
+  //JJQR - END
   //JJQR - END
 
   const prevMonthEntry = earnings.find((e) => e.period === previousMonth(currentMonth));
@@ -420,66 +486,57 @@ export default function DoctorDashboardPage() {
             </div>
           )}
 
-          {(unpaidCompleted.length > 0 || consultationsToday.length > 0 || followUpsDueToday.length > 0) && (
+          {/*JJQR - AI (Nov 25, 2026) - GAV-2 (approved mockup): Needs attention grouped by visit date (Manila). "Today · Nov 25" first and open; older
+              dates are headers that open / close; an item not cleared on its day stays under that date. Each row names the patient and has its action. */}
+          {attentionCount > 0 && (
             <div className="mt-sm space-y-xs border-t border-outline-variant/30 pt-sm">
-              <p className="text-label-sm font-semibold text-on-surface-variant">Needs attention</p>
-              {unpaidCompleted.slice(0, 5).map((e) => (
-                <Link
-                  key={`unpaid-${e.booking_id}`}
-                  href={`/doctor/appointments/${e.booking_id}`}
-                  className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
-                >
-                  <span className="text-body-sm text-on-surface">{e.patient_name} — completed, unpaid</span>
-                  <span className="text-label-sm text-on-surface-variant">₱{e.amount_due} due</span>
-                </Link>
-              ))}
-              {/* JJQR - AI (Nov 20, 2026) - B-41: say so when the list is cut at 5, and link to the full list */}
-              {unpaidCompleted.length > 5 && (
-                <Link href="/doctor/appointments" className="block rounded-lg px-sm py-xs text-label-md font-medium text-primary hover:bg-surface-container-low">
-                  +{unpaidCompleted.length - 5} more unpaid visits — view all
-                </Link>
-              )}
-              {/* JJQR - END */}
-              {consultationsToday.slice(0, 5).map((c) => (
-                <Link
-                  key={`incomplete-${c.consultation_id}`}
-                  href={`/doctor/consultation2/${c.booking_id}?mode=amend`}
-                  className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
-                >
-                  {/*JJQR - AI (Nov 20, 2026) - name the patient */}
-                  <span className="text-body-sm text-on-surface">{attentionName(c.booking_id)} — Assessment and Plan are blank</span>
-                  {/*JJQR - END */}
-                  <span className="text-label-sm text-on-surface-variant">Finish chart</span>
-                </Link>
-              ))}
-              {/*JJQR - AI (Nov 20, 2026) - say so when a list is cut at 5 (same as the unpaid list) */}
-              {consultationsToday.length > 5 && (
-                <Link href="/doctor/appointments" className="block rounded-lg px-sm py-xs text-label-md font-medium text-primary hover:bg-surface-container-low">
-                  +{consultationsToday.length - 5} more charts to finish — view all
-                </Link>
-              )}
-              {/*JJQR - END */}
-              {followUpsDueToday.slice(0, 5).map((c) => (
-                <Link
-                  key={`followup-${c.consultation_id}`}
-                  href={`/doctor/consultation2/${c.booking_id}?mode=view`}
-                  className="flex items-center justify-between rounded-lg border border-outline-variant px-sm py-xs hover:bg-surface-container-low"
-                >
-                  {/*JJQR - AI (Nov 20, 2026) - name the patient */}
-                  <span className="text-body-sm text-on-surface">{attentionName(c.booking_id)} — follow-up due today</span>
-                  {/*JJQR - END */}
-                  <span className="text-label-sm text-on-surface-variant">View chart</span>
-                </Link>
-              ))}
-              {/*JJQR - AI (Nov 20, 2026) */}
-              {followUpsDueToday.length > 5 && (
-                <Link href="/doctor/appointments" className="block rounded-lg px-sm py-xs text-label-md font-medium text-primary hover:bg-surface-container-low">
-                  +{followUpsDueToday.length - 5} more follow-ups due — view all
-                </Link>
-              )}
-              {/*JJQR - END */}
+              <div className="flex items-center justify-between gap-sm">
+                <p className="text-label-sm font-semibold text-on-surface-variant">Needs attention</p>
+                <span className="rounded-full border border-status-warning-border bg-status-warning-surface px-sm text-label-sm font-semibold text-status-warning">
+                  {itemsLabel(attentionCount)}
+                </span>
+              </div>
+              {attentionGroups.map((g) => {
+                const open = isGroupOpen(g, attentionToggled);
+                return (
+                  <div key={g.date} className="overflow-hidden rounded-lg border border-outline-variant/60">
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => setAttentionToggled((t) => ({ ...t, [g.date]: !open }))}
+                      className="flex min-h-9 w-full items-center gap-sm bg-surface-container-low px-sm py-xs text-left text-label-md font-semibold text-on-surface hover:bg-surface-container"
+                    >
+                      <span aria-hidden="true" className="w-3 text-on-surface-variant">{open ? "▾" : "▸"}</span>
+                      <span>{g.header}</span>
+                      <span className="ml-auto text-label-sm font-normal text-on-surface-variant">{g.countLabel}</span>
+                    </button>
+                    {open && (
+                      <div>
+                        {g.items.slice(0, ATTENTION_GROUP_MAX_ROWS).map((it) => (
+                          <div key={it.key} className="flex flex-wrap items-center justify-between gap-sm border-t border-outline-variant/40 px-sm py-xs">
+                            <div className="min-w-0">
+                              <p className="text-body-md font-semibold text-on-surface">{it.name}</p>
+                              <p className="text-body-sm text-on-surface">{it.what}</p>
+                              {it.note && <p className="text-label-sm text-on-surface-variant">{it.note}</p>}
+                            </div>
+                            <Link href={it.href} className={buttonStyles(it.kind === "unpaid" ? "primary" : "secondary", "shrink-0")}>
+                              {it.action}
+                            </Link>
+                          </div>
+                        ))}
+                        {g.items.length > ATTENTION_GROUP_MAX_ROWS && (
+                          <Link href="/doctor/appointments" className="block border-t border-outline-variant/40 px-sm py-xs text-label-md font-semibold text-primary hover:underline">
+                            +{g.items.length - ATTENTION_GROUP_MAX_ROWS} more — view all
+                          </Link>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
+          {/*JJQR - END */}
         </Card>
 
         <Card className="!p-md xl:col-start-2">
