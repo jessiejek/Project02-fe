@@ -93,8 +93,9 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
     );
   };
 
+  // the table needs ~768px: in the narrow dashboard queue card (and on a phone) the rows are a compact list; switched by the CARD width (@container), not the screen
   return (
-    <section aria-label="Not finished on an earlier day" data-testid="leftover-queue" className={cn("mt-lg", className)}>
+    <section aria-label="Not finished on an earlier day" data-testid="leftover-queue" className={cn("@container mt-lg", className)}>
       {note && <Toast variant="success" key={note} message={note} />}
       {error && <div className="mb-sm"><FormAlert>{error}</FormAlert></div>}
       {total > 0 && (
@@ -102,7 +103,7 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
           <div className="flex min-h-10 items-center gap-sm rounded-t-lg border border-status-warning-border bg-status-warning-surface/50 px-md text-label-md font-semibold text-status-warning">
             <span aria-hidden="true">⚠</span>
             <span>Not finished on an earlier day · {patientsLabel(total)}</span>
-            <span className="ml-auto hidden text-label-sm font-normal sm:inline">Date shown under each queue number</span>
+            <span className="ml-auto hidden text-label-sm font-normal @lg:inline">Date shown under each queue number</span>
           </div>
           <div className="overflow-hidden rounded-b-lg border border-t-0 border-status-warning-border bg-surface-container-lowest">
             {groups.map((g, gi) => {
@@ -121,7 +122,7 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
                   </button>
                   {open && (
                     <>
-                      <ul className="divide-y divide-outline-variant/40 border-t border-outline-variant/40 md:hidden">
+                      <ul className="divide-y divide-outline-variant/40 border-t border-outline-variant/40 @3xl:hidden">
                         {g.items.map((e) => {
                           const st = leftoverStatus(e, today);
                           return (
@@ -138,13 +139,13 @@ export function LeftoverQueue({ role, onChanged, className }: { role: "doctor" |
                           );
                         })}
                       </ul>
-                      <table className="hidden w-full table-fixed border-t border-outline-variant/40 md:table">
+                      <table className="hidden w-full table-fixed border-t border-outline-variant/40 @3xl:table">
                         <thead>
                           <tr className="bg-surface-container-low text-left text-label-sm text-on-surface-variant">
                             <th className="w-24 px-md py-xs font-medium">Queue</th>
                             <th className="px-sm py-xs font-medium">Patient</th>
                             <th className="w-20 px-sm py-xs font-medium">Visit</th>
-                            <th className="w-40 px-sm py-xs font-medium">Status</th>
+                            <th className="w-44 px-sm py-xs font-medium">Status</th>
                             <th className="w-[300px] px-md py-xs text-right font-medium">Actions</th>
                           </tr>
                         </thead>
