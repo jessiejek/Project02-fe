@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { buttonStyles } from "@/components/ui/buttonStyles";
 import { addDaysToDate, previousMonth, todayManila } from "@/lib/clock";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"; //JJQR - AI (Nov 25, 2026) - code review: useRef for the Mark received double-click guard //JJQR - END
 import { DoctorPageHeader } from "@/components/doctor/DoctorPageHeader";
 import { visitDate } from "@/components/doctor/appointments/model";
 //JJQR - AI (Nov 20, 2026)
@@ -30,6 +30,8 @@ import { ATTENTION_GROUP_MAX_ROWS, attentionFrom, groupAttention, isGroupOpen, i
 //JJQR - AI (Nov 25, 2026) - doctor "Mark received"
 import { Modal } from "@/components/ui/Modal";
 import { markReceivedByDoctor } from "@/lib/data/payments";
+import { ApiError } from "@/lib/api/client";
+import { MARK_RECEIVED_GENERIC, markReceivedErrorText } from "@/lib/attention-groups";
 //JJQR - END
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH")}`;
@@ -97,6 +99,7 @@ export default function DoctorDashboardPage() {
   const [receiveError, setReceiveError] = useState("");
   const [receivedIds, setReceivedIds] = useState<string[]>([]);
   const [receivedNote, setReceivedNote] = useState("");
+  const receivingRef = useRef(false); // code review: same-tick double-click guard (state updates land only after a re-render)
   //JJQR - END
   //JJQR - END
   const [followUpsDueToday, setFollowUpsDueToday] = useState<ConsultationRow[]>([]);
@@ -125,7 +128,7 @@ export default function DoctorDashboardPage() {
     try {
       const unpaidOlderRows = queryReport<Record<string, unknown>>(supabase, "v_unpaid_completed_visits"); //JJQR - AI (Nov 25, 2026) - one fetch, also used for the older Needs attention dates //JJQR - END
       const [unpaidRes, followUpsRes, recent] = await Promise.all([
-        unpaidOlderRows.then((rows) =>
+        unpaidOlderRows.then((rows) => //JJQR - AI (Nov 25, 2026) - GAV-2: reuses the one report fetch above //JJQR - END
           rows.filter((r) => (r.doctor_id as string) === meDoctorId && (r.appointment_date as string) >= monthStart),
         ),
         queryReport<Record<string, unknown>>(supabase, "v_pending_follow_ups").then((rows) =>
@@ -160,7 +163,8 @@ export default function DoctorDashboardPage() {
               patient_name: (r.patient_name as string) ?? "",
               appointment_date: r.appointment_date as string,
               amount_due: Number(r.amount_due) || 0,
-            })),
+            }))
+            .filter((r) => r.amount_due > 0), //JJQR - AI (Nov 25, 2026) - code review: like today's rows, nothing due = not listed (no "₱0 due") //JJQR - END
       );
       setBookingNames(Object.fromEntries(recent.filter((b) => b.patients).map((b) => [b.booking_id, `${b.patients!.first_name} ${b.patients!.last_name}`])));
       //JJQR - END
@@ -203,7 +207,7 @@ export default function DoctorDashboardPage() {
       //JJQR - AI (Nov 25, 2026) - GAV-2: also earlier days (last ATTENTION_DAYS_BACK days), shown under their own date
       const from = attentionFrom(today);
       //JJQR - END
-      setChartsToFinish(
+      setChartsToFinish( //JJQR - AI (Nov 25, 2026) - GAV-2: was consultationsToday (today only); now the last ATTENTION_DAYS_BACK days //JJQR - END
         rows.filter(
           //JJQR - AI (Nov 20, 2026) - Complete does not require Assessment/Plan, so only flag a chart where BOTH are blank (one filled in is a finished chart)
           (c) => (c.bookings?.appointment_date ?? "") >= from && (c.bookings?.appointment_date ?? "") <= today && c.status === "Completed" && !c.assessment?.trim() && !c.plan?.trim(),
@@ -214,7 +218,7 @@ export default function DoctorDashboardPage() {
       setFollowUpsDueToday(rows.filter((c) => c.follow_ups?.follow_up_date === today && !isPrnFollowUp(c.follow_ups)));
       //JJQR - END
     } catch {
-      setChartsToFinish([]);
+      setChartsToFinish([]); //JJQR - AI (Nov 25, 2026) - GAV-2 rename //JJQR - END
       setFollowUpsDueToday([]);
     }
   }, [meDoctorId]);
@@ -384,7 +388,8 @@ export default function DoctorDashboardPage() {
   // waived, already recorded, offline) is shown in the box in plain words and the row stays
   const confirmReceived = async () => {
     const target = receiveTarget;
-    if (!target || receiving) return;
+    if (!target || receiving || receivingRef.current) return;
+    receivingRef.current = true; //JJQR - AI (Nov 25, 2026) - code review: a second click before React re-renders must not send a second request //JJQR - END
     setReceiving(true);
     setReceiveError("");
     try {
@@ -395,11 +400,13 @@ export default function DoctorDashboardPage() {
       void loadQueue();
       void loadClinicOverview();
     } catch (e) {
-      const msg = e instanceof Error && e.message && !/^API \d+$/.test(e.message) ? e.message : "";
-      setReceiveError(msg || "Couldn't mark it received. Check the connection and try again.");
+      //JJQR - AI (Nov 25, 2026) - code review: an old server (no endpoint) or a 403 came back as "Not Found"/"Forbidden"; say it in plain words
+      setReceiveError(e instanceof ApiError ? markReceivedErrorText(e.status, e.body) : MARK_RECEIVED_GENERIC);
+      //JJQR - END
       void loadQueue();
       void loadClinicOverview();
     } finally {
+      receivingRef.current = false; //JJQR - AI (Nov 25, 2026) - code review //JJQR - END
       setReceiving(false);
     }
   };

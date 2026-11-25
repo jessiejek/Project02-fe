@@ -91,4 +91,17 @@ export function markReceivedQuestion(amount: number): string {
   return `Mark ${pesoLabel(amount)} received in cash?`;
 }
 export const MARK_RECEIVED_DETAIL = "Recorded as paid in cash for the exact amount, with no OR number, under your name.";
+//JJQR - AI (Nov 25, 2026) - code review: plain words when Mark received is refused. The new server always sends a message (amount changed, waived, already
+// recorded, visit not found); a 404/405 WITHOUT one means the clinic server is older and has no Mark received yet; 403 has no body (not your visit).
+export const MARK_RECEIVED_OLD_SERVER = "Mark received needs the updated clinic server. Record the payment at the front desk for now.";
+export const MARK_RECEIVED_NOT_YOURS = "Only the visit's own doctor can mark it received.";
+export const MARK_RECEIVED_GENERIC = "Couldn't mark it received. Check the connection and try again.";
+export function markReceivedErrorText(status: number | undefined, body: unknown): string {
+  const message = body && typeof body === "object" && typeof (body as Record<string, unknown>).message === "string" ? ((body as Record<string, unknown>).message as string).trim() : "";
+  if (message) return message;
+  if (status === 404 || status === 405) return MARK_RECEIVED_OLD_SERVER;
+  if (status === 403) return MARK_RECEIVED_NOT_YOURS;
+  return MARK_RECEIVED_GENERIC;
+}
+//JJQR - END
 //JJQR - END

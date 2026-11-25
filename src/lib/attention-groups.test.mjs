@@ -48,3 +48,17 @@ test("Mark received question names the exact peso amount", () => {
   assert.equal(pesoLabel(450.5), "₱450.50");
 });
 //JJQR - END
+
+//JJQR - AI (Nov 25, 2026) - code review: Mark received refusals in plain words
+import { markReceivedErrorText, MARK_RECEIVED_OLD_SERVER, MARK_RECEIVED_NOT_YOURS, MARK_RECEIVED_GENERIC } from "./attention-groups.ts";
+
+test("Mark received: server message wins; old server, 403 and no answer get plain words", () => {
+  assert.equal(markReceivedErrorText(409, { error: "amount_changed", message: "The amount due is now ₱500, not ₱450. Check the visit and try again." }), "The amount due is now ₱500, not ₱450. Check the visit and try again.");
+  assert.equal(markReceivedErrorText(404, { message: "This visit was not found." }), "This visit was not found.");
+  assert.equal(markReceivedErrorText(404, ""), MARK_RECEIVED_OLD_SERVER);
+  assert.equal(markReceivedErrorText(405, undefined), MARK_RECEIVED_OLD_SERVER);
+  assert.equal(markReceivedErrorText(403, ""), MARK_RECEIVED_NOT_YOURS);
+  assert.equal(markReceivedErrorText(500, "<html>"), MARK_RECEIVED_GENERIC);
+  assert.equal(markReceivedErrorText(undefined, undefined), MARK_RECEIVED_GENERIC);
+});
+//JJQR - END
