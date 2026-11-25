@@ -41,8 +41,14 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
 |---|---|---|---|
 | `Project02-be` | API + database | ASP.NET Core **.NET 10**, EF Core. **SQL Server** in production (myASP.NET host, USA, FTP upload). **SQLite** for local dev. | A **push to `main`**. GitHub Action `deploy-backend.yml` applies missing migrations to the live database first (it refuses DROPs unless run by hand with `allow_destructive_db`), then uploads the app over FTP. **The live server is down for a few seconds.** |
 | `Project02-fe` | Website (admin, staff, doctor, patient portal) | **Next.js 16**, TypeScript, **Vercel** | A **push to `main`** (about 1 min). Any other pushed branch only gets a Vercel *Preview* at a separate address. |
-| `Project02-Desktop` | Desktop app "Clinic Node" for clinic computers, offline-first | **.NET MAUI 10**: WinUI (Windows, unpackaged) + Mac Catalyst. Folder `ClinicNode/`. Each computer has its own **SQLite**, synced with the server. | A **pushed tag `vX.Y.Z`** → `release-desktop.yml` (about 20–25 min). **Windows computers update themselves silently.** |
+| `Project02-Desktop` | Desktop app "Clinic Node" for clinic computers, offline-first | **.NET MAUI 10**: WinUI (Windows, unpackaged; **the only platform users run**) + Mac Catalyst (still built by the release, not used). Folder `ClinicNode/`. Each computer has its own **SQLite**, synced with the server. | A **pushed tag `vX.Y.Z`** → `release-desktop.yml` (about 20–25 min). **Windows computers update themselves silently.** |
 | `Project02-releases` | Public update feed `latest.json` + the last 3 installers | static files | Written **only** by the desktop release workflow (force-push to its `main`). Never touch it by hand. Not cloned on the Windows PC. |
+
+**Who uses what (owner, 25 Nov 2026)**
+- The clinic is **Windows only**: the doctor and front desk use the **Clinic Node desktop app on Windows**.
+- The doctor also wants to use an **iPad**: there is **NO iPad app**. On the iPad she uses the **WEBSITE in Safari**.
+- **Mac is NOT a user platform.** The release workflow still builds a Mac version (D), but nobody uses it.
+- **All dev/QA work happens on the owner's Windows laptop** (`D:\sidequest\…`). The owner's Mac ("MacBoy") is no longer part of the workflow; a Mac build result is **no longer a workflow step**.
 
 **How they connect**
 - The web and the desktop both call the backend REST API (JWT sign-in), plus SignalR live events.
@@ -118,7 +124,7 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
 | dddf74a | 25 Nov | All pop-ups close first, then answer, and can't be dismissed while sending (`ModalClose.cs`) | owner: "I asked you to fix those" |
 | c06a80b, 3c17dc2 … 895dceb, 01947a4 | 25 Nov | START-HERE + HANDOFF.md | docs |
 | 5560dd1 | 25 Nov (Grok) | START-HERE rule 8: say the Manila time before every ship step; never ask "are you sure?" | owner |
-| 2283986 | 25 Nov (Grok) | `PatientFileUpload.cs`: several files with no suggested title pre-fill **"Lab results <visit date>" / "Documents <visit date>"** (still editable; "(1 of 3)" per file). Same rule as the web. **Not compiled yet** (box is Linux): build-check on MacBoy + Windows QA copy | owner, J-1 finding |
+| 2283986 | 25 Nov (Grok) | `PatientFileUpload.cs`: several files with no suggested title pre-fill **"Lab results <visit date>" / "Documents <visit date>"** (still editable; "(1 of 3)" per file). Same rule as the web. **Not compiled yet** (box is Linux): build-check on the Windows laptop (dev build + QA copy) | owner, J-1 finding |
 
 **Local `main` = `5a454cf`** (4 commits ahead of GitHub `main` `a0822d1`; never pushed). **Handoff branch = local `main` + everything after**, pushed.
 
@@ -149,6 +155,7 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
     - **`2e42d58`:** the desktop's upload / Reprint features on the website.
     - **`682d9e2`:** web code review fixes (8 findings).
     - **`4d033ac` (Grok, 25 Nov):** several files with no suggested title pre-fill "Lab results <visit date>" / "Documents <visit date>" (`lib/visit-upload.ts` `defaultUploadTitle`, same rule as the desktop); upload times shown in **Manila time** (`formatUploadedManila`, `timeZone: "Asia/Manila"`) in the Lab Orders "Uploaded results" panel and the chart's Results & files line (were raw UTC); 2 new tests.
+    - **`05e9770` (Grok, 25 Nov):** fixed the 2 ESLint `react-hooks/set-state-in-effect` errors (`VisitFilesPanel.tsx`, chart Reprint check in `doctor/patients/[id]/page.tsx`): the state reset now runs right after the effect instead of inside it. No behavior change; eslint 0 errors on the touched files, `tsc` clean, same 13 old test failures.
     - Plus `HANDOFF.md` commits.
 
 ---
@@ -192,9 +199,10 @@ This is the same file in all three repos (`Project02-Desktop`, `Project02-be`, `
   1. **Job `windows`** (`windows-latest`): checks out desktop + backend `main`, MAUI workload, Inno Setup, publish win-x64 self-contained, installer saved as an artifact.
   2. **Job `mac`** (`needs: windows`, `macos-latest`, Xcode 26.0): builds Mac Catalyst, signs `latest.json` (`UPDATE_SIGNING_KEY`), and **only as its last step** force-pushes the feed + installers to `Project02-releases` (`RELEASES_TOKEN`).
   - So **if the Windows job fails, the Mac job never runs; if the Mac job fails, nothing is published.** No half release.
+  - **This means a Mac build failure blocks Windows updates too**, even though nobody uses the Mac app (A). **Keep the workflow as it is for now.** A Windows-only release workflow is a later job and **needs the owner's OK** first.
   - Backend checkout uses `BE_READ_TOKEN`.
 - `build-windows.yml` is a manual Windows compile check only. It publishes nothing.
-- **There is no safe Mac compile check without publishing.** Starting the release workflow by hand publishes. The Mac build of the 25 Nov changes will first be tried during the release, and the all-or-nothing design covers that.
+- **There is no safe Mac compile check without publishing.** Starting the release workflow by hand publishes. The Mac build of the 25 Nov changes will first be tried during the release, and the all-or-nothing design covers that (if it fails: nothing ships; fix and tag again, or ask the owner about the Windows-only workflow).
 - Local scripts: `packaging/windows` (Inno Setup), `packaging/mac` (DMG + signing identity), `packaging/release`. See `packaging/README.md`.
 - **Updater:** `ClinicNode.Core/Update/UpdateChecker.cs` installs **only a higher version** (`latest > current`). A rollback must be a **new higher version**.
 - Feed: `https://raw.githubusercontent.com/jessiejek/Project02-releases/main/latest.json`. It's cached for about 5 min, so check the releases repo commits instead.
@@ -224,7 +232,7 @@ Release builds default to the live server address, with demo off.
 | Part | What ships | Branch / commits |
 |---|---|---|
 | Desktop v0.2.46 | `7665d5b, 43c28cc, 93409be, 5a454cf` (local `main`) + `e3b0478, 4bf153a, dddf74a, 2283986` (code) + docs | `handoff/claude-to-grok-2026-11-25` (desktop) |
-| Web | `2e42d58` (features) + `682d9e2` (review fixes) + `4d033ac` (upload title + Manila times) + `HANDOFF.md` | `handoff/claude-to-grok-2026-11-25` (web) |
+| Web | `2e42d58` (features) + `682d9e2` (review fixes) + `4d033ac` (upload title + Manila times) + `05e9770` (lint fix) + `HANDOFF.md` | `handoff/claude-to-grok-2026-11-25` (web) |
 | Backend | **nothing.** Don't merge or push its `main`: a push restarts the live server, and its branch only adds `HANDOFF.md` | — |
 
 **Held back on purpose:**
@@ -233,7 +241,7 @@ Release builds default to the live server address, with demo off.
 - Mac A5 paper default; backups; faster hosting.
 
 **Checklist (only after "ship", only 11:00 PM–12:00 midnight Manila; say the current Manila time before each step)**
-1. ☐ Steps J-1 and J-2 are done, or the owner explicitly said ship anyway.
+1. ☐ Steps J-1 and J-3 (desktop QA copy) are done, or the owner explicitly said ship anyway. J-2 (iPad check) is done on the Preview before the ship, or right after it on production (test patient only).
 2. ☐ **Desktop:**
    - `git fetch`; confirm GitHub `main` is still `a0822d1` and local `main` is `5a454cf`.
    - `git checkout main`, then `git merge --ff-only handoff/claude-to-grok-2026-11-25`.
@@ -275,7 +283,7 @@ Release builds default to the live server address, with demo off.
 | Desktop tests (Windows) | `ClinicNode.Tests`: 467 pass, **11 fail** (`GoldenParityTests`, CRLF line endings on Windows — old), 6 skipped. `ClinicNode.Api.Tests`: 132 pass, **1 fail** (`PaperQueueTests.Offline_with_no_reserved_number…`, stale since reserved queue blocks were removed — old). |
 | Backend tests | 523 pass, 4 old queue-clash failures (old). |
 | Web tests | 13 old consultation-UI failures (old). ESLint and unit tests can't run on the Windows PC (Node 16). |
-| Mac build | `dotnet build -f net10.0-maccatalyst` on the owner's Mac (MacBoy, **Xcode 27.2**): **0 errors** for the handoff branch **before** `2283986`. `2283986` (one C# expression) not built yet. Note the cloud release pins **Xcode 26.0** (D). |
+| Mac build | **No longer a workflow step** (Mac is not a user platform; MacBoy is out of the workflow). Last result: 0 errors on MacBoy (Xcode 27.2) **before** `2283986`. The cloud release still builds Mac with **Xcode 26.0**, and a failure there publishes nothing (D). |
 | Known open issues | ~9 server **403s per page load** on some page (not identified); Mac print defaults to US Letter; two offline computers can issue the same queue number (flagged); web can't print the PTR; **no backups** (database or `App_Data/uploads`); no password-reset email; no uptime monitor; slow US host (6–9 s per request seen).<br>**Old web bugs found in J-1 (also on web `main` bd0f449, NOT fixed in this release):**<br>1. **Rx print preview shows the strength after "Sig."**: chart → visit → "Print prescription" (or Reprint → Prescription) opens "Print Preview" with `1. Paracetamol #10 · Sig. 500mg 1 tab every 6 hours…`; the real printed form is right (`Sig. PO 1 tab every 6 hours…`). Code: `Sig. {item.dosage} {item.instruction}` in `doctor/patients/[id]/page.tsx` (since Sep 2026), same pattern in consultation2 View mode (`Sig. {rx.dosage} {rx.instruction}`), `PatientHistoryModal.tsx`, `patient/prescriptions/page.tsx`.<br>2. **"Consultation saved" shows the old fee**: walk-in New + medical certificate (booking fee ₱500) → consult → switch to "Follow-up visit" → fill notes, Rx, certificate, No follow-up → step 8 and the Review say **Charge ₱400** (Follow-up ₱350 + certificate ₱50) → Confirm & Complete → summary says **"Professional fee: Charge ₱500"**. The saved booking and payment are correct (₱400); only the summary line is wrong: it falls back to `booking.totalFee` loaded when the page opened (consultation2 `page.tsx`, Nov 20–21 code).<br>3. **Web chart "New Prescription" on a visit that already has a prescription REPLACES it** (`/doctor/patients/<id>/prescriptions/create?bookingId=…` → `PUT /api/prescription-groups/by-booking`, which keeps one group per visit and replaces its lines; no warning). Old code. So the web can never show "Prescription 1 / 2"; only a desktop's local copy can have two groups. |
 
 ---
@@ -384,6 +392,7 @@ Release builds default to the live server address, with demo off.
 | 21 | Never touch a database directly for QA; use the app or the local fake server. Repo test scripts must be opt-in and localhost-only. | live data |
 | 22 | The QA copy (`ph.clinicnode.qa`) and its manifest change are **never committed**. | it would change the real app's identity |
 | 23 | Don't merge or push backend `main` for this release (nothing changed). | avoids a pointless server restart |
+| 24 | **Users: Windows (Clinic Node desktop app) + iPad (the WEBSITE in Safari). No iPad app. Mac is not a user platform.** Every web change must work in iPad Safari (portrait and landscape, touch, no hover). All dev/QA on the Windows laptop (`D:\sidequest\…`); no Mac build step. | owner, 25 Nov 2026 |
 
 ---
 
@@ -399,7 +408,15 @@ Release builds default to the live server address, with demo off.
      - the chart: a visit's Results & files + Upload; no Upload on cancelled visits; the Lab Results / Documents Visit column + Open; Reprint lists each prescription, lab request and certificate;
      - a narrow window: the tests show before the uploads.
    - If no test patient exists, ask the owner how he wants to create one (Admin → Patients → Add). Don't use real data.
-2. **Desktop click-through in the QA copy** (after clinic hours). Start the local backend + QA app (A).
+2. **iPad check on the website** (once the web change is reachable from the iPad: the Vercel Preview, or production after the ship).
+   - **The Preview uses the LIVE API** (and so does production): **TEST patient only**, never a real patient. Uploads can't be deleted (K), so keep test uploads few and clearly named.
+   - Safari on a **real iPad**; sign in as the doctor (the owner types the password).
+   - Check:
+     - consultation → step 4 Lab Orders → Upload results, in **portrait and landscape** (layout, buttons reachable, pop-up usable);
+     - upload a **photo taken with the iPad camera** (iPad photos are HEIC): it **must arrive as JPG** (the server accepts PDF/JPG/PNG only);
+     - **Open** a file;
+     - **Reprint**, and print via **AirPrint**.
+3. **Desktop click-through in the QA copy** (after clinic hours). Start the local backend + QA app (A).
    - Check:
      - consult → Lab Orders upload; Cancel is blocked while sending;
      - chart → visit Details → Upload, and the file shows only there;
@@ -407,13 +424,14 @@ Release builds default to the live server address, with demo off.
      - Cancel booking, Record payment, Reschedule, Register patient, Prescription edit/template, an Admin dialog: each closes cleanly, with no full-window overlay;
      - Templates: delete then edit; double-tap.
    - Fix anything on the handoff branches (desktop or web), commit, and push **only** the handoff branch by exact name.
-3. **Ship in the window** with checklist E: desktop v0.2.46 + web; backend untouched.
-4. **Smoke test after the update** (after hours); update START-HERE section 2.
-5. **Make the Windows test run green:**
+4. **Ship in the window** with checklist E: desktop v0.2.46 + web; backend untouched.
+5. **Smoke test after the update** (after hours); update START-HERE section 2.
+6. **NEXT JOB after the release: prescription-overwrite warning.** Web chart "New Prescription" on a visit that already has a prescription silently REPLACES it (F, old bug 3). Add a clear warning (or ask the owner how it should behave) before anything else.
+7. **Make the Windows test run green:**
    - `GoldenParityTests`: normalize line endings (e.g. `.gitattributes` `*.json text eol=lf` for the golden files, or compare ignoring `\r`).
    - Update or delete the stale `PaperQueueTests` case.
-6. **Backups** for the database **and `App_Data/uploads`** on the host. Plan it with the owner; he runs the tools (`accounts-tools`).
-7. Find the page causing ~9 server 403s per load; decide `SyncResultPage`; optionally have the server enforce the app-only upload rules (dead visits, 10 files); Mac A5 default; password-reset email; uptime monitor; faster hosting.
+8. **Backups** for the database **and `App_Data/uploads`** on the host. Plan it with the owner; he runs the tools (`accounts-tools`).
+9. Find the page causing ~9 server 403s per load; decide `SyncResultPage`; optionally have the server enforce the app-only upload rules (dead visits, 10 files); Mac A5 default; password-reset email; uptime monitor; faster hosting.
 
 ---
 
@@ -433,7 +451,8 @@ Release builds default to the live server address, with demo off.
 | Was J-1 (web) done on the live Preview? | **No.** The owner said no: uploads can't be deleted (`PatientFilesController` has GET/POST only) and the live disk has no backup. J-1 ran on a local fake-data stack (F). |
 | Sig-shows-strength and ₱500-vs-₱400: new? | **Old.** Both happen on web `main` bd0f449 too, and the handoff commits don't touch that code. Listed in F; not fixed in this release. |
 | Several files, empty title? / Upload times in UTC? | Fixed: desktop `2283986`, web `4d033ac` (title "Lab results <date>" / "Documents <date>"); web shows Manila time. Desktop already showed local time. |
-| Mac build? | 0 errors on MacBoy (Xcode 27.2) before `2283986`; rebuild after it. |
+| Mac build? | **No longer a workflow step**: Mac is not a user platform and MacBoy is out of the workflow (25 Nov). Last result 0 errors before `2283986`. The release still builds Mac; a failure there blocks the Windows update (D). |
+| Who uses what? | Windows desktop app + the website in Safari on an iPad. No iPad app, no Mac users (A, I-24). |
 
 ---
 
