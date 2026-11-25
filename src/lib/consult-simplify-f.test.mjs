@@ -126,7 +126,7 @@ test('F5 Charge is the editor default when pf_decision is null; view still shows
   assert.match(page, /value=\{pfAmountShown\}/);
   //JJQR - AI (Nov 21, 2026) - the auto-filled total is no longer baked into the editor; the just-completed line falls back to the amount actually charged (booking total)
   assert.doesNotMatch(page, /setPfAmount\(pfAmountShown\)/);
-  assert.match(page, /pfEditorAmountFromStored\(savedConsultation\?\.feeDecision\) \|\| \(booking\?\.totalFee \? String\(booking\.totalFee\) : pfAmountShown\)/);
+  assert.match(page, /savedSummaryAmount\(pfEditorAmountFromStored\(savedConsultation\?\.feeDecision\), pfAmountShown, booking\?\.totalFee\)/); //JJQR - AI (2026-11-25) - the amount charged, not the fee loaded at page open //JJQR - END
   assert.match(page, /Professional fee: Decide at desk/);
   const loadStart = page.indexOf('async function load()');
   const loadEnd = page.indexOf('if (cancelled) return;', loadStart);

@@ -1,5 +1,6 @@
 "use client";
 
+import { savedSummaryAmount } from "@/lib/clinical/saved-fee"; //JJQR - AI (2026-11-25) - "Consultation saved" fee = the amount charged //JJQR - END
 import { rxPreviewName, rxPreviewSig } from "@/lib/rx-preview"; //JJQR - AI (2026-11-25) - Sig line like the printed form //JJQR - END
 import "./consultation.css";
 import { ClinicalNoteField } from "@/components/doctor/ClinicalNoteField";
@@ -2525,7 +2526,9 @@ Return to patient queue
           <p className="text-body-md text-on-surface">
             {formatProfessionalFeeLine({
               decision: pfViewDecisionFromStored(savedConsultation?.feeDecision) ?? pfDecision,
-              amount: pfEditorAmountFromStored(savedConsultation?.feeDecision) || (booking?.totalFee ? String(booking.totalFee) : pfAmountShown), //JJQR - AI (Nov 21, 2026)
+              //JJQR - AI (2026-11-25) - owner: show the amount actually charged (the form's amount at Complete), not the booking fee loaded when the page opened (₱500 vs ₱400)
+              amount: savedSummaryAmount(pfEditorAmountFromStored(savedConsultation?.feeDecision), pfAmountShown, booking?.totalFee),
+              //JJQR - END
               waiveReason: savedConsultation?.feeDecision?.type === "Waive" ? (savedConsultation.feeDecision.waiveReason ?? "") : pfWaiveReason,
               computedTotal: previewFee,
             })}{" "}

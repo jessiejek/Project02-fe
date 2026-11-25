@@ -34,7 +34,11 @@ test("a different typed amount is called out, with a one-click way back to the c
 });
 
 test("the completed-visit line shows the amount that was actually charged when the doctor typed none", () => {
-  assert.equal((page.match(/booking\?\.totalFee \? String\(booking\.totalFee\)/g) ?? []).length, 2);
+  //JJQR - AI (2026-11-25) - "Consultation saved" = saved amount, else the form's amount at Complete, else the booking fee (was: the booking fee loaded at page open first, P500 vs P400);
+  // the View mode of an older visit still falls back to the booking's fee from the server
+  assert.match(page, /savedSummaryAmount\(pfEditorAmountFromStored\(savedConsultation\?\.feeDecision\), pfAmountShown, booking\?\.totalFee\)/);
+  assert.equal((page.match(/booking\?\.totalFee \? String\(booking\.totalFee\)/g) ?? []).length, 1);
+  //JJQR - END
 });
 
 test("a Charge is only 'done' with an amount the server accepts (more than 0, at most 100,000)", () => {
