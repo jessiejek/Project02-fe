@@ -18,7 +18,11 @@ import { queryConsultations, queryRxGroups, queryVitalReadings, deleteRxGroup } 
 import { queryVitalFieldTemplates } from "@/lib/data/lookups";
 import { queryPatientById } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
-import { queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
+import { openPatientFile, queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles";
+//JJQR - AI (Nov 25, 2026) - desktop parity: upload to one visit + Reprint
+import { VisitUploadModal } from "@/components/doctor/VisitUploadModal";
+import { loadBookingReprintAvailability, printLabOrdersForBooking, printMedicalCertificateForBooking } from "@/lib/consult-print";
+//JJQR - END
 import { printPrescription } from "@/lib/print-forms";
 import { queryClinicSettings } from "@/lib/data/admin";
 import { queryDoctorById } from "@/lib/data/doctors";
@@ -82,15 +86,24 @@ interface ChartVitalReading {
   value: string;
 }
 
+//JJQR - AI (Nov 25, 2026) - owner: every file belongs to ONE consultation (booking) — kept here so each visit shows its own files (desktop parity)
 interface ChartLab {
   id: string;
   resultTitle: string;
+  bookingId: string;
+  uploadedAt: string;
 }
 
 interface ChartDocument {
   id: string;
   title: string;
+  bookingId: string;
+  uploadedAt: string;
 }
+
+/** Visits that did not take place cannot take files (same rule as the desktop). */
+const NO_UPLOAD_STATUSES = new Set(["Cancelled", "NoShow", "Expired", "Rescheduled"]);
+//JJQR - END
 
 interface ChartVaccination {
   id: string;
@@ -136,6 +149,13 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   const [expandedConsultationId, setExpandedConsultationId] = useState<string | null>(null);
   const [printPreviewGroup, setPrintPreviewGroup] = useState<PrescriptionGroup | null>(null);
   const [deleteRxGroupId, setDeleteRxGroupId] = useState<string | null>(null);
+  //JJQR - AI (Nov 25, 2026) - owner: desktop parity — upload to one visit, Reprint view, open files
+  const [uploadFor, setUploadFor] = useState<{ bookingId: string; date: string; kind: "lab" | "doc" } | null>(null);
+  const [reprintOpen, setReprintOpen] = useState(false);
+  const [reprintInfo, setReprintInfo] = useState<Record<string, { hasLabs: boolean; hasCert: boolean }>>({});
+  const [chartError, setChartError] = useState("");
+  const [printing, setPrinting] = useState(false);
+  //JJQR - END
 
   useEffect(() => {
     if (!doctorId) return;
@@ -255,6 +275,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         labRows.map((l) => ({
           id: l.id ?? "",
           resultTitle: l.result_title || "Lab result",
+          bookingId: l.booking_id ?? "", //JJQR - AI (Nov 25, 2026) - the visit it belongs to //JJQR - END
+          uploadedAt: l.uploaded_at ?? "",
         })),
       );
 
@@ -262,6 +284,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
         docRows.map((d) => ({
           id: d.id ?? "",
           title: d.title || d.file_name,
+          bookingId: d.booking_id ?? "", //JJQR - AI (Nov 25, 2026) - the visit it belongs to //JJQR - END
+          uploadedAt: d.uploaded_at ?? "",
         })),
       );
 
@@ -281,6 +305,16 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
     load();
     return () => { cancelled = true; };
   }, [id, doctorId, loadAttempt]);
+
+  //JJQR - AI (Nov 25, 2026) - Reprint: find out which visits have a lab request / certificate (once, when the view opens)
+  useEffect(() => {
+    if (!reprintOpen || patientBookings.length === 0) return;
+    let cancelled = false;
+    Promise.all(patientBookings.map(async (b) => [b.id, await loadBookingReprintAvailability(b.id).catch(() => ({ hasLabs: false, hasCert: false }))] as const))
+      .then((rows) => { if (!cancelled) setReprintInfo(Object.fromEntries(rows)); });
+    return () => { cancelled = true; };
+  }, [reprintOpen, patientBookings]);
+  //JJQR - END
 
   if (loadError) return <AppShell role="doctor"><ErrorState title="Patient chart unavailable" message="This chart could not be loaded. Please try again." onRetry={() => { setLoadError(false); setLoaded(false); setLoadAttempt(n => n+1); }} /></AppShell>;
 
@@ -312,6 +346,26 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
       return { booking, consult, vitals, rx, dxList, dx: dxList.join(" · ") };
     });
   const latestVisit = visits.find((v) => v.consult || v.vitals.length > 0) ?? null;
+  //JJQR - AI (Nov 25, 2026) - desktop parity helpers: files of one visit, visit date of a file, open / print with an error line
+  const filesOf = (bookingId: string) => [
+    ...patientLabResults.filter((l) => l.bookingId === bookingId).map((l) => ({ id: l.id, title: l.resultTitle, uploadedAt: l.uploadedAt, kind: "lab-result" as const })),
+    ...patientDocuments.filter((d) => d.bookingId === bookingId).map((d) => ({ id: d.id, title: d.title, uploadedAt: d.uploadedAt, kind: "document" as const })),
+  ].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+  const visitDateOf = (bookingId: string) => patientBookings.find((b) => b.id === bookingId)?.appointmentDate ?? "—";
+  const openFile = (kind: "document" | "lab-result", fileId: string) => {
+    setChartError("");
+    openPatientFile(kind, fileId).catch((e) => setChartError(e instanceof Error ? e.message : "Could not open the file."));
+  };
+  const runPrint = async (what: string, job: () => Promise<boolean>) => {
+    if (printing) return;
+    setChartError("");
+    setPrinting(true);
+    try { if (!(await job())) setChartError(`Nothing to print: this visit has no ${what}.`); }
+    catch (e) { setChartError(e instanceof Error && e.message ? e.message : `The ${what} could not be printed. Please try again.`); }
+    finally { setPrinting(false); }
+  };
+  const reload = () => setLoadAttempt((n) => n + 1);
+  //JJQR - END
 
   return (
     <AppShell role="doctor">
@@ -351,6 +405,8 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                   </div>
                 ))}
               </dl>
+              {/* //JJQR - AI (Nov 25, 2026) - owner: "Reprint" button in the left panel (desktop: under "Print patient card"; the web has no patient card) //JJQR - END */}
+              <Button variant="secondary" className="mt-md w-full" onClick={() => { setChartError(""); setReprintOpen(true); }}>Reprint</Button>
             </Card>
 
             {latestVisit && (
@@ -404,10 +460,11 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           {/* RIGHT: tabs */}
           <Card>
             <div className="mb-md">
-              <Tabs tabs={TABS.map((t) => t.id === "timeline" ? { ...t, label: `Visits ${visits.length}` } : t.id === "labs" ? { ...t, label: patientLabResults.length ? `Lab Results ${patientLabResults.length}` : t.label } : t.id === "documents" ? { ...t, label: patientDocuments.length ? `Documents ${patientDocuments.length}` : t.label } : t.id === "vaccinations" ? { ...t, label: patientVaccinations.length ? `Vaccinations ${patientVaccinations.length}` : t.label } : t)} activeId={tab} onChange={setTab} />
+              <Tabs tabs={TABS.map((t) => t.id === "timeline" ? { ...t, label: `Visits ${visits.length}` } : t.id === "labs" ? { ...t, label: patientLabResults.length ? `Lab Results ${patientLabResults.length}` : t.label } : t.id === "documents" ? { ...t, label: patientDocuments.length ? `Documents ${patientDocuments.length}` : t.label } : t.id === "vaccinations" ? { ...t, label: patientVaccinations.length ? `Vaccinations ${patientVaccinations.length}` : t.label } : t)} activeId={reprintOpen ? "" : tab} onChange={(t) => { setReprintOpen(false); setTab(t); }} />
+              {chartError && <p role="alert" className="mt-sm text-body-sm text-error">{chartError}</p>}
             </div>
 
-            {tab === "timeline" && (
+            {tab === "timeline" && !reprintOpen && (
               visits.length === 0 ? (
                 <EmptyState icon="event" message="No appointments with you yet." />
               ) : (
@@ -507,6 +564,29 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                               {referredBookingId === v.booking.id && (
                                 <Link href={`/doctor/consultation/${v.booking.id}/vitals`} className="text-label-md text-primary hover:underline">Add vitals</Link>
                               )}
+                              {/* //JJQR - AI (Nov 25, 2026) - owner: results belong to ONE consultation — this visit's files + Upload buttons that tag new files to THIS visit //JJQR - END */}
+                              <p className="pt-sm text-[12px] font-semibold uppercase tracking-[0.04em] text-on-surface-variant">Results &amp; files</p>
+                              {filesOf(v.booking.id).length === 0 ? (
+                                <p className="text-on-surface-variant">No results or files for this visit yet.</p>
+                              ) : (
+                                filesOf(v.booking.id).map((f) => (
+                                  <div key={f.kind + f.id} className="flex items-center justify-between gap-sm rounded-md border border-outline-variant px-sm py-xs">
+                                    <span className="min-w-0">
+                                      <span className="block break-words font-semibold text-on-surface">{f.title}</span>
+                                      <span className="block text-[12px] text-on-surface-variant">{f.kind === "lab-result" ? "Lab result" : "Document"} · uploaded {f.uploadedAt.slice(0, 10)}</span>
+                                    </span>
+                                    <button type="button" onClick={() => openFile(f.kind, f.id)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Open</button>
+                                  </div>
+                                ))
+                              )}
+                              {NO_UPLOAD_STATUSES.has(v.booking.status) ? (
+                                <p className="text-on-surface-variant">This visit did not take place, so files cannot be added to it.</p>
+                              ) : (
+                                <div className="flex flex-wrap gap-xs">
+                                  <button type="button" onClick={() => setUploadFor({ bookingId: v.booking.id, date: v.booking.appointmentDate, kind: "lab" })} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Upload result</button>
+                                  <button type="button" onClick={() => setUploadFor({ bookingId: v.booking.id, date: v.booking.appointmentDate, kind: "doc" })} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Upload document</button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )}
@@ -516,7 +596,13 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                 </div>
               )
             )}
-          {tab === "labs" && (
+          {/* //JJQR - AI (Nov 25, 2026) - desktop parity: each file shows the visit it belongs to + Open; uploading is done inside that visit or in the consult's Lab Orders step //JJQR - END */}
+          {(tab === "labs" || tab === "documents") && !reprintOpen && (
+            <p className="mb-sm text-body-sm text-on-surface-variant">
+              To add a {tab === "labs" ? "result" : "document"}, open the visit on the Visits tab and press {tab === "labs" ? "Upload result" : "Upload document"}, or upload it from the consultation&apos;s Lab Orders step.
+            </p>
+          )}
+          {tab === "labs" && !reprintOpen && (
             patientLabResults.length === 0 ? (
               <EmptyState icon="science" message="No lab results yet." />
             ) : (
@@ -526,13 +612,15 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <Icon name="science" className="text-[16px]" />
                     </div>
-                    <p className="text-body-md text-on-surface">{l.resultTitle}</p>
+                    <p className="min-w-0 flex-1 text-body-md text-on-surface">{l.resultTitle}</p>
+                    <span className="text-body-sm tabular-nums text-on-surface-variant">Visit {visitDateOf(l.bookingId)}</span>
+                    <button type="button" onClick={() => openFile("lab-result", l.id)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Open</button>
                   </div>
                 ))}
               </div>
             )
           )}
-          {tab === "documents" && (
+          {tab === "documents" && !reprintOpen && (
             patientDocuments.length === 0 ? (
               <EmptyState icon="description" message="No documents yet." />
             ) : (
@@ -542,13 +630,57 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                       <Icon name="description" className="text-[16px]" />
                     </div>
-                    <p className="text-body-md text-on-surface">{d.title}</p>
+                    <p className="min-w-0 flex-1 text-body-md text-on-surface">{d.title}</p>
+                    <span className="text-body-sm tabular-nums text-on-surface-variant">Visit {visitDateOf(d.bookingId)}</span>
+                    <button type="button" onClick={() => openFile("document", d.id)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Open</button>
                   </div>
                 ))}
               </div>
             )
           )}
-          {tab === "vaccinations" && (
+          {/* //JJQR - AI (Nov 25, 2026) - owner: Reprint view (opened by the left panel's "Reprint" button): every visit with something printable, one button per printout //JJQR - END */}
+          {reprintOpen && (
+            <div className="space-y-md">
+              <div className="flex flex-wrap items-start justify-between gap-sm">
+                <div>
+                  <h2 className="text-headline-sm text-on-surface">Reprint</h2>
+                  <p className="text-body-sm text-on-surface-variant">Everything you can print for this patient. Pick what to print.</p>
+                </div>
+                <button type="button" onClick={() => setReprintOpen(false)} className="text-label-md text-primary hover:underline">← Back to Visits</button>
+              </div>
+              {visits.length === 0 ? (
+                <EmptyState icon="print" message="Nothing to reprint yet." />
+              ) : (
+                <div className="space-y-sm">
+                  {visits
+                    .filter((v) => v.rx.length > 0 || reprintInfo[v.booking.id]?.hasLabs || reprintInfo[v.booking.id]?.hasCert)
+                    .map((v) => {
+                      const info = reprintInfo[v.booking.id];
+                      return (
+                        <div key={v.booking.id} className="flex flex-wrap items-center justify-between gap-sm rounded-lg border border-outline-variant p-md">
+                          <span className="min-w-0">
+                            <span className="block text-label-md tabular-nums text-on-surface-variant">{v.booking.appointmentDate}</span>
+                            <span className="block text-body-md font-semibold text-on-surface">{v.consult?.chiefComplaint || v.booking.serviceNames.join(", ") || "Consultation"}</span>
+                            {v.dx && <span className="block text-body-sm text-on-surface-variant">{v.dx}</span>}
+                          </span>
+                          <span className="flex flex-wrap gap-xs">
+                            {v.rx.map((g, i) => (
+                              <button key={g.id} type="button" onClick={() => setPrintPreviewGroup(g)} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>
+                                {v.rx.length === 1 ? "Prescription" : `Prescription ${i + 1}`}
+                              </button>
+                            ))}
+                            {info?.hasLabs && <button type="button" disabled={printing} onClick={() => runPrint("lab request", () => printLabOrdersForBooking(v.booking.id))} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Lab request</button>}
+                            {info?.hasCert && <button type="button" disabled={printing} onClick={() => runPrint("medical certificate", () => printMedicalCertificateForBooking(v.booking.id))} className={buttonStyles("secondary", "!min-h-8 !px-sm !text-[13px]")}>Medical certificate</button>}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  {Object.keys(reprintInfo).length === 0 && <p className="text-body-sm text-on-surface-variant">Checking lab requests and certificates…</p>}
+                </div>
+              )}
+            </div>
+          )}
+          {tab === "vaccinations" && !reprintOpen && (
             patientVaccinations.length === 0 ? (
               <EmptyState icon="vaccines" message="No vaccinations recorded yet." />
             ) : (
@@ -663,6 +795,19 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           </div>
         )}
       </Modal>
+
+      {/* //JJQR - AI (Nov 25, 2026) - upload to the visit whose button was pressed (one or several files) //JJQR - END */}
+      {uploadFor && (
+        <VisitUploadModal
+          isOpen
+          onClose={() => setUploadFor(null)}
+          onUploaded={() => { setExpandedConsultationId(uploadFor.bookingId); reload(); }}
+          patientId={patient.id}
+          bookingId={uploadFor.bookingId}
+          visitDate={uploadFor.date}
+          kind={uploadFor.kind}
+        />
+      )}
 
       <Modal
         isOpen={deleteRxGroupId !== null}

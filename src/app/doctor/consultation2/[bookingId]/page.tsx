@@ -135,6 +135,10 @@ import type {
 import type { Database } from "@/data/supabase-types";
 //JJQR - AI (Nov 20, 2026)
 import { asNeededFromWire, asNeededToWire } from "@/lib/rx-structured";
+//JJQR - AI (Nov 25, 2026) - desktop parity: Lab Orders upload + uploaded results panel
+import { VisitUploadModal } from "@/components/doctor/VisitUploadModal";
+import { VisitFilesPanel } from "@/components/doctor/VisitFilesPanel";
+//JJQR - END
 //JJQR - END
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
@@ -838,6 +842,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [labCatalog, setLabCatalog] = useState<LabTestRow[]>([]);
   const [savingLabs, setSavingLabs] = useState(false);
   const [printingLabs, setPrintingLabs] = useState(false);
+  //JJQR - AI (Nov 25, 2026) - owner (desktop parity): upload results tagged to this consultation; the side panel reloads after an upload
+  const [labUploadOpen, setLabUploadOpen] = useState(false);
+  const [labFilesVersion, setLabFilesVersion] = useState(0);
+  //JJQR - END
   const [printingRx, setPrintingRx] = useState(false);
   const [labsSavedAt, setLabsSavedAt] = useState<string | null>(null);
 
@@ -2834,6 +2842,13 @@ Return to patient queue
             <Button variant="secondary" className="!px-sm !py-sm" onClick={() => setHistoryOpen(true)}>
               View Patient History
             </Button>
+            {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Patient chart" right after "View Patient History". Opens in a new tab and WITHOUT
+                this booking (read-only prescriptions there), so nothing typed here is lost and this page's autosave can't overwrite chart edits. //JJQR - END */}
+            {booking && (
+              <a href={`/doctor/patients/${booking.patientId}`} target="_blank" rel="noopener" className={buttonStyles("secondary", "!px-sm !py-sm")}>
+                Patient chart
+              </a>
+            )}
             {/*JJQR - AI (Nov 20, 2026) - print bar follows live Rx items */}
             {(effectiveRxItems.length > 0 || labOrders.length > 0) && consultPrintButtons("contents", "!px-sm !py-sm")}
             {/*JJQR - END */}
@@ -2919,7 +2934,13 @@ Return to patient queue
                       )}
                       {/* //JJQR - END */}
                     </h2>
-
+                    {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): "Upload results" sits in the Lab Orders title bar (right) //JJQR - END */}
+                    {i === 4 && booking && (
+                      <Button onClick={() => setLabUploadOpen(true)}>
+                        <Icon name="upload_file" className="text-[16px]" />
+                        Upload results
+                      </Button>
+                    )}
                   </div>
 
                   {isOpen && i === 0 && (
@@ -3161,7 +3182,15 @@ Return to patient queue
                   )}
 
                   {isOpen && i === 4 && (
-                    <div className="mt-md space-y-md">
+                    //JJQR - AI (Nov 25, 2026) - owner (desktop parity): 75% the test selection / 25% the results uploaded for THIS consultation
+                    <div className="mt-md grid items-start gap-md lg:grid-cols-[minmax(0,3fr)_minmax(0,1fr)]">
+                    {booking && (
+                      <div className="lg:order-2">
+                        <VisitFilesPanel bookingId={bookingId} version={labFilesVersion} />
+                      </div>
+                    )}
+                    {/* //JJQR - END */}
+                    <div className="space-y-md lg:order-1">
                       {labsSavedAt && <Toast key={labsSavedAt} variant="success" message={`Lab request saved at ${labsSavedAt}.`} />}
 
                       {renalCue && (
@@ -3253,6 +3282,7 @@ Return to patient queue
                       {labOrders.length === 0 && (
                         <p className="text-label-md text-on-surface-variant">No tests selected (optional). Saved with the consultation.</p>
                       )}
+                    </div>
                     </div>
                   )}
 
@@ -3922,6 +3952,20 @@ Return to patient queue
           </p>
         )}
       </Modal>
+
+      {/* //JJQR - AI (Nov 25, 2026) - owner (desktop parity): upload one or several results, tagged to THIS consultation; title prefilled with the ordered tests //JJQR - END */}
+      {booking && (
+        <VisitUploadModal
+          isOpen={labUploadOpen}
+          onClose={() => setLabUploadOpen(false)}
+          onUploaded={() => setLabFilesVersion((v) => v + 1)}
+          patientId={booking.patientId}
+          bookingId={bookingId}
+          visitDate={booking.appointmentDate}
+          kind="lab"
+          suggestedTitle={labOrders.map((l) => l.testName.trim()).filter(Boolean).join(", ") || undefined}
+        />
+      )}
 
       <Modal
         isOpen={labsConfirmPrint !== null}

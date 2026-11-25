@@ -8,6 +8,7 @@ import {
   formatConsultationDiagnosisLabel,
   queryConsultationByBooking,
   queryDiagnoses,
+  queryMedicalCertificateByBooking, //JJQR - AI (Nov 25, 2026) - reprint the certificate //JJQR - END
   queryRxGroups,
   type RxGroupRow,
 } from "@/lib/data/clinical";
@@ -15,7 +16,7 @@ import { queryDoctorById } from "@/lib/data/doctors";
 import { queryLabOrdersByBooking } from "@/lib/data/labs";
 import { queryLabTestCatalog } from "@/lib/data/lookups";
 import { queryPatientById } from "@/lib/data/patients";
-import { printLabRequest, printPrescription, type PrintClinic, type PrintDoctor, type PrintPatient, type RxLine } from "@/lib/print-forms";
+import { printLabRequest, printMedicalCertificate, printPrescription, type PrintClinic, type PrintDoctor, type PrintPatient, type RxLine } from "@/lib/print-forms";
 
 const supabase = null as never;
 
@@ -181,5 +182,39 @@ export async function printLabOrdersForBooking(
     diagnoses,
     clinicalNotes,
   });
+}
+//JJQR - END
+
+//JJQR - AI (Nov 25, 2026) - owner: the web chart gets the same "Reprint" as the desktop. Print a visit's saved medical certificate
+// (same form and data as the consultation's "Print certificate"); false when the visit has none.
+export async function printMedicalCertificateForBooking(bookingId: string): Promise<boolean> {
+  const [booking, cert] = await Promise.all([
+    queryBookingById(supabase, bookingId),
+    queryMedicalCertificateByBooking(supabase, bookingId),
+  ]);
+  if (!booking || !cert) return false;
+  const patientName = booking.patients ? `${booking.patients.first_name} ${booking.patients.last_name}`.trim() : "Patient";
+  const doctorName = booking.doctors?.staff_accounts?.full_name ?? "";
+  const [clinicRow, doctor, patient] = await Promise.all([
+    queryClinicSettings(supabase),
+    queryDoctorById(supabase, booking.doctor_id),
+    queryPatientById(supabase, booking.patient_id),
+  ]);
+  const d = doctorFromRow(doctor, doctorName);
+  return printMedicalCertificate({
+    clinic: clinicFromRow(clinicRow),
+    doctor: { full_name: d.full_name, license_number: d.license_number, ptr_number: d.ptr_number },
+    patient: patientFromRow(patient, patientName),
+    cert,
+  });
+}
+
+/** What a visit can reprint: prescription groups (each printed on its own), lab request, medical certificate. */
+export async function loadBookingReprintAvailability(bookingId: string): Promise<{ hasLabs: boolean; hasCert: boolean }> {
+  const [labOrders, cert] = await Promise.all([
+    queryLabOrdersByBooking(supabase, bookingId),
+    queryMedicalCertificateByBooking(supabase, bookingId),
+  ]);
+  return { hasLabs: labOrders.some((l) => l.test_name.trim()), hasCert: !!cert };
 }
 //JJQR - END
