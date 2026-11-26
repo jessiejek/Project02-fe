@@ -22,6 +22,10 @@ import { queryPatientAccess, type PatientAccessEntry } from "@/lib/data/admin";
 import { queryConsultations, queryRxGroups } from "@/lib/data/clinical";
 import { queryPatientById, updatePatient, toTitleCase } from "@/lib/data/patients";
 import { queryBookings } from "@/lib/data/bookings";
+//JJQR - AI (2026-11-26) - GAV-12: "Merge…" next to Edit details, the retired-chart banner and the admin's Unmerge
+import { MergePatientDialog } from "@/components/doctor/MergePatientDialog";
+import { MergedIntoBanner } from "@/components/doctor/MergedIntoBanner";
+//JJQR - END
 
 // JJQR - AI (Nov 20, 2026) - PV-5: staff/doctor/admin views of this record, newest first (ids and area names only — no patient details are stored in it)
 function AccessLogPanel({ patientId }: { patientId: string }) {
@@ -104,6 +108,10 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
   const [saveError, setSaveError] = useState("");
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  //JJQR - AI (2026-11-26) - GAV-12
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergedIntoId, setMergedIntoId] = useState<string | null>(null);
+  //JJQR - END
 
   useEffect(() => {
     let cancelled = false;
@@ -128,6 +136,7 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
         return;
       }
 
+      setMergedIntoId(patientRow.merged_into_patient_id ?? null); //JJQR - AI (2026-11-26) - GAV-12 //JJQR - END
       setPatient({
         id: patientRow.patient_id,
         patientCode: patientRow.patient_code,
@@ -241,10 +250,24 @@ export default function AdminPatientDetailPage({ params }: { params: Promise<{ i
               <span className="font-mono text-body-sm">{patient.patientCode}</span> · {patient.sex} · Born {formatClinicDate(patient.dateOfBirth)}
             </p>
           </div>
-          <Button variant="secondary" onClick={openEdit}>
-            <Icon name="edit" className="text-[14px]" />Edit details
-          </Button>
+          {/*JJQR - AI (2026-11-26) - GAV-12: "Merge…" next to Edit details (hidden on a merged-away record) */}
+          <div className="flex flex-wrap gap-sm">
+            <Button variant="secondary" onClick={openEdit} disabled={Boolean(mergedIntoId)}>
+              <Icon name="edit" className="text-[14px]" />Edit details
+            </Button>
+            {!mergedIntoId && (
+              <Button variant="secondary" onClick={() => setMergeOpen(true)} data-testid="chart-merge">
+                <Icon name="merge" className="text-[14px]" />Merge…
+              </Button>
+            )}
+          </div>
+          {/*JJQR - END */}
         </header>
+        {/*JJQR - AI (2026-11-26) - GAV-12 */}
+        <MergedIntoBanner patientId={id} mergedIntoId={mergedIntoId} chartHref={(pid) => `/admin/patients/${pid}`} canUnmerge onUnmerged={() => setReloadKey((n) => n + 1)} />
+        <MergePatientDialog isOpen={mergeOpen} currentPatientId={patient.id} currentLabel={`${fullName} (${patient.patientCode})`} onClose={() => setMergeOpen(false)}
+          onMerged={(r) => { setMergeOpen(false); window.location.assign(`/admin/patients/${r.kept_patient_id}`); }} />
+        {/*JJQR - END */}
 
         <Card>
           <Tabs tabs={tabs} activeId={tab} onChange={setTab} className="mb-lg" />

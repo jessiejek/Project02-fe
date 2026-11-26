@@ -27,6 +27,9 @@ import { EditPatientDetailsDialog } from "@/components/doctor/EditPatientDetails
 //JJQR - AI (2026-11-26) - GAV-11: "Wrong patient?" moves this visit to the right person
 import { WrongPatientDialog } from "@/components/doctor/WrongPatientDialog";
 //JJQR - END
+//JJQR - AI (2026-11-26) - GAV-12: "Merge to existing patient" (this record is a duplicate of an older one)
+import { MergePatientDialog } from "@/components/doctor/MergePatientDialog";
+//JJQR - END
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Icon } from "@/components/ui/Icon";
 //JJQR - AI (Nov 20, 2026)
@@ -424,6 +427,20 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
       if (!saved) return; // the save error is already shown; nothing moves until the notes are safe
     }
     setWrongPatientOpen(true);
+  }
+  //JJQR - END
+  //JJQR - AI (2026-11-26) - GAV-12: what the doctor typed is saved first (it belongs to this visit, which moves with the merge); after the merge the page
+  // reloads: the visit is the same, so it opens as the KEPT patient (header, chart link, past visits).
+  const [mergeOpen, setMergeOpen] = useState(false);
+  async function openMerge() {
+    if (wrongPatientBusy) return;
+    if (mode === "complete") {
+      setWrongPatientBusy(true);
+      const saved = await handleSaveDraft();
+      setWrongPatientBusy(false);
+      if (!saved) return;
+    }
+    setMergeOpen(true);
   }
   //JJQR - END
   //JJQR - AI (Nov 20, 2026) E1
@@ -2637,7 +2654,11 @@ Return to patient queue
           {...clinicalBannerProps}
           onEditDetails={() => setEditPatientOpen(true)} //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
           onWrongPatient={() => void openWrongPatient()} //JJQR - AI (2026-11-26) - GAV-11 //JJQR - END
+          onMergeExisting={() => void openMerge()} //JJQR - AI (2026-11-26) - GAV-12 //JJQR - END
         />
+        {/*JJQR - AI (2026-11-26) - GAV-12 */}
+        <MergePatientDialog isOpen={mergeOpen} currentPatientId={booking.patientId} currentLabel={`${booking.patientName ?? "this patient"}`} onClose={() => setMergeOpen(false)} onMerged={() => { setMergeOpen(false); window.location.reload(); }} />
+        {/*JJQR - END */}
         {/*JJQR - AI (2026-11-26) - GAV-11 */}
         <WrongPatientDialog isOpen={wrongPatientOpen} bookingId={booking.id} onClose={() => setWrongPatientOpen(false)} onMoved={() => { setWrongPatientOpen(false); window.location.reload(); }} />
         {/*JJQR - END */}
@@ -2841,7 +2862,11 @@ Return to patient queue
         {...clinicalBannerProps}
         onEditDetails={() => setEditPatientOpen(true)} //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
         onWrongPatient={() => void openWrongPatient()} //JJQR - AI (2026-11-26) - GAV-11 //JJQR - END
+        onMergeExisting={() => void openMerge()} //JJQR - AI (2026-11-26) - GAV-12 //JJQR - END
       />
+      {/*JJQR - AI (2026-11-26) - GAV-12: "Merge to existing patient" (notes saved first; the page reloads as the kept patient) */}
+      <MergePatientDialog isOpen={mergeOpen} currentPatientId={booking.patientId} currentLabel={`${booking.patientName ?? "this patient"}`} onClose={() => setMergeOpen(false)} onMerged={() => { setMergeOpen(false); window.location.reload(); }} />
+      {/*JJQR - END */}
       {/*JJQR - AI (2026-11-26) - GAV-11: "Wrong patient?" dialog (notes saved first; the page reloads after the move) */}
       <WrongPatientDialog isOpen={wrongPatientOpen} bookingId={booking.id} onClose={() => setWrongPatientOpen(false)} onMoved={() => { setWrongPatientOpen(false); window.location.reload(); }} />
       {/*JJQR - END */}

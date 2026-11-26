@@ -35,6 +35,9 @@ export interface PatientRow {
   consent_version: number;
   created_at: string;
   updated_at: string;
+  //JJQR - AI (2026-11-26) - GAV-12: set on a merged-away (retired) record: the patient it now lives in
+  merged_into_patient_id?: string | null;
+  //JJQR - END
   //JJQR - AI (Oct 31, 2026)
   patient_allergies?: PatientAllergyRow[];
   is_pregnant?: boolean | null;

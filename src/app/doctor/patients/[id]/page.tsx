@@ -25,6 +25,10 @@ import { openPatientFile, queryPatientDocuments, queryPatientLabResults, queryVa
 import { VisitUploadModal } from "@/components/doctor/VisitUploadModal";
 //JJQR - AI (2026-11-26) - GAV-10: doctor edits the patient's details from the chart's left card
 import { EditPatientDetailsDialog } from "@/components/doctor/EditPatientDetailsDialog";
+//JJQR - AI (2026-11-26) - GAV-12: "Merge…" next to Edit details + the retired-chart banner
+import { MergePatientDialog } from "@/components/doctor/MergePatientDialog";
+import { MergedIntoBanner } from "@/components/doctor/MergedIntoBanner";
+//JJQR - END
 import { Toast } from "@/components/ui/Toast";
 import type { PatientRow } from "@/lib/data/patients";
 //JJQR - END
@@ -167,6 +171,10 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   //JJQR - END
   //JJQR - AI (2026-11-26) - GAV-10: "Edit details" dialog; on save the left card shows the new name / sex / age / birthday / phone at once
   const [editPatientOpen, setEditPatientOpen] = useState(false);
+  //JJQR - AI (2026-11-26) - GAV-12
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergedIntoId, setMergedIntoId] = useState<string | null>(null);
+  //JJQR - END
   const [patientSavedAt, setPatientSavedAt] = useState<string | null>(null);
   function onPatientDetailsSaved(row: PatientRow) {
     setPatient((p) => (p ? { ...p, fullName: `${row.first_name} ${row.last_name}`, sex: row.sex, dateOfBirth: row.date_of_birth, contactNumber: row.contact_number ?? "" } : p));
@@ -195,6 +203,7 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
 
       if (cancelled) return;
       if (patientRow) {
+        setMergedIntoId(patientRow.merged_into_patient_id ?? null); //JJQR - AI (2026-11-26) - GAV-12 //JJQR - END
         setPatient({
           id: patientRow.patient_id,
           fullName: `${patientRow.first_name} ${patientRow.last_name}`,
@@ -417,6 +426,9 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           <Icon name="chevron_left" className="text-[14px]" />
           Back to Patients
         </Link>
+        {/*JJQR - AI (2026-11-26) - GAV-12: an old link to a merged-away record says where the patient lives now */}
+        <MergedIntoBanner patientId={id} mergedIntoId={mergedIntoId} chartHref={(pid) => `/doctor/patients/${pid}`} />
+        {/*JJQR - END */}
 
         <div className="grid items-start gap-md lg:grid-cols-[300px_minmax(0,1fr)]">
           {/* LEFT RAIL: who the patient is + the latest record (desktop chart) */}
@@ -449,6 +461,13 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
               <Button variant="secondary" className="mt-md w-full" onClick={() => setEditPatientOpen(true)}>
                 <Icon name="edit" className="text-[14px]" />Edit details
               </Button>
+              {/*JJQR - END */}
+              {/*JJQR - AI (2026-11-26) - GAV-12: "Merge…" right below Edit details (this record merges INTO an existing one the doctor picks) */}
+              {!mergedIntoId && (
+                <Button variant="secondary" className="mt-sm w-full" onClick={() => setMergeOpen(true)} data-testid="chart-merge">
+                  <Icon name="merge" className="text-[14px]" />Merge…
+                </Button>
+              )}
               {/*JJQR - END */}
               {/*JJQR - AI (Nov 25, 2026) - owner: "Reprint" button in the left panel (desktop: under "Print patient card"; the web has no patient card) */}
               <Button variant="secondary" className="mt-sm w-full" onClick={() => { setChartError(""); setReprintOpen(true); }}>Reprint</Button>
@@ -859,6 +878,10 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
 
       {/*JJQR - AI (2026-11-26) - GAV-10: patient details dialog (same one as the consultation header) */}
       <EditPatientDetailsDialog isOpen={editPatientOpen} patientId={patient.id} onClose={() => setEditPatientOpen(false)} onSaved={onPatientDetailsSaved} />
+      {/*JJQR - END */}
+      {/*JJQR - AI (2026-11-26) - GAV-12: after the merge the KEPT chart opens (it now holds both records' visits) */}
+      <MergePatientDialog isOpen={mergeOpen} currentPatientId={patient.id} currentLabel={`${patient.fullName} (${patient.patientCode})`} onClose={() => setMergeOpen(false)}
+        onMerged={(r) => { setMergeOpen(false); window.location.assign(`/doctor/patients/${r.kept_patient_id}`); }} />
       {/*JJQR - END */}
 
       {/*JJQR - AI (Nov 25, 2026) - upload to the visit whose button was pressed (one or several files) */}

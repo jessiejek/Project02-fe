@@ -103,6 +103,9 @@ export interface ConsultPatientBannerProps {
   //JJQR - AI (2026-11-26) - GAV-11: when set, a "Wrong patient?" button sits right after "Edit details" (moves this visit to the right person)
   onWrongPatient?: () => void;
   //JJQR - END
+  //JJQR - AI (2026-11-26) - GAV-12: when set, a "Merge to existing patient" button sits right after "Wrong patient?"
+  onMergeExisting?: () => void;
+  //JJQR - END
 }
 
 export function ConsultPatientBanner({
@@ -129,6 +132,7 @@ export function ConsultPatientBanner({
   contentClassName,
   onEditDetails, //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
   onWrongPatient, //JJQR - AI (2026-11-26) - GAV-11 //JJQR - END
+  onMergeExisting, //JJQR - AI (2026-11-26) - GAV-12 //JJQR - END
 }: ConsultPatientBannerProps) {
   const [allergyEditorOpen, setAllergyEditorOpen] = useState(false);
   const idLine = patientIdentifierLine({ patientCode, patientSex, patientDob });
@@ -197,6 +201,19 @@ export function ConsultPatientBanner({
               >
                 <Icon name="person_off" className="text-[14px]" aria-hidden />
                 Wrong patient?
+              </button>
+            )}
+            {/*JJQR - END */}
+            {/*JJQR - AI (2026-11-26) - GAV-12: owner: "the doctor will click MERGE TO EXISTING ACCOUNT" - right after "Wrong patient?" */}
+            {onMergeExisting && (
+              <button
+                type="button"
+                onClick={onMergeExisting}
+                data-testid="merge-existing"
+                className="ml-sm inline-flex min-h-9 items-center gap-xs rounded-[6px] border border-outline-variant bg-surface-container-lowest px-sm py-xs align-middle text-label-sm font-medium text-on-surface-variant hover:bg-surface-container"
+              >
+                <Icon name="merge" className="text-[14px]" aria-hidden />
+                Merge to existing patient
               </button>
             )}
             {/*JJQR - END */}
