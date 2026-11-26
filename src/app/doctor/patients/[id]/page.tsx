@@ -458,9 +458,12 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                 ))}
               </dl>
               {/*JJQR - AI (2026-11-26) - GAV-10: "Edit details" (pencil) on the left card, above Reprint; opens the patient details dialog */}
-              <Button variant="secondary" className="mt-md w-full" onClick={() => setEditPatientOpen(true)}>
+              {/*JJQR - AI (2026-11-26) - GAV-12 review 4.6: disabled on a merged-away (retired) chart, like the admin chart; its save would only answer 409 patient_merged */}
+              <Button variant="secondary" className="mt-md w-full" onClick={() => setEditPatientOpen(true)} disabled={Boolean(mergedIntoId)}
+                title={mergedIntoId ? "This record was merged into another patient. Edit that patient's chart instead." : undefined} data-testid="chart-edit-details">
                 <Icon name="edit" className="text-[14px]" />Edit details
               </Button>
+              {/*JJQR - END */}
               {/*JJQR - END */}
               {/*JJQR - AI (2026-11-26) - GAV-12: "Merge…" right below Edit details (this record merges INTO an existing one the doctor picks) */}
               {!mergedIntoId && (
