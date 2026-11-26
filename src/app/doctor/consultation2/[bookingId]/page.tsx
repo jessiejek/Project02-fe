@@ -24,6 +24,9 @@ import { Toast } from "@/components/ui/Toast";
 //JJQR - AI (2026-11-26) - GAV-10: doctor edits the patient's details from the consultation header
 import { EditPatientDetailsDialog } from "@/components/doctor/EditPatientDetailsDialog";
 //JJQR - END
+//JJQR - AI (2026-11-26) - GAV-11: "Wrong patient?" moves this visit to the right person
+import { WrongPatientDialog } from "@/components/doctor/WrongPatientDialog";
+//JJQR - END
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Icon } from "@/components/ui/Icon";
 //JJQR - AI (Nov 20, 2026)
@@ -406,6 +409,21 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
     setBooking((b) => (b ? { ...b, patientName: [row.first_name, row.last_name].filter(Boolean).join(" "), patientSex: row.sex ?? b.patientSex, patientDob: row.date_of_birth ?? b.patientDob } : b));
     setPatientDetail((p) => (p ? { ...p, ...row } : row));
     setPatientSavedAt(new Date().toLocaleTimeString());
+  }
+  //JJQR - END
+  //JJQR - AI (2026-11-26) - GAV-11: "Wrong patient?" dialog. While consulting, what the doctor typed is saved FIRST (under this visit, so it moves with it);
+  // after the move the page reloads so the header, the chart link and the past-visit list all show the right person.
+  const [wrongPatientOpen, setWrongPatientOpen] = useState(false);
+  const [wrongPatientBusy, setWrongPatientBusy] = useState(false);
+  async function openWrongPatient() {
+    if (wrongPatientBusy) return;
+    if (mode === "complete") {
+      setWrongPatientBusy(true);
+      const saved = await handleSaveDraft();
+      setWrongPatientBusy(false);
+      if (!saved) return; // the save error is already shown; nothing moves until the notes are safe
+    }
+    setWrongPatientOpen(true);
   }
   //JJQR - END
   //JJQR - AI (Nov 20, 2026) E1
@@ -2618,7 +2636,11 @@ Return to patient queue
           }}
           {...clinicalBannerProps}
           onEditDetails={() => setEditPatientOpen(true)} //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
+          onWrongPatient={() => void openWrongPatient()} //JJQR - AI (2026-11-26) - GAV-11 //JJQR - END
         />
+        {/*JJQR - AI (2026-11-26) - GAV-11 */}
+        <WrongPatientDialog isOpen={wrongPatientOpen} bookingId={booking.id} onClose={() => setWrongPatientOpen(false)} onMoved={() => { setWrongPatientOpen(false); window.location.reload(); }} />
+        {/*JJQR - END */}
         {/*JJQR - AI (2026-11-26) - GAV-10: patient details dialog + saved toast (completed view) */}
         <EditPatientDetailsDialog isOpen={editPatientOpen} patientId={booking.patientId} onClose={() => setEditPatientOpen(false)} onSaved={onPatientDetailsSaved} />
         {patientSavedAt && <Toast key={patientSavedAt} variant="success" message={`Patient details saved at ${patientSavedAt}.`} />}
@@ -2818,7 +2840,11 @@ Return to patient queue
         }}
         {...clinicalBannerProps}
         onEditDetails={() => setEditPatientOpen(true)} //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
+        onWrongPatient={() => void openWrongPatient()} //JJQR - AI (2026-11-26) - GAV-11 //JJQR - END
       />
+      {/*JJQR - AI (2026-11-26) - GAV-11: "Wrong patient?" dialog (notes saved first; the page reloads after the move) */}
+      <WrongPatientDialog isOpen={wrongPatientOpen} bookingId={booking.id} onClose={() => setWrongPatientOpen(false)} onMoved={() => { setWrongPatientOpen(false); window.location.reload(); }} />
+      {/*JJQR - END */}
       {/*JJQR - AI (2026-11-26) - GAV-10: patient details dialog (Save keeps you on this consultation) */}
       <EditPatientDetailsDialog isOpen={editPatientOpen} patientId={booking.patientId} onClose={() => setEditPatientOpen(false)} onSaved={onPatientDetailsSaved} />
       {/*JJQR - END */}

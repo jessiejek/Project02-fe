@@ -72,6 +72,7 @@ import {
   faCopy,
   faPencil,
   faUpload,
+  faUserXmark, //JJQR - AI (2026-11-26) - GAV-11 "Wrong patient?" //JJQR - END
 } from "@fortawesome/free-solid-svg-icons";
 import { faCircle as faCircleRegular } from "@fortawesome/free-regular-svg-icons";
 
@@ -158,6 +159,7 @@ const ICON_MAP: Record<string, IconDefinition> = {
   copy: faCopy,
   edit: faPencil,
   upload_file: faUpload,
+  person_off: faUserXmark, //JJQR - AI (2026-11-26) - GAV-11 //JJQR - END
 };
 
 export interface IconProps {

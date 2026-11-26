@@ -100,6 +100,9 @@ export interface ConsultPatientBannerProps {
   //JJQR - AI (2026-11-26) - GAV-10: when set, an "Edit details" (pencil) button sits right beside the patient's name
   onEditDetails?: () => void;
   //JJQR - END
+  //JJQR - AI (2026-11-26) - GAV-11: when set, a "Wrong patient?" button sits right after "Edit details" (moves this visit to the right person)
+  onWrongPatient?: () => void;
+  //JJQR - END
 }
 
 export function ConsultPatientBanner({
@@ -125,6 +128,7 @@ export function ConsultPatientBanner({
   ageYears,
   contentClassName,
   onEditDetails, //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
+  onWrongPatient, //JJQR - AI (2026-11-26) - GAV-11 //JJQR - END
 }: ConsultPatientBannerProps) {
   const [allergyEditorOpen, setAllergyEditorOpen] = useState(false);
   const idLine = patientIdentifierLine({ patientCode, patientSex, patientDob });
@@ -181,6 +185,18 @@ export function ConsultPatientBanner({
               >
                 <Icon name="edit" className="text-[14px]" aria-hidden />
                 Edit details
+              </button>
+            )}
+            {/*JJQR - END */}
+            {/*JJQR - AI (2026-11-26) - GAV-11: owner: "tag this patient as DIFFERENT and create a new one and carry over the consultation" - right after Edit details */}
+            {onWrongPatient && (
+              <button
+                type="button"
+                onClick={onWrongPatient}
+                className="ml-sm inline-flex min-h-9 items-center gap-xs rounded-[6px] border border-outline-variant bg-surface-container-lowest px-sm py-xs align-middle text-label-sm font-medium text-on-surface-variant hover:bg-surface-container"
+              >
+                <Icon name="person_off" className="text-[14px]" aria-hidden />
+                Wrong patient?
               </button>
             )}
             {/*JJQR - END */}
