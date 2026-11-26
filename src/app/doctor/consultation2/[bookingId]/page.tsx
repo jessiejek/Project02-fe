@@ -21,6 +21,9 @@ import { StatusPill, type PillTone } from "@/components/ui/StatusPill";
 import { Modal } from "@/components/ui/Modal";
 import { Drawer } from "@/components/ui/Drawer";
 import { Toast } from "@/components/ui/Toast";
+//JJQR - AI (2026-11-26) - GAV-10: doctor edits the patient's details from the consultation header
+import { EditPatientDetailsDialog } from "@/components/doctor/EditPatientDetailsDialog";
+//JJQR - END
 import { DatePicker } from "@/components/ui/DatePicker";
 import { Icon } from "@/components/ui/Icon";
 //JJQR - AI (Nov 20, 2026)
@@ -395,6 +398,16 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - AI (Oct 31, 2026) — prior visit Rx lines for PrescriptionForm
   const [priorRxItems, setPriorRxItems] = useState<PrescriptionLineItem[]>([]);
   const [patientDetail, setPatientDetail] = useState<PatientRow | null>(null);
+  //JJQR - AI (2026-11-26) - GAV-10: "Edit details" dialog + its "saved" toast. Saving only touches the patient row and this page's header
+  // (booking.patientName/Sex/Dob, patientDetail); every consultation field (SOAP, Rx, labs, vitals) stays exactly as typed.
+  const [editPatientOpen, setEditPatientOpen] = useState(false);
+  const [patientSavedAt, setPatientSavedAt] = useState<string | null>(null);
+  function onPatientDetailsSaved(row: PatientRow) {
+    setBooking((b) => (b ? { ...b, patientName: [row.first_name, row.last_name].filter(Boolean).join(" "), patientSex: row.sex ?? b.patientSex, patientDob: row.date_of_birth ?? b.patientDob } : b));
+    setPatientDetail((p) => (p ? { ...p, ...row } : row));
+    setPatientSavedAt(new Date().toLocaleTimeString());
+  }
+  //JJQR - END
   //JJQR - AI (Nov 20, 2026) E1
   const [doctorProfile, setDoctorProfile] = useState<DoctorRow | null>(null);
   const patientAddressMissingRef = useRef(false);
@@ -2604,7 +2617,12 @@ Return to patient queue
             void persistAllergies(next, false);
           }}
           {...clinicalBannerProps}
+          onEditDetails={() => setEditPatientOpen(true)} //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
         />
+        {/*JJQR - AI (2026-11-26) - GAV-10: patient details dialog + saved toast (completed view) */}
+        <EditPatientDetailsDialog isOpen={editPatientOpen} patientId={booking.patientId} onClose={() => setEditPatientOpen(false)} onSaved={onPatientDetailsSaved} />
+        {patientSavedAt && <Toast key={patientSavedAt} variant="success" message={`Patient details saved at ${patientSavedAt}.`} />}
+        {/*JJQR - END */}
         <div className="space-y-lg">
           <div className="flex flex-wrap items-center justify-between gap-md">
             <div>
@@ -2799,13 +2817,20 @@ Return to patient queue
           void persistAllergies(next, false);
         }}
         {...clinicalBannerProps}
+        onEditDetails={() => setEditPatientOpen(true)} //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
       />
+      {/*JJQR - AI (2026-11-26) - GAV-10: patient details dialog (Save keeps you on this consultation) */}
+      <EditPatientDetailsDialog isOpen={editPatientOpen} patientId={booking.patientId} onClose={() => setEditPatientOpen(false)} onSaved={onPatientDetailsSaved} />
+      {/*JJQR - END */}
       {/* JJQR - END */}
       <div className="consultation-workspace min-w-0 space-y-lg">
         {mode === "amend" && (
           <Toast variant="info" message="Manual save only — autosave is off in amend mode." dismissible={false} />
         )}
         {saveError && <Toast key={saveError} variant="error" message={saveError} />}
+        {/*JJQR - AI (2026-11-26) - GAV-10 */}
+        {patientSavedAt && <Toast key={patientSavedAt} variant="success" message={`Patient details saved at ${patientSavedAt}.`} />}
+        {/*JJQR - END */}
         {/*JJQR - AI (Nov 19, 2026) - template save/apply notices + SOAP template Undo */}
         {tplNotice && <Toast key={tplNotice.id} variant={tplNotice.variant} message={tplNotice.message} />}
         {templateUndo && undoAvailable && (

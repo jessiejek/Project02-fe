@@ -97,6 +97,9 @@ export interface ConsultPatientBannerProps {
   /** When set, replaces the default inner `max-w-doctor-record` (e.g. completed view column). */
   contentClassName?: string;
   //JJQR - END
+  //JJQR - AI (2026-11-26) - GAV-10: when set, an "Edit details" (pencil) button sits right beside the patient's name
+  onEditDetails?: () => void;
+  //JJQR - END
 }
 
 export function ConsultPatientBanner({
@@ -121,6 +124,7 @@ export function ConsultPatientBanner({
   guardianRelationship,
   ageYears,
   contentClassName,
+  onEditDetails, //JJQR - AI (2026-11-26) - GAV-10 //JJQR - END
 }: ConsultPatientBannerProps) {
   const [allergyEditorOpen, setAllergyEditorOpen] = useState(false);
   const idLine = patientIdentifierLine({ patientCode, patientSex, patientDob });
@@ -168,6 +172,18 @@ export function ConsultPatientBanner({
           <p className="min-w-[9rem] flex-1 text-body-md text-on-surface">
             <span className="break-words font-semibold">{patientName || "—"}</span>
             {metaCompact ? <span className="text-on-surface-variant"> · {metaCompact}</span> : null}
+            {/*JJQR - AI (2026-11-26) - GAV-10: owner: "there must be an EDIT while consulting" - pencil button beside the name; opens the patient details dialog (no navigation) */}
+            {onEditDetails && (
+              <button
+                type="button"
+                onClick={onEditDetails}
+                className="ml-sm inline-flex min-h-9 items-center gap-xs rounded-[6px] border border-outline-variant bg-surface-container-lowest px-sm py-xs align-middle text-label-sm font-medium text-primary hover:bg-surface-container"
+              >
+                <Icon name="edit" className="text-[14px]" aria-hidden />
+                Edit details
+              </button>
+            )}
+            {/*JJQR - END */}
           </p>
           <div className="flex min-w-0 flex-wrap items-center gap-sm">
             {isPregnant && obAog && (

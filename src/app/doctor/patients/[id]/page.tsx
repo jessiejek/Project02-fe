@@ -23,6 +23,11 @@ import { queryBookings } from "@/lib/data/bookings";
 import { openPatientFile, queryPatientDocuments, queryPatientLabResults, queryVaccinations } from "@/lib/data/patientFiles"; //JJQR - AI (Nov 25, 2026) - openPatientFile: Open a visit's file from the chart //JJQR - END
 //JJQR - AI (Nov 25, 2026) - desktop parity: upload to one visit + Reprint
 import { VisitUploadModal } from "@/components/doctor/VisitUploadModal";
+//JJQR - AI (2026-11-26) - GAV-10: doctor edits the patient's details from the chart's left card
+import { EditPatientDetailsDialog } from "@/components/doctor/EditPatientDetailsDialog";
+import { Toast } from "@/components/ui/Toast";
+import type { PatientRow } from "@/lib/data/patients";
+//JJQR - END
 import { formatUploadedManila } from "@/lib/visit-upload"; //JJQR - AI (2026-11-25) - owner: Manila upload times //JJQR - END
 import { loadBookingReprintAvailability, printLabOrdersForBooking, printMedicalCertificateForBooking } from "@/lib/consult-print";
 //JJQR - END
@@ -159,6 +164,14 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
   const [reprintChecked, setReprintChecked] = useState(false);
   const [chartError, setChartError] = useState("");
   const [printing, setPrinting] = useState(false);
+  //JJQR - END
+  //JJQR - AI (2026-11-26) - GAV-10: "Edit details" dialog; on save the left card shows the new name / sex / age / birthday / phone at once
+  const [editPatientOpen, setEditPatientOpen] = useState(false);
+  const [patientSavedAt, setPatientSavedAt] = useState<string | null>(null);
+  function onPatientDetailsSaved(row: PatientRow) {
+    setPatient((p) => (p ? { ...p, fullName: `${row.first_name} ${row.last_name}`, sex: row.sex, dateOfBirth: row.date_of_birth, contactNumber: row.contact_number ?? "" } : p));
+    setPatientSavedAt(new Date().toLocaleTimeString());
+  }
   //JJQR - END
 
   useEffect(() => {
@@ -432,8 +445,16 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
                   </div>
                 ))}
               </dl>
+              {/*JJQR - AI (2026-11-26) - GAV-10: "Edit details" (pencil) on the left card, above Reprint; opens the patient details dialog */}
+              <Button variant="secondary" className="mt-md w-full" onClick={() => setEditPatientOpen(true)}>
+                <Icon name="edit" className="text-[14px]" />Edit details
+              </Button>
+              {/*JJQR - END */}
               {/*JJQR - AI (Nov 25, 2026) - owner: "Reprint" button in the left panel (desktop: under "Print patient card"; the web has no patient card) */}
-              <Button variant="secondary" className="mt-md w-full" onClick={() => { setChartError(""); setReprintOpen(true); }}>Reprint</Button>
+              <Button variant="secondary" className="mt-sm w-full" onClick={() => { setChartError(""); setReprintOpen(true); }}>Reprint</Button>
+              {/*JJQR - END */}
+              {/*JJQR - AI (2026-11-26) - GAV-10 */}
+              {patientSavedAt && <div className="mt-sm"><Toast key={patientSavedAt} variant="success" message={`Patient details saved at ${patientSavedAt}.`} /></div>}
               {/*JJQR - END */}
             </Card>
 
@@ -835,6 +856,10 @@ function DoctorPatientDetailWorkflow({ id }: { id: string }) {
           </div>
         )}
       </Modal>
+
+      {/*JJQR - AI (2026-11-26) - GAV-10: patient details dialog (same one as the consultation header) */}
+      <EditPatientDetailsDialog isOpen={editPatientOpen} patientId={patient.id} onClose={() => setEditPatientOpen(false)} onSaved={onPatientDetailsSaved} />
+      {/*JJQR - END */}
 
       {/*JJQR - AI (Nov 25, 2026) - upload to the visit whose button was pressed (one or several files) */}
       {uploadFor && (
