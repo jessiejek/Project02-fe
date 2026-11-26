@@ -802,13 +802,114 @@ function rxRow(item: HtmlRxLine): string {
 }
 //JJQR - END
 
+//JJQR - AI (2026-11-26) - GAV-14: a height guess (hundredths of an inch) for each printed row, from Arial's letter widths and the same word wrapping the printer does, so the bigger print never runs into the signature / Next appointment. Mirrored exactly in the desktop's ClinicFormsHtml (golden tests compare the HTML).
+const RX_ROWS_SPACE = 464; // 2.86in (under the table header) down to 7.50in (just above the signature block at 7.54in)
+const RX_ONE_PAGE_MAX = 6;
+const RX_ROOMY_MAX = 3;
+const RX_AIRY_MAX = 4;
+const RX_AIRY_EXTRA = 25; // .rx-airy adds 0.25in of padding to each row
+const RX_SPARE = 8; // spare, in case a printer wraps a line more than the guess
+
+// Arial / Helvetica widths (1/1000 em) for the characters space (32) to ~ (126); [0] regular, [1] bold
+const RX_AFM: number[][] = [[
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667,
+  611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500,
+  222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+], [
+  278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556,
+  556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, 975, 722, 722, 722, 722, 667,
+  611, 778, 722, 278, 556, 722, 611, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667,
+  667, 611, 333, 278, 333, 584, 556, 333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556,
+  278, 889, 611, 611, 611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+]];
+
+// widths are 1/1000 em x font size in tenths of a pt = 1/10000 pt
+function rxTextW(text: string, bold: boolean, size10: number): number {
+  let w = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    w += c >= 32 && c <= 126 ? RX_AFM[bold ? 1 : 0][c - 32] : 1000;
+  }
+  return w * size10;
+}
+
+function rxWrapLines(text: string, bold: boolean, size10: number, avail: number): number {
+  const words = text.split(" ");
+  const space = rxTextW(" ", bold, size10);
+  let lines = 1;
+  let cur = 0;
+  let any = false;
+  for (let i = 0; i < words.length; i++) {
+    if (!words[i]) continue;
+    const w = rxTextW(words[i], bold, size10);
+    if (!any) {
+      cur = w;
+      any = true;
+    } else if (cur + space + w <= avail) {
+      cur += space + w;
+    } else {
+      lines++;
+      cur = w;
+    }
+    while (cur > avail) {
+      lines++;
+      cur -= avail;
+    }
+  }
+  return lines;
+}
+
+function rxRowHeight(item: HtmlRxLine, roomy: boolean): number {
+  const name = rxDisplayName(item.generic_name, item.dosage);
+  const qty = item.quantity ?? "";
+  const sig = sigFreeText(item);
+  const long = sig.length > 70;
+  const nameSize = roomy ? 130 : 105;
+  const sigSize = roomy ? (long ? 95 : 105) : (long ? 80 : 85);
+  const labelSize = roomy ? 105 : 85;
+  const mealSize = roomy ? 95 : 80;
+  const indSize = roomy ? 95 : 85;
+  const inner = roomy ? 1976000 : 1992000; // the medicine cell inside its padding (2.745in / 2.766in)
+  const qtyU = rxTextW(qty, true, nameSize) + 15000;
+  const nameAvail = inner - 45000 - rxTextW("# ", true, nameSize) - (qtyU > 288000 ? qtyU : 288000);
+  const mealW = (rxTextW("before/", true, mealSize) + rxTextW(" ", false, mealSize) + rxTextW("after", true, mealSize)) + 52500;
+  const sigAvail = inner - rxTextW("Sig.", true, labelSize) - 90000 - mealW;
+  const indAvail = roomy ? 572000 : 587000;
+  const nameLines = rxWrapLines(name, true, nameSize, nameAvail);
+  const sigLines = rxWrapLines(sig, false, sigSize, sigAvail);
+  const indLines = rxWrapLines(item.indication ?? "", false, indSize, indAvail);
+  // line heights from the CSS; the fixed parts were fitted on 800 rendered rows per size
+  const med = roomy ? 58 + nameLines * 21 + sigLines * 17 : 30 + nameLines * 17 + sigLines * 14;
+  const ind = roomy ? 20 + indLines * 16 : 10 + indLines * 15;
+  return med > ind ? med : ind;
+}
+
+export function rxLayout(items: HtmlRxLine[]): { roomy: boolean; airy: boolean; tall: boolean } {
+  // biggest size that still fits one page: roomy (1-3 medicines) > airy (up to 4) > normal (up to 6); otherwise normal size flowing onto a 2nd page
+  const fits = (roomy: boolean, extra: number): boolean => {
+    let total = RX_SPARE;
+    for (let i = 0; i < items.length; i++) total += rxRowHeight(items[i], roomy) + extra;
+    return total <= RX_ROWS_SPACE;
+  };
+  if (items.length <= RX_ROOMY_MAX && fits(true, 0)) return { roomy: true, airy: false, tall: false };
+  if (items.length <= RX_AIRY_MAX && fits(false, RX_AIRY_EXTRA)) return { roomy: false, airy: true, tall: false };
+  if (items.length <= RX_ONE_PAGE_MAX && fits(false, 0)) return { roomy: false, airy: false, tall: false };
+  return { roomy: false, airy: false, tall: true };
+}
+//JJQR - END
+
 export function buildPrescriptionHtml(opts: RxHtmlOpts): string {
   //JJQR - AI (Nov 20, 2026)
   const rows: string[] = [];
   for (let i = 0; i < opts.items.length; i++) {
     rows.push(rxRow(opts.items[i]));
   }
-  const tall = opts.items.length > 5;
+  //JJQR - END
+  //JJQR - AI (2026-11-26) - GAV-14 bigger print: 1-3 medicines get the roomy size, 4 get extra space, up to 6 stay on one page, anything that would run into the signature flows onto a 2nd page instead of shrinking
+  const layout = rxLayout(opts.items);
+  const tall = layout.tall;
   //JJQR - END
   const css =
     shellCss(opts.pageSize, "148mm", "210mm") +
@@ -863,109 +964,129 @@ export function buildPrescriptionHtml(opts: RxHtmlOpts): string {
   width: 0.6in;
   height: auto;
 }
+/* JJQR - AI (2026-11-26) - GAV-14 doctor: "make our prescription BIG / more readable" + "SPACE" between medicines + "BIGGER" Duration number. Same A5 pad: header, patient lines, Rx, signature and Next appointment stay put; the table starts beside the Rx (its header row has no medicine text) and uses the empty half of the page. Base sizes are for 5-6 medicines; .rx-airy (4 medicines) adds space between rows; .rx-roomy (1-3 medicines) is bigger still. Old sizes: name 8.5pt, # 8pt, Sig 7pt, slots 7pt, Days number 6pt. Also fixes 6+ medicines printing on top of the letterhead (flow-root at the end). */
 .rx-tbl {
   position: absolute;
   left: 0.43in;
-  top: 2.87in;
+  top: 2.58in;
   border-collapse: collapse;
-  width: 4.67in;
+  width: 4.75in;
   table-layout: fixed;
-  font-size: 8pt;
+  font-size: 9pt;
 }
-.rx-tbl col.col-med { width: 2.73in; }
-.rx-tbl col.col-dur { width: 1.0in; }
-.rx-tbl col.col-ind { width: 0.94in; }
+.rx-tbl col.col-med { width: 2.88in; }
+.rx-tbl col.col-dur { width: 0.95in; }
+.rx-tbl col.col-ind { width: 0.92in; }
 .rx-tbl th, .rx-tbl td {
   border: 1px solid #000;
   vertical-align: top;
   box-sizing: border-box;
 }
 .rx-tbl th {
-  font-size: 8.75pt;
+  font-size: 10pt;
   font-weight: 700;
   text-align: center;
-  height: 0.33in;
+  height: 0.28in;
   padding: 1px 2px;
   vertical-align: middle;
 }
 .rx-tbl td.h-empty {
-  height: 0.33in;
+  height: 0.28in;
   padding: 0;
   border: none;
 }
-.rx-row td { min-height: 0.575in; padding: 2px 4px 1px; }
-.rx-med { position: relative; min-height: 0.535in; }
-.rx-med-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; min-height: 0.18in; }
-.rx-med-name { font-size: 8.5pt; flex: 1; min-width: 0; }
-.rx-qty { font-size: 8pt; white-space: nowrap; }
-.rx-qty .u { min-width: 0.45in; }
+.rx-row td { min-height: 0.6in; padding: 3px 5px 3px; }
+.rx-med { position: relative; min-height: 0.6in; }
+.rx-med-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; min-height: 0.19in; }
+.rx-med-name { font-size: 10.5pt; font-weight: 700; line-height: 1.15; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rx-qty { font-size: 10.5pt; font-weight: 700; white-space: nowrap; line-height: 1.15; }
+.rx-qty .u { min-width: 0.4in; text-align: center; }
 .rx-sig {
   display: flex;
   align-items: flex-start;
   gap: 4px;
-  font-size: 7pt;
+  font-size: 8.5pt;
   margin-top: 0.02in;
+  line-height: 1.15;
 }
 .sig-k {
   flex: none;
   white-space: nowrap;
+  font-weight: 700;
 }
 .sig-free {
   flex: 1 1 auto;
   min-width: 0;
   white-space: normal;
   overflow-wrap: anywhere;
-  line-height: 1.2;
-  font-size: 7pt;
+  line-height: 1.15;
+  font-size: 8.5pt;
 }
-.sig-long { font-size: 6.2pt; }
+.sig-long { font-size: 8pt; }
 .meal {
   flex: none;
-  font-size: 6.5pt;
+  font-size: 8pt;
   white-space: nowrap;
   margin-left: 4px;
 }
 .rx-slots {
   text-align: center;
-  margin-top: 0.04in;
-  font-size: 7pt;
+  margin-top: 0.03in;
+  font-size: 8pt;
   white-space: nowrap;
+  line-height: 1.2;
 }
 .slot { display: inline; }
 .slot.pill {
   display: inline-block;
-  border: 1px solid #111;
+  border: 1.5px solid #111;
   border-radius: 999px;
-  padding: 0 3px;
+  padding: 0 4px;
   margin: 0 -2px;
   box-sizing: border-box;
   line-height: 1.15;
-  /* JJQR - AI (Nov 20, 2026) */
   font-weight: 700;
 }
-.faint { color: #aaa; }
+.faint { color: #999; }
 .slot-note {
-  font-size: 6pt;
-  color: #555;
+  font-size: 8pt;
+  color: #444;
   font-style: italic;
 }
-/* JJQR - END */
-.rx-dur { font-size: 6pt; line-height: 1.35; }
-.dur-m { margin-bottom: 1px; }
+.rx-dur { font-size: 8pt; line-height: 1.3; }
+.rx-dur > div { white-space: nowrap; }
+.dur-m { margin-bottom: 3px; }
 .cb {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border: 1px solid #000;
   text-align: center;
-  font-size: 7px;
-  line-height: 7px;
+  font-size: 9px;
+  line-height: 9px;
   font-weight: 700;
   vertical-align: middle;
   margin-right: 2px;
 }
-.dur-u { min-width: 0.28in; width: 0.32in; }
-.rx-ind { font-size: 7pt; word-break: break-word; }
+.dur-u { min-width: 0.34in; width: 0.36in; font-size: 12pt; font-weight: 700; text-align: center; line-height: 1.1; }
+.rx-ind { font-size: 8.5pt; overflow-wrap: anywhere; line-height: 1.2; }
+.rx-roomy .rx-row td { padding: 8px 6px 10px; }
+.rx-roomy .rx-med { min-height: 0.92in; }
+.rx-roomy .rx-med-top { min-height: 0.24in; }
+.rx-roomy .rx-med-name, .rx-roomy .rx-qty { font-size: 13pt; }
+.rx-roomy .rx-sig, .rx-roomy .sig-free { font-size: 10.5pt; }
+.rx-roomy .rx-sig { margin-top: 0.08in; }
+.rx-roomy .sig-long { font-size: 9.5pt; }
+.rx-roomy .meal { font-size: 9.5pt; }
+.rx-roomy .rx-slots { font-size: 8.5pt; margin-top: 0.1in; }
+.rx-roomy .slot-note { font-size: 9pt; }
+.rx-roomy .rx-dur { font-size: 9pt; }
+.rx-roomy .dur-u { font-size: 15pt; width: 0.4in; }
+.rx-roomy .cb { width: 11px; height: 11px; font-size: 10px; line-height: 10px; }
+.rx-roomy .rx-ind { font-size: 9.5pt; }
+.rx-airy .rx-row td { padding: 15px 5px 15px; }
+.form-tall.form-rx { display: flow-root; }
+/* JJQR - END */
 .rx-next {
   position: absolute;
   left: 0.41in;
@@ -987,7 +1108,7 @@ export function buildPrescriptionHtml(opts: RxHtmlOpts): string {
 .form-tall .rx-tbl {
   position: relative;
   top: auto;
-  margin: 2.87in 0 0 0.43in;
+  margin: 2.58in 0 0 0.43in; /* JJQR - AI (2026-11-26) - GAV-14: same start as the one-page table (was 2.87in) JJQR - END */
 }
 .form-tall .rx-next {
   position: relative;
@@ -1038,7 +1159,7 @@ export function buildPrescriptionHtml(opts: RxHtmlOpts): string {
 
   return (
     "<style>" + css + "</style>" +
-    '<div class="form form-rx' + (tall ? " form-tall" : "") + '">' + inner + "</div>"
+    '<div class="form form-rx' + (tall ? " form-tall" : "") + (layout.roomy ? " rx-roomy" : layout.airy ? " rx-airy" : "") + '">' + inner + "</div>" //JJQR - AI (2026-11-26) - GAV-14 roomy / airy size class //JJQR - END
   );
 }
 

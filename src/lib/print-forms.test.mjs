@@ -318,17 +318,17 @@ test("prescription: A5 page size, table labels, 1 row, fill, 6 meds, escape", ()
   assert.equal(countClass(html, "rx-row"), 1);
   assert.match(html, /--pad-l:\s*0\.35in/);
   assert.match(html, /--pad-r:\s*0\.65in/);
-  assert.match(html, /width:\s*4\.67in/);
-  assert.match(html, /width:\s*2\.73in/);
-  assert.match(html, /width:\s*1\.0in/);
-  assert.match(html, /width:\s*0\.94in/);
-  assert.match(html, /height:\s*0\.575in/);
-  assert.match(html, /height:\s*0\.33in/);
+  assert.match(html, /width:\s*4\.75in/); //JJQR - AI (2026-11-26) - GAV-14 table widened to the header right edge (was 4.67in) //JJQR - END
+  assert.match(html, /width:\s*2\.88in/); //JJQR - AI (2026-11-26) - GAV-14 columns 2.88 / 0.95 / 0.92in (were 2.73 / 1.0 / 0.94in) //JJQR - END
+  assert.match(html, /width:\s*0\.95in/);
+  assert.match(html, /width:\s*0\.92in/);
+  assert.match(html, /height:\s*0\.6in/); //JJQR - AI (2026-11-26) - GAV-14 row min-height (was 0.575in) //JJQR - END
+  assert.match(html, /height:\s*0\.28in/); //JJQR - AI (2026-11-26) - GAV-14 table header row (was 0.33in) //JJQR - END
   assert.match(html, /left:\s*0\.43in/);
   assert.match(html, /top:\s*1\.58in/);
   assert.match(html, /top:\s*1\.77in/);
   assert.match(html, /top:\s*1\.98in/);
-  assert.match(html, /top:\s*2\.87in/);
+  assert.match(html, /top:\s*2\.58in/); //JJQR - AI (2026-11-26) - GAV-14 table starts beside the Rx (was 2.87in) //JJQR - END
   assert.match(html, /left:\s*66%/);
   assert.match(html, /left:\s*77%/);
   assert.match(html, /width:\s*0\.6in/);
@@ -432,12 +432,12 @@ test("prescription: sig route dedupe and long-sig wrap layout", () => {
   assert.match(html, /\.rx-sig\s*\{[^}]*align-items:\s*flex-start/);
   assert.match(html, /\.sig-free\s*\{[^}]*flex:\s*1 1 auto/);
   assert.match(html, /\.sig-free\s*\{[^}]*overflow-wrap:\s*anywhere/);
-  assert.match(html, /\.sig-long\s*\{[^}]*font-size:\s*6\.2pt/);
+  assert.match(html, /\.sig-long\s*\{[^}]*font-size:\s*8pt/); //JJQR - AI (2026-11-26) - GAV-14 bigger print (was 6.2pt) //JJQR - END
   const tdRule = html.match(/\.rx-row td\s*\{[^}]*\}/);
   assert.ok(tdRule, "rx-row td rule missing");
-  assert.match(tdRule[0], /min-height:\s*0\.575in/);
+  assert.match(tdRule[0], /min-height:\s*0\.6in/); //JJQR - AI (2026-11-26) - GAV-14 bigger print (was 0.575in) //JJQR - END
   assert.ok(
-    !/(?:^|[^-\w])height:\s*0\.575in/.test(tdRule[0]),
+    !/(?:^|[^-\w])height:\s*0\.6in/.test(tdRule[0]),
     "rx-row td must use min-height, not a fixed height",
   );
 
@@ -824,3 +824,23 @@ test("license and PTR numbers print when the doctor filled them in and stay blan
     assert.match(html, /PTR No:<\/span><span class="u sig-u"><\/span>/);
   }
 });
+
+//JJQR - AI (2026-11-26) - GAV-14 doctor: bigger, more readable prescription on the same A5 pad; up to six ordinary lines on one page, more flow to a 2nd page at the same size
+test("GAV-14: prescription size tiers and one-page fit", () => {
+  const line = (n, ins = "1 TAB ONCE A DAY") => ({ generic_name: "MED" + n, dosage: "500MG", quantity: "10", instruction: ins, route: "PO", indication: "HPN" });
+  const pad = (items) => buildPrescriptionHtml({ origin: ORIGIN, pageSize: PAGE_A5, doctor, patient, age: "36", date: "November 26, 2026", items });
+  const cls = (html) => (html.match(/<div class="(form form-rx[^"]*)">/) || [])[1];
+  assert.equal(cls(pad([line(1), line(2), line(3)])), "form form-rx rx-roomy");
+  assert.equal(cls(pad([line(1), line(2), line(3), line(4)])), "form form-rx rx-airy");
+  assert.equal(cls(pad([1, 2, 3, 4, 5, 6].map((n) => line(n)))), "form form-rx");
+  assert.equal(cls(pad([1, 2, 3, 4, 5, 6, 7].map((n) => line(n)))), "form form-rx form-tall");
+  const long = "TAKE ONE TABLET EVERY 8 HOURS WITH FOOD FOR COUGH AND WHEEZING, CONTINUE UNTIL THE SYMPTOMS RESOLVE COMPLETELY PLEASE";
+  assert.equal(cls(pad([1, 2, 3, 4, 5, 6].map((n) => line(n, long)))), "form form-rx form-tall", "six very long lines flow instead of running into the signature");
+  const html = pad([line(1)]);
+  assert.match(html, /\.rx-med-name\s*\{[^}]*font-size:\s*10\.5pt;\s*font-weight:\s*700/);
+  assert.match(html, /\.rx-roomy \.rx-med-name, \.rx-roomy \.rx-qty \{ font-size: 13pt; \}/);
+  assert.match(html, /\.dur-u\s*\{[^}]*font-size:\s*12pt;\s*font-weight:\s*700/);
+  assert.match(html, /\.rx-roomy \.dur-u \{ font-size: 15pt;/);
+  assert.match(html, /\.form-tall\.form-rx \{ display: flow-root; \}/);
+});
+//JJQR - END
