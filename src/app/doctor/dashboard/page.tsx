@@ -455,7 +455,13 @@ export default function DoctorDashboardPage() {
   const attentionGroups = groupAttention(attentionEntries, attentionToday);
   //JJQR - AI (2026-11-26) - why: owner (t79u): today's Needs attention stays in today's card; each earlier date's Needs attention moves under that date
   // in the "Earlier days" card (with that day's queue). Same rows and actions as before, rendered by one function for both places.
-  const todayAttention = attentionGroups.find((g) => g.isToday);
+  const todayAttentionAll = attentionGroups.find((g) => g.isToday);
+  //JJQR - AI (2026-11-27) - why: owner (t146u) "WE COULD ONLY REMIND THE DOCTOR BUT NOT QUEUE": follow-ups due today leave the queue card's
+  // "Needs attention · Today" and get their own "Follow-ups due today" card below it. Reminder only: no queue number, never in the waiting /
+  // in progress / completed counts (those come from the queue board, which follow-ups are never part of).
+  const todayFollowUps = (todayAttentionAll?.items ?? []).filter((it) => it.kind === "followup");
+  const todayAttention = todayAttentionAll ? { ...todayAttentionAll, items: todayAttentionAll.items.filter((it) => it.kind !== "followup") } : undefined;
+  //JJQR - END
   const renderAttentionRows = (items: AttentionEntry[]) => (
     <div>
       {items.slice(0, ATTENTION_GROUP_MAX_ROWS).map((it) => (
@@ -642,6 +648,19 @@ export default function DoctorDashboardPage() {
           </Modal>
           {/*JJQR - END */}
         </Card>
+        {/*JJQR - AI (2026-11-27) - why: owner (t146u): follow-ups are reminders only, in their own card directly below the patient queue; hidden when empty */}
+        {todayFollowUps.length > 0 && (
+          <Card className="!p-md sm:!p-lg" data-testid="today-followups">
+            <div className="mb-sm flex flex-wrap items-center justify-between gap-sm">
+              <h3 className="text-label-lg font-semibold text-on-surface">Follow-ups due today</h3>
+              <span className="text-label-sm text-on-surface-variant">{itemsLabel(todayFollowUps.length)} · reminder only</span>
+            </div>
+            <div className="overflow-hidden rounded-lg border border-outline-variant/60 [&>div>div:first-child]:border-t-0">
+              {renderAttentionRows(todayFollowUps)}
+            </div>
+          </Card>
+        )}
+        {/*JJQR - END */}
         {/*JJQR - AI (2026-11-26) - why: owner (t79u) "UNDER NOVEMBER 25 → Queue → list, → Needs attention → list": earlier days in their own card, below today's */}
         <LeftoverQueue role="doctor" onChanged={() => { void loadQueue(); }} attention={earlierAttention} />
         </div>
