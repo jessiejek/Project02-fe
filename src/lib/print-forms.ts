@@ -21,6 +21,7 @@ import {
   buildLabRequestHtml,
   buildMedicalCertificateHtml,
   type DiagnosisLayout, //JJQR - AI (2026-11-27) - why: "Print as" choice //JJQR - END
+  diagnosisLayoutFromText, //JJQR - AI (2026-11-27) - why: no "Print as" given (reprint) = read it from the text //JJQR - END
   buildPrescriptionHtml,
 } from "@/lib/print-forms-html";
 
@@ -188,7 +189,7 @@ export function printMedicalCertificate(opts: {
       recommendations: cert.recommendations ?? "",
       purposeException: cert.purpose_exception ?? "",
       comeBackOn: fmtDate(cert.come_back_on),
-      diagnosisLayout: opts.diagnosisLayout ?? "lines", //JJQR - AI (2026-11-27) - why: default = each diagnosis on its own line //JJQR - END
+      diagnosisLayout: opts.diagnosisLayout ?? diagnosisLayoutFromText(cert.diagnosis_text), //JJQR - AI (2026-11-27) - why: no choice given = read from the text (numbered/bulleted = each on its own line, ";" = one line, plain = paragraph) //JJQR - END
     }),
     "medical_certificate",
   );

@@ -11,6 +11,8 @@ import {
   diagnosisTextFromRows,
   diagnosisRowsForEdit,
   diagnosisStyleFromText,
+  diagnosisParagraphLines,
+  diagnosisLayoutFromText,
 } from "./print-forms-html.ts";
 
 const ORIGIN = "http://forms.test";
@@ -925,5 +927,49 @@ test("medical certificate: bullets print one per ruled line; One line drops the 
   assert.ok(lines.includes("Diagnosis/ Impressions:</span>• URTI<br>• DENGUE FEVER</div>"));
   const one = buildMedicalCertificateHtml({ ...base, diagnosis: "• URTI\n• DENGUE FEVER", diagnosisLayout: "oneLine" });
   assert.ok(one.includes("Diagnosis/ Impressions:</span>URTI; DENGUE FEVER</div>"));
+});
+//JJQR - END
+
+//JJQR - AI (2026-11-27) - why: owner: "give me paragraph style diagnosis": "Print as: Paragraph" prints her text as typed
+const DX_PARA = "Patient presented with 3 days of fever, cough and body malaise; no difficulty of breathing. Clinical impression is acute upper respiratory tract infection, r/o dengue fever. Advised rest & hydration <2 days>.";
+test("diagnosisParagraphLines: her own lines kept, spaces squeezed, one blank line between paragraphs, ends trimmed", () => {
+  assert.deepEqual(diagnosisParagraphLines("  Acute   URTI.\r\nRule out dengue.  "), ["Acute URTI.", "Rule out dengue."]);
+  assert.deepEqual(diagnosisParagraphLines("\n\nFirst.\n\n\n\nSecond.\n\n"), ["First.", "", "Second."]);
+  assert.deepEqual(diagnosisParagraphLines("1) URTI; 2) AGE"), ["1) URTI; 2) AGE"]); // nothing split or renumbered
+  assert.deepEqual(diagnosisParagraphLines(" \n "), []);
+  assert.deepEqual(diagnosisParagraphLines(null), []);
+});
+
+test("diagnosisLayoutFromText: numbered/bulleted = lines, ';' = one line, plain = paragraph, empty = lines", () => {
+  assert.equal(diagnosisLayoutFromText(""), "lines");
+  assert.equal(diagnosisLayoutFromText(null), "lines");
+  assert.equal(diagnosisLayoutFromText("1) URTI\n2) AGE"), "lines");
+  assert.equal(diagnosisLayoutFromText("1) URTI;2) AGE"), "lines");
+  assert.equal(diagnosisLayoutFromText("\n• URTI"), "lines");
+  assert.equal(diagnosisLayoutFromText("URTI; AGE"), "oneLine");
+  assert.equal(diagnosisLayoutFromText("Patient seen for fever. Impression is URTI."), "paragraph");
+  assert.equal(diagnosisLayoutFromText("2.5 days of fever.\nImpression: URTI"), "paragraph"); // a dose/number is not a list marker
+  assert.equal(diagnosisLayoutFromText(DX_PARA), "oneLine"); // her own ";" reads as One line until she picks Paragraph (then it is pinned)
+});
+
+test("medical certificate: Paragraph prints the text as typed (escaped, own new lines, no '; ', numbers or bullets), wrapped over enough ruled lines", () => {
+  const base = { origin: ORIGIN, pageSize: PAGE_A5, doctor, patient, issueDate: "", address: "", examinedAt: "", examFrom: "", examTo: "", recommendations: "", purposeException: "", comeBackOn: "" };
+  const p = buildMedicalCertificateHtml({ ...base, diagnosis: DX_PARA, diagnosisLayout: "paragraph" });
+  assert.ok(p.includes("Diagnosis/ Impressions:</span>Patient presented with 3 days of fever, cough and body malaise; no difficulty of breathing. Clinical impression is acute upper respiratory tract infection, r/o dengue fever. Advised rest &amp; hydration &lt;2 days&gt;.</div>"));
+  assert.ok(!p.includes("<br>"), "one paragraph, no forced breaks");
+  const rules = (h) => (h.match(/<div class="wl"><\/div>/g) || []).length - 3; // less the 3 recommendation lines
+  assert.equal(rules(p), 3, "three sentences wrap over the 3 printed lines");
+  const longer = buildMedicalCertificateHtml({ ...base, diagnosis: DX_PARA + " " + DX_PARA, diagnosisLayout: "paragraph" });
+  assert.ok(rules(longer) > 3, "a longer paragraph gets more ruled lines than the 3 printed ones");
+  assert.match(longer, /<div class="write mc-diag" style="--dx-lh:0\.\d{3}in;--dx-h:0\.\d{3}in;--dx-fs:\dpt">/);
+  const two = buildMedicalCertificateHtml({ ...base, diagnosis: "1) URTI\n\nRule out dengue.", diagnosisLayout: "paragraph" });
+  assert.ok(two.includes("Diagnosis/ Impressions:</span>1) URTI<br><br>Rule out dengue.</div>")); // her lines + one blank line, nothing renumbered
+  const short = buildMedicalCertificateHtml({ ...base, diagnosis: "Acute URTI.", diagnosisLayout: "paragraph" });
+  assert.equal(rules(short), 3);
+  const huge = buildMedicalCertificateHtml({ ...base, diagnosis: DX_PARA.repeat(5), diagnosisLayout: "paragraph" });
+  assert.match(huge, /--dx-fs:6pt/, "very long text shrinks the font, the same rules as the lists");
+  // "One line" and "Each on its own line" are unchanged
+  assert.ok(buildMedicalCertificateHtml({ ...base, diagnosis: "1) URTI\n2) AGE", diagnosisLayout: "oneLine" }).includes("</span>1) URTI; 2) AGE</div>"));
+  assert.ok(buildMedicalCertificateHtml({ ...base, diagnosis: "1) URTI\n2) AGE" }).includes("</span>1) URTI<br>2) AGE</div>"));
 });
 //JJQR - END

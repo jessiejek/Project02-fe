@@ -111,7 +111,7 @@ import {
 import { queryDoctorById, type DoctorRow } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
 import { printMedicalCertificate } from "@/lib/print-forms";
-import { diagnosisRowsForEdit, diagnosisTextFromRows, diagnosisStyleFromText, type DiagnosisListStyle } from "@/lib/print-forms-html"; //JJQR - AI (2026-11-27) - why: "Each on its own line" rows <-> diagnosis text //JJQR - END
+import { diagnosisRowsForEdit, diagnosisTextFromRows, diagnosisStyleFromText, diagnosisLayoutFromText, type DiagnosisListStyle, type DiagnosisLayout } from "@/lib/print-forms-html"; //JJQR - AI (2026-11-27) - why: "Each on its own line" rows <-> diagnosis text //JJQR - END
 //JJQR - AI (Nov 20, 2026) E1
 import {
   diagnosisTextFromConsult,
@@ -1342,7 +1342,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const mcDiagnosisField = !certExists && !mcDiagnosisDirty ? mcDiagnosisDefault : mcDiagnosis;
   //JJQR - END
   //JJQR - AI (2026-11-27) - why: owner wants a choice under Diagnosis / Impressions: print each diagnosis on its own ruled line (default) or all on one line; kept for this print only (no column for it)
-  const [mcDxLayout, setMcDxLayout] = useState<"lines" | "oneLine">("lines");
+  //JJQR - AI (2026-11-27) - why: owner: "give me paragraph style diagnosis": a third choice, "Paragraph". Until she picks one it is read from the text (numbered/bulleted = lines, ";" = one line, plain = paragraph) and pinned on her first edit so typing never flips the box
+  const [mcDxLayout, setMcDxLayout] = useState<DiagnosisLayout | null>(null);
+  const mcDxLayoutView: DiagnosisLayout = mcDxLayout ?? diagnosisLayoutFromText(mcDiagnosisField);
+  //JJQR - END
   //JJQR - END
   //JJQR - AI (2026-11-27) - why: "Each on its own line" rows (5 at least). Every row edit saves the joined text ("1) ...\n2) ..."); if the text changes elsewhere (template, reload) the rows follow it again
   const [mcDxRows, setMcDxRows] = useState<string[] | null>(null);
@@ -1352,6 +1355,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - END
   const mcDxRowsView = mcDxRows && diagnosisTextFromRows(mcDxRows, mcDxStyleView) === mcDiagnosisField ? mcDxRows : diagnosisRowsForEdit(mcDiagnosisField);
   function setMcDxRowsAndText(next: string[], style: DiagnosisListStyle = mcDxStyleView) {
+    if (mcDxLayout === null) setMcDxLayout(mcDxLayoutView); //JJQR - AI (2026-11-27) - why: pin the mode on the first edit //JJQR - END
     setMcDxRows(next);
     setMcDiagnosisDirty(true);
     setMcDiagnosis(diagnosisTextFromRows(next, style));
@@ -2270,7 +2274,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           address: pat?.address ?? null,
         },
         cert,
-        diagnosisLayout: mcDxLayout, //JJQR - AI (2026-11-27) - why: "Print as" choice under Diagnosis / Impressions //JJQR - END
+        diagnosisLayout: mcDxLayoutView, //JJQR - AI (2026-11-27) - why: "Print as" choice under Diagnosis / Impressions //JJQR - END
       });
     } finally {
       setIssuingCert(false);
@@ -3648,24 +3652,24 @@ Return to patient queue
                         <div className="flex flex-wrap items-center gap-sm">
                           <span className="text-label-md font-medium text-on-surface-variant">Print as</span>
                           <div role="group" aria-label="Print diagnosis as" className="inline-flex rounded-lg border border-outline-variant bg-surface-container p-[3px]">
-                            {(["oneLine", "lines"] as const).map((v) => (
+                            {(["oneLine", "lines", "paragraph"] as const).map((v) => ( //JJQR - AI (2026-11-27) - why: + "Paragraph" //JJQR - END
                               <button
                                 key={v}
                                 type="button"
-                                aria-pressed={mcDxLayout === v}
+                                aria-pressed={mcDxLayoutView === v}
                                 onClick={() => { setMcDxLayout(v); setMcDxRows(null); setMcDxStyle(null); }}
                                 className={cn(
                                   "min-h-8 rounded-[6px] px-md py-xs text-label-md font-medium transition-colors",
-                                  mcDxLayout === v ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
+                                  mcDxLayoutView === v ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
                                 )}
                               >
-                                {v === "oneLine" ? "One line" : "Each on its own line"}
+                                {v === "oneLine" ? "One line" : v === "lines" ? "Each on its own line" : "Paragraph"}
                               </button>
                             ))}
                           </div>
                         </div>
                         {/*JJQR - AI (2026-11-27) - why: "List style" directly under "Print as", only for "Each on its own line": numbers "1) ..." (default) or bullets "• ..." */}
-                        {mcDxLayout === "lines" && (
+                        {mcDxLayoutView === "lines" && (
                           <div className="flex flex-wrap items-center gap-sm">
                             <span className="text-label-md font-medium text-on-surface-variant">List style</span>
                             <div role="group" aria-label="Diagnosis list style" className="inline-flex rounded-lg border border-outline-variant bg-surface-container p-[3px]">
@@ -3687,7 +3691,7 @@ Return to patient queue
                           </div>
                         )}
                         {/*JJQR - END */}
-                        {mcDxLayout === "lines" ? (
+                        {mcDxLayoutView === "lines" ? (
                           <div className="space-y-xs">
                             <ul className="space-y-xs" aria-label="Diagnoses, one per line">
                               {mcDxRowsView.map((row, i) => (
@@ -3723,11 +3727,12 @@ Return to patient queue
                             value={mcDiagnosisField}
                             aria-label="Diagnosis / Impressions"
                             onChange={(e) => {
+                              if (mcDxLayout === null) setMcDxLayout(mcDxLayoutView); //JJQR - AI (2026-11-27) - why: pin the mode on the first edit (typing "1)" or ";" must not switch the box) //JJQR - END
                               setMcDiagnosisDirty(true);
                               setMcDiagnosis(e.target.value);
                             }}
                             placeholder={assessment ? `Diagnosis / Impressions (default: “${assessment}”)` : "Diagnosis / Impressions"}
-                            rows={2}
+                            rows={mcDxLayoutView === "paragraph" ? 6 : 2} //JJQR - AI (2026-11-27) - why: "Paragraph" = a roomier multi-line box, printed exactly as typed //JJQR - END
                             className="w-full rounded-lg border border-outline-variant p-md text-body-md"
                           />
                         )}

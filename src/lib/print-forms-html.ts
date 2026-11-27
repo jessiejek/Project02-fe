@@ -61,8 +61,8 @@ export interface McHtmlOpts {
   diagnosisLayout?: DiagnosisLayout; //JJQR - AI (2026-11-27) - why: "Print as" under Diagnosis / Impressions; default "lines" (each on its own line) //JJQR - END
 }
 
-//JJQR - AI (2026-11-27) - why: "Print as" choice for the certificate's diagnosis: "lines" = each on its own ruled line, "oneLine" = joined with "; "
-export type DiagnosisLayout = "lines" | "oneLine";
+//JJQR - AI (2026-11-27) - why: "Print as" choice for the certificate's diagnosis: "lines" = each on its own ruled line, "oneLine" = joined with "; ", "paragraph" = her text as typed (owner: "give me paragraph style diagnosis")
+export type DiagnosisLayout = "lines" | "oneLine" | "paragraph";
 //JJQR - END
 
 export interface RxHtmlOpts {
@@ -632,7 +632,7 @@ export function buildMedicalCertificateHtml(opts: McHtmlOpts): string {
     '</span><span>until</span><span class="u grow">' +
     e(opts.examTo) +
     "</span><span>.</span></div>" +
-    diagnosisBlock(opts.diagnosis, opts.diagnosisLayout === "oneLine") + //JJQR - AI (2026-11-27) - why: one diagnosis per ruled line (was flat(opts.diagnosis), which ran "1) ...;2) ..." together) //JJQR - END
+    diagnosisBlock(opts.diagnosis, opts.diagnosisLayout ?? "lines") + //JJQR - AI (2026-11-27) - why: one diagnosis per ruled line (was flat(opts.diagnosis), which ran "1) ...;2) ..." together) //JJQR - END
     '<div class="write mc-rec"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>' +
     '<div class="write-text">' +
     '<span class="write-lbl">Recommendations:</span>' +
@@ -974,6 +974,34 @@ export function diagnosisTextFromRows(rows: Array<string | null | undefined>, st
   return out.join("\n");
 }
 
+//JJQR - AI (2026-11-27) - why: owner: "give me paragraph style diagnosis". "Paragraph" prints her text as typed: her own new lines kept (runs of spaces / blank lines squeezed to one), wrapped over the ruled lines, no "; " joining, numbering or bullets.
+export function diagnosisParagraphLines(text: string | null | undefined): string[] {
+  const out: string[] = [];
+  const lines = (text ?? "").split(/\r\n|\r|\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].replace(/\s+/g, " ").trim();
+    if (t) out.push(t);
+    else if (out.length && out[out.length - 1] !== "") out.push(""); // one blank line between paragraphs
+  }
+  while (out.length && out[out.length - 1] === "") out.pop();
+  return out;
+}
+
+// Which "Print as" a saved diagnosis was written in (nothing is stored, so it is read back from the text):
+// empty = "lines" (the default); any line starting with "1)" / "1." / "•" = "lines"; otherwise a ";" = "oneLine"; otherwise (plain text) = "paragraph".
+export function diagnosisLayoutFromText(text: string | null | undefined): DiagnosisLayout {
+  const lines = (text ?? "").split(/\r\n|\r|\n/);
+  let any = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    any = true;
+    if (DX_LEAD.test(lines[i])) return "lines";
+  }
+  if (!any) return "lines";
+  return (text ?? "").indexOf(";") >= 0 ? "oneLine" : "paragraph";
+}
+//JJQR - END
+
 /** The rows to show: the text's items, padded with empty rows to at least DX_MIN_ROWS. */
 export function diagnosisRowsForEdit(text: string | null | undefined): string[] {
   const rows = diagnosisRowsFromText(text);
@@ -1016,8 +1044,9 @@ function dxInches(mils: number): string {
   return Math.floor(mils / 1000) + "." + (r < 10 ? "00" : r < 100 ? "0" : "") + r + "in";
 }
 
-function diagnosisBlock(text: string | null | undefined, oneLine: boolean): string {
-  const split = splitDiagnosisLines(text);
+function diagnosisBlock(text: string | null | undefined, layout: DiagnosisLayout): string {
+  const oneLine = layout === "oneLine";
+  const split = layout === "paragraph" ? diagnosisParagraphLines(text) : splitDiagnosisLines(text); //JJQR - AI (2026-11-27) - why: "Paragraph": her own lines, wrapped like sentences //JJQR - END
   const items = oneLine && split.length ? [split.map((t) => t.replace(/^•[ \t]*/, "")).join("; ")] : split; //JJQR - AI (2026-11-27) - why: no "•" inside a one-line sentence //JJQR - END
   // "One line": joined with "; " and wrapped like a sentence
   let lines = 0;
