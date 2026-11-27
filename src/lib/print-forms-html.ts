@@ -58,7 +58,12 @@ export interface McHtmlOpts {
   recommendations: string;
   purposeException: string;
   comeBackOn: string;
+  diagnosisLayout?: DiagnosisLayout; //JJQR - AI (2026-11-27) - why: "Print as" under Diagnosis / Impressions; default "lines" (each on its own line) //JJQR - END
 }
+
+//JJQR - AI (2026-11-27) - why: "Print as" choice for the certificate's diagnosis: "lines" = each on its own ruled line, "oneLine" = joined with "; "
+export type DiagnosisLayout = "lines" | "oneLine";
+//JJQR - END
 
 export interface RxHtmlOpts {
   origin: string;
@@ -627,7 +632,7 @@ export function buildMedicalCertificateHtml(opts: McHtmlOpts): string {
     '</span><span>until</span><span class="u grow">' +
     e(opts.examTo) +
     "</span><span>.</span></div>" +
-    diagnosisBlock(opts.diagnosis) + //JJQR - AI (2026-11-27) - why: one diagnosis per ruled line (was flat(opts.diagnosis), which ran "1) ...;2) ..." together) //JJQR - END
+    diagnosisBlock(opts.diagnosis, opts.diagnosisLayout === "oneLine") + //JJQR - AI (2026-11-27) - why: one diagnosis per ruled line (was flat(opts.diagnosis), which ran "1) ...;2) ..." together) //JJQR - END
     '<div class="write mc-rec"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>' +
     '<div class="write-text">' +
     '<span class="write-lbl">Recommendations:</span>' +
@@ -967,8 +972,9 @@ function dxInches(mils: number): string {
   return Math.floor(mils / 1000) + "." + (r < 10 ? "00" : r < 100 ? "0" : "") + r + "in";
 }
 
-function diagnosisBlock(text: string | null | undefined): string {
-  const items = splitDiagnosisLines(text);
+function diagnosisBlock(text: string | null | undefined, oneLine: boolean): string {
+  const split = splitDiagnosisLines(text);
+  const items = oneLine && split.length ? [split.join("; ")] : split; // "One line": joined with "; " and wrapped like a sentence
   let lines = 0;
   const first = DX_W - rxTextW("Diagnosis/ Impressions:", false, DX_SIZE) - DX_LBL;
   for (let i = 0; i < items.length; i++) lines += dxWrapLines(items[i], i === 0 ? first : DX_W, DX_W);

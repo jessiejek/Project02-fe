@@ -872,6 +872,8 @@ test("medical certificate: one diagnosis per ruled line, extra ruled lines when 
   assert.equal((five.match(/<div class="wl"><\/div>/g) || []).length, 5 + 3); // 5 diagnosis lines + 3 recommendation lines
   const long = buildMedicalCertificateHtml({ ...base, diagnosis: "1) " + "very long diagnosis text ".repeat(12) + "\n2) Dengue fever" });
   assert.ok(/<div class="write mc-diag" style="--dx-lh:0\.\d{3}in;--dx-h:0\.\d{3}in;--dx-fs:\dpt">/.test(long)); // a long item wraps inside its own lines
+  const joined = buildMedicalCertificateHtml({ ...base, diagnosis: "1) Upper respiratory tract infection\n2) Dengue fever", diagnosisLayout: "oneLine" });
+  assert.ok(joined.includes("Diagnosis/ Impressions:</span>1) Upper respiratory tract infection; 2) Dengue fever</div>")); // "One line" = joined with "; "
   const one = buildMedicalCertificateHtml({ ...base, diagnosis: "Acute URTI" });
   assert.ok(one.includes('<div class="write mc-diag"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>'));
 });

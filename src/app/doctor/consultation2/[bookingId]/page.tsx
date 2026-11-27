@@ -1340,6 +1340,9 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   const [mcDiagnosisDirty, setMcDiagnosisDirty] = useState(false);
   const mcDiagnosisField = !certExists && !mcDiagnosisDirty ? mcDiagnosisDefault : mcDiagnosis;
   //JJQR - END
+  //JJQR - AI (2026-11-27) - why: owner wants a choice under Diagnosis / Impressions: print each diagnosis on its own ruled line (default) or all on one line; kept for this print only (no column for it)
+  const [mcDxLayout, setMcDxLayout] = useState<"lines" | "oneLine">("lines");
+  //JJQR - END
 
   //JJQR - AI (Nov 20, 2026) E2 — templates never overwrite address, examined at, exam dates, patient/doctor, or diagnosis when diagnoses/Assessment exist
   function mcTemplateFieldPlan(template: MedicalCertificateTemplateRow) {
@@ -2250,6 +2253,7 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
           address: pat?.address ?? null,
         },
         cert,
+        diagnosisLayout: mcDxLayout, //JJQR - AI (2026-11-27) - why: "Print as" choice under Diagnosis / Impressions //JJQR - END
       });
     } finally {
       setIssuingCert(false);
@@ -3632,6 +3636,27 @@ Return to patient queue
                         rows={2}
                         className="w-full rounded-lg border border-outline-variant p-md text-body-md"
                       /></label>
+                      {/*JJQR - END */}
+                      {/*JJQR - AI (2026-11-27) - why: "Print as" directly under the Diagnosis / Impressions box: each diagnosis on its own printed line (default) or one line joined with "; " */}
+                      <div className="flex flex-wrap items-center gap-sm">
+                        <span className="text-label-md font-medium text-on-surface-variant">Print as</span>
+                        <div role="group" aria-label="Print diagnosis as" className="inline-flex rounded-lg border border-outline-variant bg-surface-container p-[3px]">
+                          {(["oneLine", "lines"] as const).map((v) => (
+                            <button
+                              key={v}
+                              type="button"
+                              aria-pressed={mcDxLayout === v}
+                              onClick={() => setMcDxLayout(v)}
+                              className={cn(
+                                "min-h-8 rounded-[6px] px-md py-xs text-label-md font-medium transition-colors",
+                                mcDxLayout === v ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
+                              )}
+                            >
+                              {v === "oneLine" ? "One line" : "Each on its own line"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       {/*JJQR - END */}
                       <textarea
                         value={mcRecommendations}

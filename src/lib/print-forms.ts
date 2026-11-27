@@ -20,6 +20,7 @@ import { cleanMedCertAddress } from "@/lib/clinical/med-cert-fields";
 import {
   buildLabRequestHtml,
   buildMedicalCertificateHtml,
+  type DiagnosisLayout, //JJQR - AI (2026-11-27) - why: "Print as" choice //JJQR - END
   buildPrescriptionHtml,
 } from "@/lib/print-forms-html";
 
@@ -165,6 +166,7 @@ export function printMedicalCertificate(opts: {
   doctor: PrintDoctor;
   patient: PrintPatient;
   cert: MedCertData;
+  diagnosisLayout?: DiagnosisLayout; //JJQR - AI (2026-11-27) - why: the "Print as" choice for this print (not stored) //JJQR - END
 }): boolean {
   const { clinic, doctor, patient, cert } = opts;
   //JJQR - AI (Nov 20, 2026) E3 — print "residing at <address>" without doubling / dangling commas
@@ -186,6 +188,7 @@ export function printMedicalCertificate(opts: {
       recommendations: cert.recommendations ?? "",
       purposeException: cert.purpose_exception ?? "",
       comeBackOn: fmtDate(cert.come_back_on),
+      diagnosisLayout: opts.diagnosisLayout ?? "lines", //JJQR - AI (2026-11-27) - why: default = each diagnosis on its own line //JJQR - END
     }),
     "medical_certificate",
   );
