@@ -10,6 +10,7 @@ import {
   diagnosisRowsFromText,
   diagnosisTextFromRows,
   diagnosisRowsForEdit,
+  diagnosisStyleFromText,
 } from "./print-forms-html.ts";
 
 const ORIGIN = "http://forms.test";
@@ -898,5 +899,31 @@ test("diagnosis rows: split text into rows without markers (from One line / save
   assert.equal(diagnosisRowsForEdit(Array.from({ length: 7 }, (_, i) => i + 1 + ") X").join("\n")).length, 7);
   // round trip: rows -> text -> print lines
   assert.deepEqual(splitDiagnosisLines(diagnosisTextFromRows(["URTI", "", "1) AGE"])), ["1) URTI", "2) AGE"]);
+});
+//JJQR - END
+
+//JJQR - AI (2026-11-27) - why: "List style": bullets or numbers
+test("diagnosis rows: bullets style saves '• ...' lines; numbers stays the default", () => {
+  assert.equal(diagnosisTextFromRows(["URTI", "", "2) DENGUE FEVER", "• AGE"], "bullets"), "• URTI\n• DENGUE FEVER\n• AGE");
+  assert.equal(diagnosisTextFromRows(["• URTI", "• AGE"]), "1) URTI\n2) AGE");
+  assert.equal(diagnosisTextFromRows(["• URTI", "• AGE"], "numbers"), "1) URTI\n2) AGE");
+});
+
+test("diagnosis rows: '•' and 'N)' markers both split and strip; style read back from the text", () => {
+  assert.deepEqual(diagnosisRowsFromText("• URTI\n• DENGUE FEVER"), ["URTI", "DENGUE FEVER"]);
+  assert.deepEqual(diagnosisRowsFromText("• URTI • AGE; • HPN"), ["URTI", "AGE", "HPN"]);
+  assert.deepEqual(splitDiagnosisLines("• URTI • AGE"), ["• URTI", "• AGE"]);
+  assert.equal(diagnosisStyleFromText("\n  • URTI\n• AGE"), "bullets");
+  assert.equal(diagnosisStyleFromText("1) URTI\n2) AGE"), "numbers");
+  assert.equal(diagnosisStyleFromText("URTI"), "numbers");
+  assert.equal(diagnosisStyleFromText(""), "numbers");
+});
+
+test("medical certificate: bullets print one per ruled line; One line drops the bullets", () => {
+  const base = { origin: ORIGIN, pageSize: PAGE_A5, doctor, patient, issueDate: "", address: "", examinedAt: "", examFrom: "", examTo: "", recommendations: "", purposeException: "", comeBackOn: "" };
+  const lines = buildMedicalCertificateHtml({ ...base, diagnosis: "• URTI\n• DENGUE FEVER" });
+  assert.ok(lines.includes("Diagnosis/ Impressions:</span>• URTI<br>• DENGUE FEVER</div>"));
+  const one = buildMedicalCertificateHtml({ ...base, diagnosis: "• URTI\n• DENGUE FEVER", diagnosisLayout: "oneLine" });
+  assert.ok(one.includes("Diagnosis/ Impressions:</span>URTI; DENGUE FEVER</div>"));
 });
 //JJQR - END

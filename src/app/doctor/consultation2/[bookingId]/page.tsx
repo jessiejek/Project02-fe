@@ -111,7 +111,7 @@ import {
 import { queryDoctorById, type DoctorRow } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
 import { printMedicalCertificate } from "@/lib/print-forms";
-import { diagnosisRowsForEdit, diagnosisTextFromRows } from "@/lib/print-forms-html"; //JJQR - AI (2026-11-27) - why: "Each on its own line" rows <-> diagnosis text //JJQR - END
+import { diagnosisRowsForEdit, diagnosisTextFromRows, diagnosisStyleFromText, type DiagnosisListStyle } from "@/lib/print-forms-html"; //JJQR - AI (2026-11-27) - why: "Each on its own line" rows <-> diagnosis text //JJQR - END
 //JJQR - AI (Nov 20, 2026) E1
 import {
   diagnosisTextFromConsult,
@@ -1346,11 +1346,15 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - END
   //JJQR - AI (2026-11-27) - why: "Each on its own line" rows (5 at least). Every row edit saves the joined text ("1) ...\n2) ..."); if the text changes elsewhere (template, reload) the rows follow it again
   const [mcDxRows, setMcDxRows] = useState<string[] | null>(null);
-  const mcDxRowsView = mcDxRows && diagnosisTextFromRows(mcDxRows) === mcDiagnosisField ? mcDxRows : diagnosisRowsForEdit(mcDiagnosisField);
-  function setMcDxRowsAndText(next: string[]) {
+  //JJQR - AI (2026-11-27) - why: owner: "make me choose bullets or numbers": "List style" for the rows; not saved anywhere, read back from the text (a leading "•" = bullets) until she picks one
+  const [mcDxStyle, setMcDxStyle] = useState<DiagnosisListStyle | null>(null);
+  const mcDxStyleView: DiagnosisListStyle = mcDxStyle ?? diagnosisStyleFromText(mcDiagnosisField);
+  //JJQR - END
+  const mcDxRowsView = mcDxRows && diagnosisTextFromRows(mcDxRows, mcDxStyleView) === mcDiagnosisField ? mcDxRows : diagnosisRowsForEdit(mcDiagnosisField);
+  function setMcDxRowsAndText(next: string[], style: DiagnosisListStyle = mcDxStyleView) {
     setMcDxRows(next);
     setMcDiagnosisDirty(true);
-    setMcDiagnosis(diagnosisTextFromRows(next));
+    setMcDiagnosis(diagnosisTextFromRows(next, style));
   }
   function focusMcDxRow(i: number) {
     requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`input[data-dx-row="${i}"]`)?.focus());
@@ -3649,7 +3653,7 @@ Return to patient queue
                                 key={v}
                                 type="button"
                                 aria-pressed={mcDxLayout === v}
-                                onClick={() => { setMcDxLayout(v); setMcDxRows(null); }}
+                                onClick={() => { setMcDxLayout(v); setMcDxRows(null); setMcDxStyle(null); }}
                                 className={cn(
                                   "min-h-8 rounded-[6px] px-md py-xs text-label-md font-medium transition-colors",
                                   mcDxLayout === v ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
@@ -3660,12 +3664,35 @@ Return to patient queue
                             ))}
                           </div>
                         </div>
+                        {/*JJQR - AI (2026-11-27) - why: "List style" directly under "Print as", only for "Each on its own line": numbers "1) ..." (default) or bullets "• ..." */}
+                        {mcDxLayout === "lines" && (
+                          <div className="flex flex-wrap items-center gap-sm">
+                            <span className="text-label-md font-medium text-on-surface-variant">List style</span>
+                            <div role="group" aria-label="Diagnosis list style" className="inline-flex rounded-lg border border-outline-variant bg-surface-container p-[3px]">
+                              {(["numbers", "bullets"] as const).map((v) => (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  aria-pressed={mcDxStyleView === v}
+                                  onClick={() => { setMcDxStyle(v); setMcDxRowsAndText(mcDxRowsView, v); }}
+                                  className={cn(
+                                    "min-h-8 rounded-[6px] px-md py-xs text-label-md font-medium transition-colors",
+                                    mcDxStyleView === v ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
+                                  )}
+                                >
+                                  {v === "numbers" ? "Numbers 1) 2) 3)" : "Bullets •"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {/*JJQR - END */}
                         {mcDxLayout === "lines" ? (
                           <div className="space-y-xs">
                             <ul className="space-y-xs" aria-label="Diagnoses, one per line">
                               {mcDxRowsView.map((row, i) => (
                                 <li key={i} className="flex items-center gap-sm">
-                                  <span aria-hidden="true" className="w-4 shrink-0 text-center text-title-md text-on-surface-variant">•</span>
+                                  <span aria-hidden="true" className={cn("w-6 shrink-0 text-center text-on-surface-variant", mcDxStyleView === "bullets" ? "text-title-md" : "text-label-md font-medium")}>{mcDxStyleView === "bullets" ? "•" : `${i + 1}.`}</span>{/*JJQR - AI (2026-11-27) - why: the row marker follows List style //JJQR - END */}
                                   <input
                                     data-dx-row={i}
                                     value={row}
@@ -3686,7 +3713,7 @@ Return to patient queue
                             <button
                               type="button"
                               onClick={() => { setMcDxRowsAndText([...mcDxRowsView, ""]); focusMcDxRow(mcDxRowsView.length); }}
-                              className="ml-6 text-label-md font-medium text-primary hover:underline"
+                              className="ml-8 text-label-md font-medium text-primary hover:underline"
                             >
                               + Add line
                             </button>

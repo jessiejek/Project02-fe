@@ -907,7 +907,7 @@ export function rxLayout(items: HtmlRxLine[]): { roomy: boolean; airy: boolean; 
 //JJQR - END
 
 //JJQR - AI (2026-11-27) - why: Dr. Allyn wants each diagnosis on its own ruled line of the medical certificate ("mu newline igka 2"). Split at print time on new lines, ";" and before every number marker after the first ("2)" / "2."), then give each item its own line; more lines than the 3 printed ones get extra ruled lines with tighter spacing so the certificate stays one page. Mirrored exactly in the desktop's ClinicFormsHtml (golden tests compare the HTML).
-const DX_MARKER = /(^|[ \t,])([0-9]{1,2})[.)](?=[ \t]*[A-Za-z])/g;
+const DX_MARKER = /(^|[ \t,])(?:([0-9]{1,2})[.)](?=[ \t]*[A-Za-z])|•(?=[ \t]*\S))/g; //JJQR - AI (2026-11-27) - why: "Bullets •" list style: a "•" starts a new line too //JJQR - END
 const DX_LINES = 3; // ruled lines printed on the pad
 const DX_LH = 230; // their spacing, thousandths of an inch (0.23in)
 const DX_SPACE = 910; // 4.17in (top of the block) down to 5.08in (just above Recommendations at 5.10in)
@@ -941,7 +941,19 @@ export function splitDiagnosisLines(text: string | null | undefined): string[] {
 //JJQR - AI (2026-11-27) - why: owner: "Each on its own line" = a bulleted list of single-line fields (5 at least, "+ Add line" for more). Rows <-> the saved diagnosis text:
 // rows join as "1) ...\n2) ..." (her numbering style, blanks dropped, a number she typed herself is not doubled); text splits back into rows without the "N)" markers.
 export const DX_MIN_ROWS = 5;
-const DX_LEAD = /^[ \t]*[0-9]{1,2}[.)](?![0-9])[ \t]*/;
+const DX_LEAD = /^[ \t]*(?:[0-9]{1,2}[.)](?![0-9])|•)[ \t]*/; //JJQR - AI (2026-11-27) - why: strip a "•" as well as "N)" //JJQR - END
+//JJQR - AI (2026-11-27) - why: owner: "make me choose bullets or numbers": rows are saved as "1) ..." (numbers, default) or "• ..." (bullets); the style is read back from the text (a leading "•" = bullets)
+export type DiagnosisListStyle = "numbers" | "bullets";
+
+export function diagnosisStyleFromText(text: string | null | undefined): DiagnosisListStyle {
+  const lines = (text ?? "").split(/\r\n|\r|\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t) return t.charAt(0) === "•" ? "bullets" : "numbers";
+  }
+  return "numbers";
+}
+//JJQR - END
 
 export function diagnosisRowsFromText(text: string | null | undefined): string[] {
   const out: string[] = [];
@@ -953,11 +965,11 @@ export function diagnosisRowsFromText(text: string | null | undefined): string[]
   return out;
 }
 
-export function diagnosisTextFromRows(rows: Array<string | null | undefined>): string {
+export function diagnosisTextFromRows(rows: Array<string | null | undefined>, style: DiagnosisListStyle = "numbers"): string {
   const out: string[] = [];
   for (let i = 0; i < rows.length; i++) {
     const t = (rows[i] ?? "").replace(/\s+/g, " ").trim().replace(DX_LEAD, "").trim();
-    if (t) out.push(out.length + 1 + ") " + t);
+    if (t) out.push((style === "bullets" ? "•" : out.length + 1 + ")") + " " + t); //JJQR - AI (2026-11-27) - why: bullets or numbers //JJQR - END
   }
   return out.join("\n");
 }
@@ -1006,7 +1018,8 @@ function dxInches(mils: number): string {
 
 function diagnosisBlock(text: string | null | undefined, oneLine: boolean): string {
   const split = splitDiagnosisLines(text);
-  const items = oneLine && split.length ? [split.join("; ")] : split; // "One line": joined with "; " and wrapped like a sentence
+  const items = oneLine && split.length ? [split.map((t) => t.replace(/^•[ \t]*/, "")).join("; ")] : split; //JJQR - AI (2026-11-27) - why: no "•" inside a one-line sentence //JJQR - END
+  // "One line": joined with "; " and wrapped like a sentence
   let lines = 0;
   const first = DX_W - rxTextW("Diagnosis/ Impressions:", false, DX_SIZE) - DX_LBL;
   for (let i = 0; i < items.length; i++) lines += dxWrapLines(items[i], i === 0 ? first : DX_W, DX_W);
