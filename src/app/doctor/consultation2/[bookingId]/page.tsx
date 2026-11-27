@@ -111,6 +111,7 @@ import {
 import { queryDoctorById, type DoctorRow } from "@/lib/data/doctors";
 import { queryBookingById } from "@/lib/data/bookings";
 import { printMedicalCertificate } from "@/lib/print-forms";
+import { dxAutoNumberEdit } from "@/lib/clinical/dx-auto-number"; //JJQR - AI (2026-11-27) - why: Enter auto-numbering in the ruled Diagnosis box //JJQR - END
 //JJQR - AI (Nov 20, 2026) E1
 import {
   diagnosisTextFromConsult,
@@ -154,6 +155,17 @@ import { VisitFilesPanel } from "@/components/doctor/VisitFilesPanel";
 //JJQR - END
 
 type DbLineItem = Database["public"]["Tables"]["prescription_line_items"]["Row"];
+
+//JJQR - AI (2026-11-27) - why: ruled Diagnosis box for "Each on its own line": one 28px row per line with a rule under it (scrolls with the text), like the paper form
+const MC_DX_RULED = {
+  lineHeight: "28px",
+  paddingTop: 0,
+  paddingBottom: 0,
+  backgroundImage: "repeating-linear-gradient(to bottom, transparent 0px, transparent 27px, #b9c2cc 27px, #b9c2cc 28px)",
+  backgroundAttachment: "local",
+  backgroundPosition: "0 0",
+} as const;
+//JJQR - END
 
 function mapRxGroup(g: RxGroupRow): PrescriptionGroup {
   return {
@@ -1342,6 +1354,10 @@ function ConsultationWorkflow({ bookingId }: { bookingId: string }) {
   //JJQR - END
   //JJQR - AI (2026-11-27) - why: owner wants a choice under Diagnosis / Impressions: print each diagnosis on its own ruled line (default) or all on one line; kept for this print only (no column for it)
   const [mcDxLayout, setMcDxLayout] = useState<"lines" | "oneLine">("lines");
+  //JJQR - END
+  //JJQR - AI (2026-11-27) - why: owner: "if each as own line give me lines when i type": ruled box + Enter auto-numbering ("2) ", "3) ") in "Each on its own line" mode
+  const mcDxRef = useRef<HTMLTextAreaElement | null>(null);
+  const mcDxRows = Math.max(3, mcDiagnosisField.split(/\r\n|\r|\n/).length + 1);
   //JJQR - END
 
   //JJQR - AI (Nov 20, 2026) E2 — templates never overwrite address, examined at, exam dates, patient/doctor, or diagnosis when diagnoses/Assessment exist
@@ -3627,14 +3643,26 @@ Return to patient queue
                       </div>
                       {/*JJQR - AI (Nov 20, 2026) E1 */}
                       <label className="block min-w-0 flex-1 space-y-xs"><span className="text-label-md font-medium text-on-surface">Diagnosis / Impressions</span><textarea
+                        ref={mcDxRef} //JJQR - AI (2026-11-27) - why: put the caret after an automatic "2) " //JJQR - END
                         value={mcDiagnosisField}
                         onChange={(e) => {
                           setMcDiagnosisDirty(true);
+                          //JJQR - AI (2026-11-27) - why: "Each on its own line": Enter adds the next number, Enter on a blank numbered line removes it, a typed number is not doubled
+                          const auto = mcDxLayout === "lines" ? dxAutoNumberEdit(mcDiagnosisField, e.target.value) : null;
+                          if (auto) {
+                            setMcDiagnosis(auto.text);
+                            requestAnimationFrame(() => mcDxRef.current?.setSelectionRange(auto.caret, auto.caret));
+                            return;
+                          }
+                          //JJQR - END
                           setMcDiagnosis(e.target.value);
                         }}
                         placeholder={assessment ? `Diagnosis / Impressions (default: “${assessment}”)` : "Diagnosis / Impressions"}
-                        rows={2}
-                        className="w-full rounded-lg border border-outline-variant p-md text-body-md"
+                        //JJQR - AI (2026-11-27) - why: "Each on its own line" shows ruled lines like the paper form (one line per row, lines scroll with the text); "One line" keeps the plain box
+                        rows={mcDxLayout === "lines" ? mcDxRows : 2}
+                        style={mcDxLayout === "lines" ? MC_DX_RULED : undefined}
+                        className={cn("w-full rounded-lg border border-outline-variant text-body-md", mcDxLayout === "lines" ? "px-md" : "p-md")}
+                        //JJQR - END
                       /></label>
                       {/*JJQR - END */}
                       {/*JJQR - AI (2026-11-27) - why: "Print as" directly under the Diagnosis / Impressions box: each diagnosis on its own printed line (default) or one line joined with "; " */}
