@@ -7,6 +7,9 @@ import {
   buildMedicalCertificateHtml,
   buildPrescriptionHtml,
   splitDiagnosisLines,
+  diagnosisRowsFromText,
+  diagnosisTextFromRows,
+  diagnosisRowsForEdit,
 } from "./print-forms-html.ts";
 
 const ORIGIN = "http://forms.test";
@@ -876,5 +879,24 @@ test("medical certificate: one diagnosis per ruled line, extra ruled lines when 
   assert.ok(joined.includes("Diagnosis/ Impressions:</span>1) Upper respiratory tract infection; 2) Dengue fever</div>")); // "One line" = joined with "; "
   const one = buildMedicalCertificateHtml({ ...base, diagnosis: "Acute URTI" });
   assert.ok(one.includes('<div class="write mc-diag"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>'));
+});
+//JJQR - END
+
+//JJQR - AI (2026-11-27) - why: "Each on its own line" rows <-> saved diagnosis text
+test("diagnosis rows: join numbered with new lines, drop blanks, never double a typed number", () => {
+  assert.equal(diagnosisTextFromRows(["UPPER RESPIRATORY TRACT INFECTION", "", "  DENGUE   FEVER ", "", ""]), "1) UPPER RESPIRATORY TRACT INFECTION\n2) DENGUE FEVER");
+  assert.equal(diagnosisTextFromRows(["1) URTI", "2. AGE", "5) HPN"]), "1) URTI\n2) AGE\n3) HPN");
+  assert.equal(diagnosisTextFromRows(["2.5 ml syrup reaction", "Type 2 diabetes"]), "1) 2.5 ml syrup reaction\n2) Type 2 diabetes");
+  assert.equal(diagnosisTextFromRows(["", " ", null]), "");
+});
+
+test("diagnosis rows: split text into rows without markers (from One line / saved text), padded to 5 for editing", () => {
+  assert.deepEqual(diagnosisRowsFromText("1) UPPER RESPIRATORY TRACT INFECTION;2) DENGUE FEVER"), ["UPPER RESPIRATORY TRACT INFECTION", "DENGUE FEVER"]);
+  assert.deepEqual(diagnosisRowsFromText("1. URTI 2. AGE\n3) HPN"), ["URTI", "AGE", "HPN"]);
+  assert.deepEqual(diagnosisRowsFromText("Acute URTI; Hypertension"), ["Acute URTI", "Hypertension"]);
+  assert.deepEqual(diagnosisRowsForEdit("1) URTI\n2) AGE"), ["URTI", "AGE", "", "", ""]);
+  assert.equal(diagnosisRowsForEdit(Array.from({ length: 7 }, (_, i) => i + 1 + ") X").join("\n")).length, 7);
+  // round trip: rows -> text -> print lines
+  assert.deepEqual(splitDiagnosisLines(diagnosisTextFromRows(["URTI", "", "1) AGE"])), ["1) URTI", "2) AGE"]);
 });
 //JJQR - END

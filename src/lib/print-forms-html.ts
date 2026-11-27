@@ -938,6 +938,38 @@ export function splitDiagnosisLines(text: string | null | undefined): string[] {
   return out;
 }
 
+//JJQR - AI (2026-11-27) - why: owner: "Each on its own line" = a bulleted list of single-line fields (5 at least, "+ Add line" for more). Rows <-> the saved diagnosis text:
+// rows join as "1) ...\n2) ..." (her numbering style, blanks dropped, a number she typed herself is not doubled); text splits back into rows without the "N)" markers.
+export const DX_MIN_ROWS = 5;
+const DX_LEAD = /^[ \t]*[0-9]{1,2}[.)](?![0-9])[ \t]*/;
+
+export function diagnosisRowsFromText(text: string | null | undefined): string[] {
+  const out: string[] = [];
+  const items = splitDiagnosisLines(text);
+  for (let i = 0; i < items.length; i++) {
+    const t = items[i].replace(DX_LEAD, "").trim();
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+export function diagnosisTextFromRows(rows: Array<string | null | undefined>): string {
+  const out: string[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const t = (rows[i] ?? "").replace(/\s+/g, " ").trim().replace(DX_LEAD, "").trim();
+    if (t) out.push(out.length + 1 + ") " + t);
+  }
+  return out.join("\n");
+}
+
+/** The rows to show: the text's items, padded with empty rows to at least DX_MIN_ROWS. */
+export function diagnosisRowsForEdit(text: string | null | undefined): string[] {
+  const rows = diagnosisRowsFromText(text);
+  while (rows.length < DX_MIN_ROWS) rows.push("");
+  return rows;
+}
+//JJQR - END
+
 function dxWrapLines(text: string, firstAvail: number, avail: number): number {
   const words = text.split(" ");
   const space = rxTextW(" ", false, DX_SIZE);
