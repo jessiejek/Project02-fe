@@ -6,6 +6,7 @@ import {
   buildLabRequestHtml,
   buildMedicalCertificateHtml,
   buildPrescriptionHtml,
+  splitDiagnosisLines,
 } from "./print-forms-html.ts";
 
 const ORIGIN = "http://forms.test";
@@ -842,5 +843,36 @@ test("GAV-14: prescription size tiers and one-page fit", () => {
   assert.match(html, /\.dur-u\s*\{[^}]*font-size:\s*12pt;\s*font-weight:\s*700/);
   assert.match(html, /\.rx-roomy \.dur-u \{ font-size: 15pt;/);
   assert.match(html, /\.form-tall\.form-rx \{ display: flow-root; \}/);
+});
+//JJQR - END
+
+//JJQR - AI (2026-11-27) - why: Dr. Allyn wants each diagnosis on its own ruled line of the medical certificate
+test("splitDiagnosisLines: new lines, ';' and number markers after the first; not doses or words", () => {
+  assert.deepEqual(splitDiagnosisLines("1) UPPER RESPIRATORY TRACT INFECTION;2) DENGUE FEVER"), ["1) UPPER RESPIRATORY TRACT INFECTION", "2) DENGUE FEVER"]);
+  assert.deepEqual(splitDiagnosisLines("1. URTI 2. Dengue fever 3. AGE"), ["1. URTI", "2. Dengue fever", "3. AGE"]);
+  assert.deepEqual(splitDiagnosisLines("1) URTI\r\n\n2) AGE"), ["1) URTI", "2) AGE"]);
+  assert.deepEqual(splitDiagnosisLines("1) a, 2) b, 3) c"), ["1) a", "2) b", "3) c"]);
+  assert.deepEqual(splitDiagnosisLines("Acute URTI; Hypertension stage 2"), ["Acute URTI", "Hypertension stage 2"]);
+  assert.deepEqual(splitDiagnosisLines("Paracetamol 500mg 2.5 ml, Type 2 diabetes, COVID-19"), ["Paracetamol 500mg 2.5 ml, Type 2 diabetes, COVID-19"]);
+  assert.deepEqual(splitDiagnosisLines("  Acute   URTI  "), ["Acute URTI"]);
+  assert.deepEqual(splitDiagnosisLines("  ; \n ;"), []);
+  assert.deepEqual(splitDiagnosisLines(null), []);
+});
+
+test("medical certificate: one diagnosis per ruled line, extra ruled lines when needed (one page)", () => {
+  const base = {
+    origin: ORIGIN, pageSize: PAGE_A5, doctor, patient, issueDate: "November 27, 2026", address: "Buaya, Lapu Lapu City",
+    examinedAt: "Grace Medical Clinic", examFrom: "", examTo: "", recommendations: "", purposeException: "", comeBackOn: "",
+  };
+  const three = buildMedicalCertificateHtml({ ...base, diagnosis: "1) Upper respiratory tract infection;2) Dengue fever 3) Acute gastroenteritis" });
+  assert.ok(three.includes('<div class="write mc-diag"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>'));
+  assert.ok(three.includes("Diagnosis/ Impressions:</span>1) Upper respiratory tract infection<br>2) Dengue fever<br>3) Acute gastroenteritis</div>"));
+  const five = buildMedicalCertificateHtml({ ...base, diagnosis: "1) A\n2) B\n3) C\n4) D\n5) E" });
+  assert.ok(five.includes('<div class="write mc-diag" style="--dx-lh:0.182in;--dx-h:0.910in;--dx-fs:9pt">'));
+  assert.equal((five.match(/<div class="wl"><\/div>/g) || []).length, 5 + 3); // 5 diagnosis lines + 3 recommendation lines
+  const long = buildMedicalCertificateHtml({ ...base, diagnosis: "1) " + "very long diagnosis text ".repeat(12) + "\n2) Dengue fever" });
+  assert.ok(/<div class="write mc-diag" style="--dx-lh:0\.\d{3}in;--dx-h:0\.\d{3}in;--dx-fs:\dpt">/.test(long)); // a long item wraps inside its own lines
+  const one = buildMedicalCertificateHtml({ ...base, diagnosis: "Acute URTI" });
+  assert.ok(one.includes('<div class="write mc-diag"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>'));
 });
 //JJQR - END

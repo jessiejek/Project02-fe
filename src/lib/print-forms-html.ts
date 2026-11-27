@@ -598,7 +598,12 @@ export function buildMedicalCertificateHtml(opts: McHtmlOpts): string {
 .form-mc .sig-name { font-size: 7.5pt; font-weight: 700; height: 0.20in; line-height: 0.20in; }
 .form-mc .sig-row { font-size: 7.5pt; height: 0.20in; margin: 0; line-height: 0.20in; }
 
-.form-mc .ln { width: auto; }`; //JJQR - AI (Nov 23, 2026) - every pinned line used width:100% inside the left/right margins, so its underline ran past the right margin to the page edge. Let it fill only the margin box (the desktop already did; keeps both prints identical) //JJQR - END
+.form-mc .ln { width: auto; }
+/* JJQR - AI (2026-11-27) - why: the diagnosis block can get extra ruled lines (tighter spacing, still one page); defaults = the 3 printed lines */
+.mc-diag .wl { height: var(--dx-lh, 0.23in); }
+.mc-diag .write-text { line-height: var(--dx-lh, 0.23in); height: var(--dx-h, 0.69in); font-size: var(--dx-fs, 9pt); }
+.mc-diag .write-lbl { height: var(--dx-lh, 0.23in); line-height: var(--dx-lh, 0.23in); font-size: var(--dx-fs, 9pt); }
+/* JJQR - END */`; //JJQR - AI (Nov 23, 2026) - every pinned line used width:100% inside the left/right margins, so its underline ran past the right margin to the page edge. Let it fill only the margin box (the desktop already did; keeps both prints identical) //JJQR - END
 
   const inner =
     letterheadHtml(opts.origin) +
@@ -622,11 +627,7 @@ export function buildMedicalCertificateHtml(opts: McHtmlOpts): string {
     '</span><span>until</span><span class="u grow">' +
     e(opts.examTo) +
     "</span><span>.</span></div>" +
-    '<div class="write mc-diag"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>' +
-    '<div class="write-text">' +
-    '<span class="write-lbl">Diagnosis/ Impressions:</span>' +
-    flat(opts.diagnosis) +
-    "</div></div>" +
+    diagnosisBlock(opts.diagnosis) + //JJQR - AI (2026-11-27) - why: one diagnosis per ruled line (was flat(opts.diagnosis), which ran "1) ...;2) ..." together) //JJQR - END
     '<div class="write mc-rec"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>' +
     '<div class="write-text">' +
     '<span class="write-lbl">Recommendations:</span>' +
@@ -897,6 +898,99 @@ export function rxLayout(items: HtmlRxLine[]): { roomy: boolean; airy: boolean; 
   if (items.length <= RX_AIRY_MAX && fits(false, RX_AIRY_EXTRA)) return { roomy: false, airy: true, tall: false };
   if (items.length <= RX_ONE_PAGE_MAX && fits(false, 0)) return { roomy: false, airy: false, tall: false };
   return { roomy: false, airy: false, tall: true };
+}
+//JJQR - END
+
+//JJQR - AI (2026-11-27) - why: Dr. Allyn wants each diagnosis on its own ruled line of the medical certificate ("mu newline igka 2"). Split at print time on new lines, ";" and before every number marker after the first ("2)" / "2."), then give each item its own line; more lines than the 3 printed ones get extra ruled lines with tighter spacing so the certificate stays one page. Mirrored exactly in the desktop's ClinicFormsHtml (golden tests compare the HTML).
+const DX_MARKER = /(^|[ \t,])([0-9]{1,2})[.)](?=[ \t]*[A-Za-z])/g;
+const DX_LINES = 3; // ruled lines printed on the pad
+const DX_LH = 230; // their spacing, thousandths of an inch (0.23in)
+const DX_SPACE = 910; // 4.17in (top of the block) down to 5.08in (just above Recommendations at 5.10in)
+const DX_W = 3352320; // 4.80in writing width (A5 less the 0.50in / 0.53in margins) in 1/10000 pt, less 3% spare
+const DX_SIZE = 90; // 9pt
+const DX_LBL = 57600; // the label's 0.08in right padding, 1/10000 pt
+
+export function splitDiagnosisLines(text: string | null | undefined): string[] {
+  const out: string[] = [];
+  const push = (s: string): void => {
+    const t = s.replace(/\s+/g, " ").trim().replace(/[ ,]+$/, "");
+    if (t) out.push(t);
+  };
+  const parts = (text ?? "").split(/\r\n|\r|\n|;/);
+  for (let p = 0; p < parts.length; p++) {
+    const part = parts[p];
+    let from = 0;
+    DX_MARKER.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = DX_MARKER.exec(part)) !== null) {
+      const at = m.index + m[1].length;
+      if (part.slice(0, at).trim() === "") continue; // never before the first item
+      push(part.slice(from, at));
+      from = at;
+    }
+    push(part.slice(from));
+  }
+  return out;
+}
+
+function dxWrapLines(text: string, firstAvail: number, avail: number): number {
+  const words = text.split(" ");
+  const space = rxTextW(" ", false, DX_SIZE);
+  let lines = 1;
+  let room = firstAvail;
+  let cur = 0;
+  let any = false;
+  for (let i = 0; i < words.length; i++) {
+    if (!words[i]) continue;
+    const w = rxTextW(words[i], false, DX_SIZE);
+    if (!any) {
+      cur = w;
+      any = true;
+    } else if (cur + space + w <= room) {
+      cur += space + w;
+    } else {
+      lines++;
+      room = avail;
+      cur = w;
+    }
+    while (cur > room) {
+      lines++;
+      cur -= room;
+      room = avail;
+    }
+  }
+  return lines;
+}
+
+function dxInches(mils: number): string {
+  const r = mils % 1000;
+  return Math.floor(mils / 1000) + "." + (r < 10 ? "00" : r < 100 ? "0" : "") + r + "in";
+}
+
+function diagnosisBlock(text: string | null | undefined): string {
+  const items = splitDiagnosisLines(text);
+  let lines = 0;
+  const first = DX_W - rxTextW("Diagnosis/ Impressions:", false, DX_SIZE) - DX_LBL;
+  for (let i = 0; i < items.length; i++) lines += dxWrapLines(items[i], i === 0 ? first : DX_W, DX_W);
+  const n = lines > DX_LINES ? lines : DX_LINES;
+  let style = "";
+  if (n > DX_LINES) {
+    const fit = Math.floor(DX_SPACE / n);
+    const lh = fit < DX_LH ? fit : DX_LH;
+    const fs = lh >= 170 ? "9pt" : lh >= 140 ? "8pt" : lh >= 115 ? "7pt" : "6pt";
+    style = ' style="--dx-lh:' + dxInches(lh) + ";--dx-h:" + dxInches(lh * n) + ";--dx-fs:" + fs + '"';
+  }
+  let rules = "";
+  for (let i = 0; i < n; i++) rules += '<div class="wl"></div>';
+  const body: string[] = [];
+  for (let i = 0; i < items.length; i++) body.push(e(items[i]));
+  return (
+    '<div class="write mc-diag"' + style + '><div class="write-lines">' + rules + "</div>" +
+    '<div class="write-text">' +
+    '<span class="write-lbl">Diagnosis/ Impressions:</span>' +
+    body.join("<br>") +
+    "</div></div>"
+  );
 }
 //JJQR - END
 
