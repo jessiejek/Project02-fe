@@ -878,8 +878,6 @@ test("medical certificate: one diagnosis per ruled line, extra ruled lines when 
   assert.equal((five.match(/<div class="wl"><\/div>/g) || []).length, 5 + 3); // 5 diagnosis lines + 3 recommendation lines
   const long = buildMedicalCertificateHtml({ ...base, diagnosis: "1) " + "very long diagnosis text ".repeat(12) + "\n2) Dengue fever" });
   assert.ok(/<div class="write mc-diag" style="--dx-lh:0\.\d{3}in;--dx-h:0\.\d{3}in;--dx-fs:\dpt">/.test(long)); // a long item wraps inside its own lines
-  const joined = buildMedicalCertificateHtml({ ...base, diagnosis: "1) Upper respiratory tract infection\n2) Dengue fever", diagnosisLayout: "oneLine" });
-  assert.ok(joined.includes("Diagnosis/ Impressions:</span>1) Upper respiratory tract infection; 2) Dengue fever</div>")); // "One line" = joined with "; "
   const one = buildMedicalCertificateHtml({ ...base, diagnosis: "Acute URTI" });
   assert.ok(one.includes('<div class="write mc-diag"><div class="write-lines"><div class="wl"></div><div class="wl"></div><div class="wl"></div></div>'));
 });
@@ -893,7 +891,7 @@ test("diagnosis rows: join numbered with new lines, drop blanks, never double a 
   assert.equal(diagnosisTextFromRows(["", " ", null]), "");
 });
 
-test("diagnosis rows: split text into rows without markers (from One line / saved text), padded to 5 for editing", () => {
+test("diagnosis rows: split text into rows without markers (from saved text), padded to 5 for editing", () => {
   assert.deepEqual(diagnosisRowsFromText("1) UPPER RESPIRATORY TRACT INFECTION;2) DENGUE FEVER"), ["UPPER RESPIRATORY TRACT INFECTION", "DENGUE FEVER"]);
   assert.deepEqual(diagnosisRowsFromText("1. URTI 2. AGE\n3) HPN"), ["URTI", "AGE", "HPN"]);
   assert.deepEqual(diagnosisRowsFromText("Acute URTI; Hypertension"), ["Acute URTI", "Hypertension"]);
@@ -921,12 +919,10 @@ test("diagnosis rows: '•' and 'N)' markers both split and strip; style read ba
   assert.equal(diagnosisStyleFromText(""), "numbers");
 });
 
-test("medical certificate: bullets print one per ruled line; One line drops the bullets", () => {
+test("medical certificate: bullets print one per ruled line", () => {
   const base = { origin: ORIGIN, pageSize: PAGE_A5, doctor, patient, issueDate: "", address: "", examinedAt: "", examFrom: "", examTo: "", recommendations: "", purposeException: "", comeBackOn: "" };
   const lines = buildMedicalCertificateHtml({ ...base, diagnosis: "• URTI\n• DENGUE FEVER" });
   assert.ok(lines.includes("Diagnosis/ Impressions:</span>• URTI<br>• DENGUE FEVER</div>"));
-  const one = buildMedicalCertificateHtml({ ...base, diagnosis: "• URTI\n• DENGUE FEVER", diagnosisLayout: "oneLine" });
-  assert.ok(one.includes("Diagnosis/ Impressions:</span>URTI; DENGUE FEVER</div>"));
 });
 //JJQR - END
 
@@ -940,16 +936,17 @@ test("diagnosisParagraphLines: her own lines kept, spaces squeezed, one blank li
   assert.deepEqual(diagnosisParagraphLines(null), []);
 });
 
-test("diagnosisLayoutFromText: numbered/bulleted = lines, ';' = one line, plain = paragraph, empty = lines", () => {
+test("diagnosisLayoutFromText: numbered/bulleted = List, anything else (';' too) = Paragraph, empty = List; never one line", () => {
   assert.equal(diagnosisLayoutFromText(""), "lines");
   assert.equal(diagnosisLayoutFromText(null), "lines");
   assert.equal(diagnosisLayoutFromText("1) URTI\n2) AGE"), "lines");
   assert.equal(diagnosisLayoutFromText("1) URTI;2) AGE"), "lines");
   assert.equal(diagnosisLayoutFromText("\n• URTI"), "lines");
-  assert.equal(diagnosisLayoutFromText("URTI; AGE"), "oneLine");
+  assert.equal(diagnosisLayoutFromText("URTI; AGE"), "paragraph");
   assert.equal(diagnosisLayoutFromText("Patient seen for fever. Impression is URTI."), "paragraph");
   assert.equal(diagnosisLayoutFromText("2.5 days of fever.\nImpression: URTI"), "paragraph"); // a dose/number is not a list marker
-  assert.equal(diagnosisLayoutFromText(DX_PARA), "oneLine"); // her own ";" reads as One line until she picks Paragraph (then it is pinned)
+  assert.equal(diagnosisLayoutFromText(DX_PARA), "paragraph"); // her own ";" stays in the paragraph
+  assert.equal(diagnosisLayoutFromText(" \n "), "lines");
 });
 
 test("medical certificate: Paragraph prints the text as typed (escaped, own new lines, no '; ', numbers or bullets), wrapped over enough ruled lines", () => {
@@ -968,8 +965,8 @@ test("medical certificate: Paragraph prints the text as typed (escaped, own new 
   assert.equal(rules(short), 3);
   const huge = buildMedicalCertificateHtml({ ...base, diagnosis: DX_PARA.repeat(5), diagnosisLayout: "paragraph" });
   assert.match(huge, /--dx-fs:6pt/, "very long text shrinks the font, the same rules as the lists");
-  // "One line" and "Each on its own line" are unchanged
-  assert.ok(buildMedicalCertificateHtml({ ...base, diagnosis: "1) URTI\n2) AGE", diagnosisLayout: "oneLine" }).includes("</span>1) URTI; 2) AGE</div>"));
+  // List is unchanged; Paragraph never joins with "; "
+  assert.ok(buildMedicalCertificateHtml({ ...base, diagnosis: "1) URTI\n2) AGE", diagnosisLayout: "paragraph" }).includes("</span>1) URTI<br>2) AGE</div>"));
   assert.ok(buildMedicalCertificateHtml({ ...base, diagnosis: "1) URTI\n2) AGE" }).includes("</span>1) URTI<br>2) AGE</div>"));
 });
 //JJQR - END

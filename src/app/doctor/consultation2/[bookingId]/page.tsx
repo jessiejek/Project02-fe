@@ -3652,7 +3652,7 @@ Return to patient queue
                         <div className="flex flex-wrap items-center gap-sm">
                           <span className="text-label-md font-medium text-on-surface-variant">Print as</span>
                           <div role="group" aria-label="Print diagnosis as" className="inline-flex rounded-lg border border-outline-variant bg-surface-container p-[3px]">
-                            {(["oneLine", "lines", "paragraph"] as const).map((v) => ( //JJQR - AI (2026-11-27) - why: + "Paragraph" //JJQR - END
+                            {(["paragraph", "lines"] as const).map((v) => ( //JJQR - AI (2026-11-27) - why: owner: "SO paragraph | List" ("One line" removed) //JJQR - END
                               <button
                                 key={v}
                                 type="button"
@@ -3663,7 +3663,7 @@ Return to patient queue
                                   mcDxLayoutView === v ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
                                 )}
                               >
-                                {v === "oneLine" ? "One line" : v === "lines" ? "Each on its own line" : "Paragraph"}
+                                {v === "lines" ? "List" : "Paragraph"}
                               </button>
                             ))}
                           </div>
@@ -3684,7 +3684,7 @@ Return to patient queue
                                     mcDxStyleView === v ? "bg-surface-container-lowest text-primary shadow-sm" : "text-on-surface-variant hover:text-on-surface",
                                   )}
                                 >
-                                  {v === "numbers" ? "Numbers 1) 2) 3)" : "Bullets •"}
+                                  {v === "numbers" ? "Numbers" : "Bullets"}{/*JJQR - AI (2026-11-27) - why: owner: "if List Numbers|bullets" //JJQR - END */}
                                 </button>
                               ))}
                             </div>
@@ -3732,7 +3732,7 @@ Return to patient queue
                               setMcDiagnosis(e.target.value);
                             }}
                             placeholder={assessment ? `Diagnosis / Impressions (default: “${assessment}”)` : "Diagnosis / Impressions"}
-                            rows={mcDxLayoutView === "paragraph" ? 6 : 2} //JJQR - AI (2026-11-27) - why: "Paragraph" = a roomier multi-line box, printed exactly as typed //JJQR - END
+                            rows={6} //JJQR - AI (2026-11-27) - why: "Paragraph" = a roomier multi-line box, printed exactly as typed //JJQR - END
                             className="w-full rounded-lg border border-outline-variant p-md text-body-md"
                           />
                         )}

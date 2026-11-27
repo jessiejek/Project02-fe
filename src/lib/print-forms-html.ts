@@ -61,8 +61,8 @@ export interface McHtmlOpts {
   diagnosisLayout?: DiagnosisLayout; //JJQR - AI (2026-11-27) - why: "Print as" under Diagnosis / Impressions; default "lines" (each on its own line) //JJQR - END
 }
 
-//JJQR - AI (2026-11-27) - why: "Print as" choice for the certificate's diagnosis: "lines" = each on its own ruled line, "oneLine" = joined with "; ", "paragraph" = her text as typed (owner: "give me paragraph style diagnosis")
-export type DiagnosisLayout = "lines" | "oneLine" | "paragraph";
+//JJQR - AI (2026-11-27) - why: owner: "SO paragraph | List". "Print as" for the certificate's diagnosis: "lines" = List (one ruled line per item, numbers or bullets), "paragraph" = her text as typed. ("One line" removed.)
+export type DiagnosisLayout = "lines" | "paragraph";
 //JJQR - END
 
 export interface RxHtmlOpts {
@@ -988,7 +988,7 @@ export function diagnosisParagraphLines(text: string | null | undefined): string
 }
 
 // Which "Print as" a saved diagnosis was written in (nothing is stored, so it is read back from the text):
-// empty = "lines" (the default); any line starting with "1)" / "1." / "•" = "lines"; otherwise a ";" = "oneLine"; otherwise (plain text) = "paragraph".
+// empty = "lines" (List, the default); any line starting with "1)" / "1." / "•" = "lines"; anything else (plain text, ";" too) = "paragraph".
 export function diagnosisLayoutFromText(text: string | null | undefined): DiagnosisLayout {
   const lines = (text ?? "").split(/\r\n|\r|\n/);
   let any = false;
@@ -997,8 +997,7 @@ export function diagnosisLayoutFromText(text: string | null | undefined): Diagno
     any = true;
     if (DX_LEAD.test(lines[i])) return "lines";
   }
-  if (!any) return "lines";
-  return (text ?? "").indexOf(";") >= 0 ? "oneLine" : "paragraph";
+  return any ? "paragraph" : "lines"; //JJQR - AI (2026-11-27) - why: no "One line" any more; ";" stays in her paragraph //JJQR - END
 }
 //JJQR - END
 
@@ -1045,10 +1044,8 @@ function dxInches(mils: number): string {
 }
 
 function diagnosisBlock(text: string | null | undefined, layout: DiagnosisLayout): string {
-  const oneLine = layout === "oneLine";
   const split = layout === "paragraph" ? diagnosisParagraphLines(text) : splitDiagnosisLines(text); //JJQR - AI (2026-11-27) - why: "Paragraph": her own lines, wrapped like sentences //JJQR - END
-  const items = oneLine && split.length ? [split.map((t) => t.replace(/^•[ \t]*/, "")).join("; ")] : split; //JJQR - AI (2026-11-27) - why: no "•" inside a one-line sentence //JJQR - END
-  // "One line": joined with "; " and wrapped like a sentence
+  const items = split; //JJQR - AI (2026-11-27) - why: "One line" (joined with "; ") removed //JJQR - END
   let lines = 0;
   const first = DX_W - rxTextW("Diagnosis/ Impressions:", false, DX_SIZE) - DX_LBL;
   for (let i = 0; i < items.length; i++) lines += dxWrapLines(items[i], i === 0 ? first : DX_W, DX_W);
